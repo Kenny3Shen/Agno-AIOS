@@ -1,6 +1,6 @@
 {
   "title": "MCP",
-  "description": "管理 PostgreSQL 中的 MCP Server，并查看 FastMCP 暴露的真实组件",
+  "description": "管理 MCP Server 与组件；每位用户可独立选择启用哪些 MCP",
   "neverExpires": "永不过期",
   "visibilityUpdated": "Server 可见性已更新",
   "visibilityFailed": "更新 Server 可见性失败",
@@ -43,7 +43,7 @@
   "testConnectionFailed": "MCP 连接测试失败，请检查配置后重试。",
   "colServer": "服务 / 命名空间",
   "colTransport": "传输",
-  "colEnabled": "启用",
+  "colEnabled": "平台可用",
   "colVisibility": "可见性",
   "colActions": "操作",
   "colComponent": "组件",
@@ -68,5 +68,9 @@
   "fieldMetadata": "元数据",
   "inputSchema": "输入 Schema",
   "outputSchema": "输出 Schema",
-  "callResult": "调用结果"
+  "callResult": "调用结果",
+  "colForMe": "启用",
+  "forMeFor": "启用 {{name}}",
+  "forMeUpdated": "已更新启用状态",
+  "forMeUpdateFailed": "更新启用状态失败"
 }

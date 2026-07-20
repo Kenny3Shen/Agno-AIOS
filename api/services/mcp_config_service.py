@@ -19,6 +19,7 @@ from api.persistence.mcp import (
     server_name_exists,
     update_server_row,
 )
+from api.persistence.capability_preferences import clear_capability_preferences_for_resource
 from api.utils.json import JSONDecodeError, loads
 
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -190,6 +191,8 @@ async def apply_mcp_server_toggle(server_id: int, enabled: bool, user: Any) -> M
     )
 
 
+
+
 async def remove_mcp_server(server_id: int, user: Any) -> McpConfigChange:
     row = await get_server_row(server_id)
     if row is None:
@@ -198,6 +201,9 @@ async def remove_mcp_server(server_id: int, user: Any) -> McpConfigChange:
         raise HTTPException(status_code=403, detail="Administrator permission required")
     if row["server_type"] == "builtin" or not await delete_server_row(server_id):
         raise HTTPException(status_code=400, detail="Built-in MCP server cannot be deleted")
+    await clear_capability_preferences_for_resource(
+        capability_type="mcp_server", capability_key=str(server_id)
+    )
     return McpConfigChange(
         response={"success": True, "restart_required": True}, action="mcp.delete",
         resource_type="mcp", resource_id=row["name"],

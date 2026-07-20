@@ -80,6 +80,7 @@ interface NavigationItem {
   icon: ReactNode
   labelKey: string
   scope?: string
+  scopes?: string[]
 }
 
 const navigationGroups: NavigationGroup<NavigationItem>[] = [

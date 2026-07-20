@@ -113,7 +113,8 @@
   "triggerFailed": "failed",
   "stepSkills": "Bound skills",
   "stepSkillsPlaceholder": "Select enabled skills (multi)",
-  "stepSkillsHint": "At run time loads global-enabled ∩ bound names. Empty means no skills.",
+  "stepSkillsHint": "At run time loads platform-available ∩ personally effective ∩ bound names. Empty means no skills.",
+  "skillUnavailableForMe": "Not enabled",
   "canvasTips": "Drag to reorder; wire to resequence",
   "listTruncated": "Showing {{shown}} of {{total}} workflows (page cap; deep links still open by id)",
   "loadingWorkflow": "Opening workflow…",
@@ -317,5 +318,17 @@
   "toolbarGroupRun": "Run",
   "shapesSearchPlaceholder": "Search shapes…",
   "shapesSearchEmpty": "No matching shapes",
-  "shapesDropHint": "Drag to canvas; double-click to add"
+  "shapesDropHint": "Drag to canvas; double-click to add",
+  "paletteBasicNodes": "Basic nodes",
+  "paletteBusinessNodes": "Business nodes",
+  "paletteCustomNodes": "Custom nodes",
+  "palettePresetDragHint": "Drag to canvas; double-click to add",
+  "saveAsCustomNode": "Save as custom node",
+  "customNodeSaved": "Saved custom node \"{{name}}\"",
+  "customNodeSaveFailed": "Failed to save custom node",
+  "deleteCustomNodeTitle": "Delete custom node",
+  "deleteCustomNodeBody": "Delete \"{{name}}\"? This cannot be undone.",
+  "customNodeDeleted": "Custom node deleted",
+  "customNodeDeleteFailed": "Failed to delete custom node",
+  "customNodesEmpty": "No custom nodes yet; save from a selected step"
 }

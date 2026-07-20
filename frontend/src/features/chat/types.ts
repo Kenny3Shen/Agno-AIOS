@@ -85,6 +85,7 @@ export interface Message {
   /** Effective knowledge mount for this run (false on lean/tools-off). */
   searchKnowledge?: boolean
   skillNames?: string[] | null
+  mcpServerNames?: string[]
   raw_run?: JsonRecord | null
   tools?: unknown[] | null
 }
@@ -117,7 +118,7 @@ export interface ChatState {
 }
 
 export type ChatRunEvent =
-  | { type: 'run.started'; runId: string; sessionId?: string; model?: string; provider?: string; agentId?: string; enableTools?: boolean; leanMode?: boolean; searchKnowledge?: boolean; skillNames?: string[] | null }
+  | { type: 'run.started'; runId: string; sessionId?: string; model?: string; provider?: string; agentId?: string; enableTools?: boolean; leanMode?: boolean; searchKnowledge?: boolean; skillNames?: string[] | null; mcpServerNames?: string[] }
   | { type: 'content.delta'; runId?: string; delta: string }
   | { type: 'tool.update'; runId?: string; tool: ToolStep }
   | { type: 'reasoning.delta'; runId?: string; delta: string }

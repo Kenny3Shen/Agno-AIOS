@@ -190,7 +190,7 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
       const messages = updateMessage(state.messages, action.id, (message) => {
         switch (event.type) {
           case 'run.started':
-            return { ...message, run_id: event.runId, session_id: event.sessionId ?? message.session_id, status: 'streaming', retry: null, error: null, leanMode: event.leanMode, enableTools: event.enableTools, searchKnowledge: event.searchKnowledge, skillNames: event.skillNames }
+            return { ...message, run_id: event.runId, session_id: event.sessionId ?? message.session_id, status: 'streaming', retry: null, error: null, leanMode: event.leanMode, enableTools: event.enableTools, searchKnowledge: event.searchKnowledge, skillNames: event.skillNames, mcpServerNames: event.mcpServerNames }
           case 'content.delta': {
             if (message.final && message.status !== 'streaming' && message.status !== 'retrying') {
               return message
@@ -585,6 +585,9 @@ export const normalizeMessages = (value: unknown): Message[] =>
             : source.skill_names === null
               ? null
               : undefined,
+          mcpServerNames: Array.isArray(source.mcp_server_names)
+            ? source.mcp_server_names.filter((serverName): serverName is string => typeof serverName === 'string')
+            : undefined,
         }
       })
     : []

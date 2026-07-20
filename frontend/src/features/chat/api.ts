@@ -211,6 +211,9 @@ const parseEvent = (event: string, data: string): ChatRunEvent | null => {
               : value.skill_names === null
                 ? null
                 : undefined,
+            mcpServerNames: Array.isArray(value.mcp_server_names)
+              ? value.mcp_server_names.filter((item): item is string => typeof item === 'string')
+              : undefined,
           }
         : null
     case 'content.delta':

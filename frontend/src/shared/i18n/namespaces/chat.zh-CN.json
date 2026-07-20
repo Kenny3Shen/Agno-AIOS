@@ -80,6 +80,8 @@
   "tokensMetric": "{{value}} tokens",
   "tokensMetricTitle": "{{count}} tokens",
   "skillsAttachedBadge": "Skills · {{count}}",
+  "mcpAttached": "本轮 MCP Servers：{{names}}",
+  "mcpAttachedBadge": "MCP · {{count}}",
   "skillsAttachedHelp": "本轮按意图挂载的 Local Skills。",
   "skillsAllEnabled": "本轮通用安全意图，已挂载全部已启用 Local Skills。",
   "skillsNone": "本轮未挂载 Skill",

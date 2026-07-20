@@ -113,7 +113,8 @@
   "triggerFailed": "失败",
   "stepSkills": "绑定 Skill",
   "stepSkillsPlaceholder": "选择已启用的 Skill（可多选）",
-  "stepSkillsHint": "运行时仅加载「全局启用 ∩ 本步绑定」。不选则不挂 Skill。",
+  "stepSkillsHint": "运行时仅加载「平台可用 ∩ 个人有效 ∩ 本步绑定」。不选则不挂 Skill。",
+  "skillUnavailableForMe": "未启用",
   "canvasTips": "拖拽排序，连线改变顺序",
   "listTruncated": "工作流列表显示 {{shown}} / {{total}}（达到页上限，深链仍可按 ID 打开）",
   "loadingWorkflow": "正在打开工作流…",
@@ -317,5 +318,17 @@
   "toolbarGroupRun": "运行",
   "shapesSearchPlaceholder": "搜索节点…",
   "shapesSearchEmpty": "无匹配节点",
-  "shapesDropHint": "拖到画布；双击快速添加"
+  "shapesDropHint": "拖到画布；双击快速添加",
+  "paletteBasicNodes": "基础节点",
+  "paletteBusinessNodes": "业务节点",
+  "paletteCustomNodes": "自定义节点",
+  "palettePresetDragHint": "拖到画布；双击添加",
+  "saveAsCustomNode": "保存为自定义节点",
+  "customNodeSaved": "已保存自定义节点「{{name}}」",
+  "customNodeSaveFailed": "保存自定义节点失败",
+  "deleteCustomNodeTitle": "删除自定义节点",
+  "deleteCustomNodeBody": "确定删除「{{name}}」？此操作不可撤销。",
+  "customNodeDeleted": "已删除自定义节点",
+  "customNodeDeleteFailed": "删除自定义节点失败",
+  "customNodesEmpty": "暂无自定义节点；选中步骤后可保存"
 }

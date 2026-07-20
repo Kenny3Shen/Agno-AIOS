@@ -1,3 +1,5 @@
+import pytest
+
 from api.services.collect_crawl_service import (
     _looks_like_article,
     _summary_from_markdown,
@@ -36,6 +38,53 @@ def test_looks_like_article_filters_noise():
     )
 
 
+@pytest.mark.parametrize(
+    ("url", "source_domain", "expected"),
+    [
+        ("https://hackread.com/submit-press-release/", "hackread.com", False),
+        ("https://therecord.media/news/leadership", "therecord.media", False),
+        ("https://therecord.media/news/cybercrime", "therecord.media", False),
+        ("https://therecord.media/news/nation-state", "therecord.media", False),
+        (
+            "https://therecord.media/news/influence-operations",
+            "therecord.media",
+            False,
+        ),
+        ("https://therecord.media/news/technology", "therecord.media", False),
+        (
+            "https://therecord.media/a-long-security-news-story",
+            "therecord.media",
+            True,
+        ),
+        ("https://thehackernews.com/expert-insights/", "thehackernews.com", False),
+        (
+            "https://thehackernews.com/p/upcoming-hacker-news-webinars.html",
+            "thehackernews.com",
+            False,
+        ),
+        (
+            "https://thehackernews.com/expert-insights/2026/07/a-real-story.html",
+            "thehackernews.com",
+            True,
+        ),
+        ("https://xlab.tencent.com/en/about/", "xlab.tencent.com", False),
+        ("https://xlab.tencent.com/en/policy/", "xlab.tencent.com", False),
+        ("https://xlab.tencent.com/en/archives/2026/07", "xlab.tencent.com", False),
+        (
+            "https://xlab.tencent.com/en/2026/07/17/a-real-post",
+            "xlab.tencent.com",
+            True,
+        ),
+    ],
+)
+def test_looks_like_article_applies_source_path_policy(
+    url: str,
+    source_domain: str,
+    expected: bool,
+):
+    assert _looks_like_article(url, source_domain) is expected
+
+
 def test_extract_article_links_from_list_html():
     html = """
     <html><body>
@@ -47,6 +96,26 @@ def test_extract_article_links_from_list_html():
     links = extract_article_links(html, "https://thehackernews.com/", "thehackernews.com")
     assert any("serious-bug-found" in link for link in links)
     assert all("/tag/" not in link for link in links)
+
+
+def test_extract_article_links_skips_navigation_chrome():
+    html = """
+    <html><body>
+      <header class="site-header">
+        <a href="/another-long-security-story">Navigation story-like link</a>
+      </header>
+      <div role="navigation">
+        <a href="/role-navigation-security-story">Role navigation link</a>
+      </div>
+      <article>
+        <header>
+          <a href="/a-real-long-security-story">Article</a>
+        </header>
+      </article>
+    </body></html>
+    """
+    links = extract_article_links(html, "https://hackread.com/", "hackread.com")
+    assert links == ["https://hackread.com/a-real-long-security-story"]
 
 
 def test_title_and_summary_from_markdown():

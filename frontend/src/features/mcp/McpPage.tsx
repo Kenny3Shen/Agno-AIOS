@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   App,
@@ -44,6 +44,14 @@ import {
   type McpServer,
   type McpToken,
 } from './api'
+import { currentUserQuery } from '@/features/auth'
+import { roleOf } from '@/shared/auth/permissions'
+import {
+  listCapabilities,
+  setCapabilityPreference,
+  type CapabilityItem,
+  type CapabilityPreference,
+} from '@/features/capabilities'
 
 const tokenTime = (value: number, neverExpires: string) => (value ? new Date(value * 1000).toLocaleString() : neverExpires)
 
@@ -74,8 +82,19 @@ export function McpPage() {
   const [serverForm] = Form.useForm()
 
   const config = useQuery({ queryKey: ['mcp', 'config'], queryFn: getConfig })
+  const capabilitiesQuery = useQuery({ queryKey: ['capabilities'], queryFn: listCapabilities })
+  const currentUser = useQuery(currentUserQuery())
+  const isAdmin = roleOf(currentUser.data) === 'admin'
   const components = useQuery({ queryKey: ['mcp', 'components', namespace], queryFn: () => listComponents(namespace) })
   const tokens = useQuery({ queryKey: ['mcp', 'tokens'], queryFn: listTokens })
+  const capabilityByServerId = useMemo(() => {
+    const map = new Map<number, CapabilityItem>()
+    for (const item of capabilitiesQuery.data ?? []) {
+      if (item.kind !== 'mcp_server' || item.server_id == null) continue
+      map.set(item.server_id, item)
+    }
+    return map
+  }, [capabilitiesQuery.data])
   const refresh = () => client.invalidateQueries({ queryKey: ['mcp'] })
   const updateServerVisibility = async (name: string, visibility: ResourceVisibility) => {
     try {
@@ -106,6 +125,7 @@ export function McpPage() {
     onSuccess: async (_, { enabled }) => {
       message.success(enabled ? t('serverEnabled') : t('serverDisabled'))
       await refresh()
+      await client.invalidateQueries({ queryKey: ['capabilities'] })
     },
     onError: (error) => message.error(error.message),
   })
@@ -116,6 +136,19 @@ export function McpPage() {
       await refresh()
     },
     onError: (error) => message.error(error.message),
+  })
+  const updatePreference = useMutation({
+    mutationFn: ({ item, state }: { item: CapabilityItem; state: CapabilityPreference }) =>
+      setCapabilityPreference(item, state),
+    onSuccess: (updated) => {
+      client.setQueryData<CapabilityItem[]>(['capabilities'], (current) =>
+        (current ?? []).map((item) =>
+          item.kind === updated.kind && item.capability_key === updated.capability_key ? updated : item,
+        ),
+      )
+      message.success(t('forMeUpdated'))
+    },
+    onError: (error) => message.error(error instanceof Error ? error.message : t('forMeUpdateFailed')),
   })
 
   const servers = config.data?.mcp_servers ?? []
@@ -173,7 +206,7 @@ export function McpPage() {
                   <Table<McpServer>
                     rowKey="id"
                     size="small"
-                    loading={config.isLoading}
+                    loading={config.isLoading || capabilitiesQuery.isLoading}
                     dataSource={servers}
                     pagination={false}
                     rowClassName={(row) => (row.namespace === namespace ? 'ant-table-row-selected' : '')}
@@ -195,18 +228,50 @@ export function McpPage() {
                         ),
                       },
                       { title: t('colTransport'), dataIndex: 'transport', width: 150, render: (value) => <Tag>{value}</Tag> },
+                      ...(isAdmin
+                        ? [
+                            {
+                              title: t('colEnabled'),
+                              width: 90,
+                              render: (_: unknown, row: McpServer) => {
+                                const pending = toggleServer.isPending && toggleServer.variables?.server.id === row.id
+                                return (
+                                  <Switch
+                                    checked={row.enabled}
+                                    loading={pending}
+                                    disabled={!row.can_manage || pending}
+                                    onClick={(_checked, event) => event.stopPropagation()}
+                                    onChange={(enabled) => toggleServer.mutate({ server: row, enabled })}
+                                  />
+                                )
+                              },
+                            },
+                          ]
+                        : []),
                       {
-                        title: t('colEnabled'),
-                        width: 90,
-                        render: (_, row) => {
-                          const pending = toggleServer.isPending && toggleServer.variables?.server.id === row.id
+                        title: t('colForMe'),
+                        key: 'for_me',
+                        width: 110,
+                        render: (_: unknown, row: McpServer) => {
+                          const capability = capabilityByServerId.get(row.id)
+                          const pending =
+                            updatePreference.isPending &&
+                            updatePreference.variables?.item.capability_key === capability?.capability_key
+                          const platformReady = Boolean(capability?.platform_enabled ?? row.enabled)
                           return (
                             <Switch
-                              checked={row.enabled}
-                              loading={pending}
-                              disabled={!row.can_manage || pending}
+                              checked={Boolean(capability?.effective_enabled)}
+                              loading={pending || capabilitiesQuery.isLoading}
+                              disabled={!capability || !platformReady || pending}
+                              aria-label={t('forMeFor', { name: row.name })}
                               onClick={(_checked, event) => event.stopPropagation()}
-                              onChange={(enabled) => toggleServer.mutate({ server: row, enabled })}
+                              onChange={(enabled) => {
+                                if (!capability) return
+                                updatePreference.mutate({
+                                  item: capability,
+                                  state: enabled ? 'enabled' : 'disabled',
+                                })
+                              }}
                             />
                           )
                         },

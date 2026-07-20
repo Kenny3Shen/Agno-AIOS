@@ -30,6 +30,7 @@ from api.routes import (
     agent_evals,
     approvals,
     audit,
+    capabilities,
     chat,
     collect,
     cve,
@@ -225,6 +226,7 @@ async def readiness_check(request: Request):
 # Include routers
 app.include_router(auth_router)
 app.include_router(audit.router)
+app.include_router(capabilities.router)
 app.include_router(cve.router)
 app.include_router(chat.router)
 app.include_router(collect.router)

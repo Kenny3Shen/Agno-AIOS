@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from typing import Literal
 
 from fastmcp import FastMCP
-from fastmcp.server.dependencies import get_http_headers
+from fastmcp.server.dependencies import get_access_token, get_http_headers
 from mcp.types import ToolAnnotations
 
 from api.services.audit_service import record_audit_event_async
@@ -44,7 +44,13 @@ async def simulate_containment(
         raise ValueError("target and reason are required")
 
     headers = get_http_headers()
-    user_id = headers.get("x-agno-user-id", "")
+    access_token = get_access_token()
+    claims = access_token.claims if access_token is not None else {}
+    user_id = str(
+        (claims or {}).get("sub")
+        or (getattr(access_token, "subject", "") if access_token is not None else "")
+        or ""
+    )
     run_id = headers.get("x-agno-run-id", "")
     session_id = headers.get("x-agno-session-id", "")
     await record_audit_event_async(

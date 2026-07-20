@@ -1,6 +1,6 @@
 {
   "title": "Skills",
-  "description": "Manage agent skills, scripts, and resource visibility",
+  "description": "Manage agent skills; each user can independently enable Skills",
   "visibilityUpdated": "Visibility updated",
   "visibilityFailed": "Failed to update skill visibility",
   "deleted": "Skill deleted",
@@ -31,9 +31,13 @@
   "colSkill": "Skill",
   "colDescription": "Description",
   "colVisibility": "Visibility",
-  "colEnabled": "Enabled",
+  "colEnabled": "Platform available",
   "colActions": "Actions",
   "contentTab": "SKILL.md",
   "metadataTab": "Metadata",
-  "scriptsTag": "scripts"
+  "scriptsTag": "scripts",
+  "colForMe": "Enabled",
+  "forMeFor": "Enable {{name}}",
+  "forMeUpdated": "Enablement updated",
+  "forMeUpdateFailed": "Failed to update enablement"
 }

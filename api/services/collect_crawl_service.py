@@ -115,6 +115,28 @@ SKIP_PATH_MARKERS = (
     "mailto:",
 )
 
+# Fetching these assets through the HTML parser cannot produce an article body.
+NON_ARTICLE_PATH_SUFFIXES = (
+    ".pdf",
+    ".xml",
+    ".json",
+    ".zip",
+)
+
+# Some sources expose article dates in every real post URL.  Requiring that
+# shape avoids pulling their navigation, policy, archive, and landing pages.
+_DATED_ARTICLE_SOURCE_PATHS: dict[str, re.Pattern[str]] = {
+    "thehackernews.com": re.compile(r"/20\d{2}/\d{2}/", re.I),
+    "xlab.tencent.com": re.compile(r"/en/20\d{2}/\d{2}/\d{2}/", re.I),
+}
+
+_NAVIGATION_ANCESTOR_TAGS = frozenset({"nav", "aside"})
+_CHROME_BOUNDARY_TAGS = frozenset({"header", "footer"})
+_NAVIGATION_COMPONENT_RE = re.compile(
+    r"^(?:(?:site|cs)-)?(?:header|footer|nav|menu)(?:[-_]|$)",
+    re.I,
+)
+
 ARTICLE_PATH_HINTS = re.compile(
     r"(/\d{4}/|/20\d{2}/|/news/|/post/|/posts/|/article|/articles|"
     r"/story/|/vulnerabilit|/threat|/malware|/advisory|/blog/|/content/)",
@@ -130,7 +152,8 @@ def _normalize_url(url: str) -> str:
     parsed = urlsplit(url.strip())
     if not parsed.scheme or not parsed.netloc:
         return ""
-    # Drop fragments; keep query for sites that need it sparingly
+    # Drop fragments and normalize an optional trailing slash so existing rows
+    # are consistently recognized on later crawls.
     path = parsed.path or "/"
     if path != "/" and path.endswith("/"):
         path = path.rstrip("/")
@@ -161,6 +184,59 @@ def _is_same_source(url: str, source_domain: str) -> bool:
     return False
 
 
+def _matches_source_article_path(path: str, source_domain: str) -> bool:
+    """Apply source-specific URL shapes before treating a link as an article."""
+    normalized_path = path.rstrip("/") or "/"
+    source = source_domain.lower()
+
+    # The Record uses /news/<topic> for section landing pages; current article
+    # URLs are top-level slugs.  Do not spend a crawl slot on those listings.
+    if source == "therecord.media" and re.fullmatch(r"/news/[^/]+", normalized_path):
+        return False
+
+    dated_path = _DATED_ARTICLE_SOURCE_PATHS.get(source)
+    if dated_path is not None:
+        return bool(dated_path.search(path))
+
+    # These are static pages at Hackread that otherwise look like article
+    # slugs under the generic heuristic below.
+    if source == "hackread.com" and normalized_path in {
+        "/about-us",
+        "/privacy-policy",
+        "/submit-press-release",
+    }:
+        return False
+
+    return True
+
+
+def _is_navigation_anchor(anchor: Any) -> bool:
+    """Return whether an anchor belongs to chrome rather than page content."""
+    is_inside_article = any(
+        str(getattr(ancestor, "name", "") or "").lower() == "article"
+        for ancestor in anchor.parents
+    )
+    for ancestor in anchor.parents:
+        name = str(getattr(ancestor, "name", "") or "").lower()
+        if name in _NAVIGATION_ANCESTOR_TAGS:
+            return True
+        if name in _CHROME_BOUNDARY_TAGS and not is_inside_article:
+            return True
+        attrs = getattr(ancestor, "attrs", {})
+        if not isinstance(attrs, Mapping):
+            continue
+        if str(attrs.get("role") or "").lower() == "navigation":
+            return True
+        classes = attrs.get("class") or []
+        components = [*classes, attrs.get("id")]
+        if any(
+            _NAVIGATION_COMPONENT_RE.match(str(component or ""))
+            for component in components
+        ):
+            return True
+    return False
+
+
 def _looks_like_article(url: str, source_domain: str) -> bool:
     if not _is_same_source(url, source_domain):
         return False
@@ -169,6 +245,10 @@ def _looks_like_article(url: str, source_domain: str) -> bool:
         return False
     path = urlsplit(url).path or ""
     if path in {"", "/"}:
+        return False
+    if path.lower().endswith(NON_ARTICLE_PATH_SUFFIXES):
+        return False
+    if not _matches_source_article_path(path, source_domain):
         return False
     # WeChat permanent links
     if source_domain == "mp.weixin.qq.com":
@@ -264,6 +344,8 @@ def extract_article_links(html: str, base_url: str, source_domain: str) -> list[
     found: list[str] = []
     seen: set[str] = set()
     for anchor in soup.find_all("a", href=True):
+        if _is_navigation_anchor(anchor):
+            continue
         href = str(anchor.get("href") or "").strip()
         if not href:
             continue

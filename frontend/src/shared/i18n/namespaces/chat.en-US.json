@@ -80,6 +80,8 @@
   "tokensMetric": "{{value}} tokens",
   "tokensMetricTitle": "{{count}} tokens",
   "skillsAttachedBadge": "Skills · {{count}}",
+  "mcpAttached": "MCP Servers for this run: {{names}}",
+  "mcpAttachedBadge": "MCP · {{count}}",
   "skillsAttachedHelp": "Local Skills attached for this turn by intent.",
   "skillsAllEnabled": "General security intent; all enabled Local Skills are attached.",
   "skillsNone": "No Skills attached this turn",

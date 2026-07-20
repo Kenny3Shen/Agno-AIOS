@@ -35,6 +35,7 @@ _SKILLS_CFG_MTIME: float | None = None
 
 
 class SkillInfoData(TypedDict):
+    capability_key: str
     name: str
     description: str
     enabled: bool
@@ -50,6 +51,7 @@ class SkillInfoData(TypedDict):
 
 @dataclass(frozen=True)
 class SkillMetadata:
+    capability_key: str
     name: str
     description: str
     visibility: str
@@ -161,7 +163,7 @@ def parse_skill_metadata(skill_dir: Path) -> SkillMetadata:
     visibility = "private"
     owner_user_id = ""
     if not md_path.exists():
-        return SkillMetadata(name, description, visibility, owner_user_id)
+        return SkillMetadata(skill_dir.name, name, description, visibility, owner_user_id)
 
     raw = md_path.read_text(encoding="utf-8")
     meta, _body = _split_skill_markdown(raw)
@@ -186,10 +188,10 @@ def parse_skill_metadata(skill_dir: Path) -> SkillMetadata:
             or meta.get("user_id")
             or ""
         ).strip()
-    return SkillMetadata(name, description, visibility, owner_user_id)
+    return SkillMetadata(skill_dir.name, name, description, visibility, owner_user_id)
 
 
-def write_skill_metadata(skill_dir: Path, updates: dict[str, str]) -> None:
+def write_skill_metadata(skill_dir: Path, updates: dict[str, Any]) -> None:
     md_path = skill_dir / "SKILL.md"
     raw = md_path.read_text(encoding="utf-8") if md_path.exists() else ""
     meta, body = _split_skill_markdown(raw)
@@ -201,11 +203,16 @@ def write_skill_metadata(skill_dir: Path, updates: dict[str, str]) -> None:
             project_metadata[key] = value
         else:
             meta[key] = value
+    # Drop obsolete recommended-default flag from older skill packages.
+    project_metadata.pop("default_enabled", None)
     meta.pop("visibility", None)
     meta.pop("owner_user_id", None)
     meta.pop("user_id", None)
+    meta.pop("default_enabled", None)
     if project_metadata:
         meta["metadata"] = project_metadata
+    else:
+        meta.pop("metadata", None)
     md_path.write_text(
         "---\n"
         + yaml.safe_dump(meta, sort_keys=False, allow_unicode=True)
@@ -283,6 +290,7 @@ def _skill_info_for_dir(
         scripts_dir = skill_dir / "scripts"
         has_scripts_dir = scripts_dir.is_dir() and any(scripts_dir.iterdir())
     return {
+        "capability_key": metadata.capability_key,
         "name": metadata.name,
         "description": metadata.description,
         "enabled": _skill_enabled_from_config(cfg, skill_dir, metadata.name),
@@ -364,6 +372,8 @@ def set_skill_visibility(skill_name: str, visibility: str, user: Any) -> tuple[s
     normalized_visibility = normalize_visibility(visibility, strict=True)
     write_skill_metadata(skill_dir, {"visibility": normalized_visibility})
     return metadata.name, normalized_visibility
+
+
 
 
 def delete_skill(skill_name: str, user: Any) -> str:

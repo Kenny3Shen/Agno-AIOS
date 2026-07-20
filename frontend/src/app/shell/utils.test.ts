@@ -39,6 +39,28 @@ describe('shell navigation groups', () => {
     ])
   })
 
+  it('keeps an item when any of its alternative scopes is granted', () => {
+    const alternatives: NavigationGroup<{
+      key: string
+      scopes?: string[]
+    }>[] = [
+      {
+        key: 'capabilities',
+        labelKey: 'capabilities',
+        items: [
+          { key: '/skills', scopes: ['skill:read', 'skill:write'] },
+        ],
+      },
+    ]
+
+    expect(
+      filterNavigationGroups(
+        alternatives,
+        (scope) => scope === 'skill:write',
+      ),
+    ).toEqual(alternatives)
+  })
+
   it('defaults to opening the first two navigation groups', () => {
     expect(defaultOpenNavigationGroupKeys(groups)).toEqual([navigationGroupMenuKey('workspace'), navigationGroupMenuKey('governance')])
     expect(defaultOpenNavigationGroupKeys([])).toEqual([])

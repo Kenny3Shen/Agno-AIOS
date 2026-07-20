@@ -96,3 +96,16 @@ async def get_user_db(
     session: AsyncSession = Depends(get_async_session),
 ) -> AsyncGenerator[SQLAlchemyUserDatabase[User, UUID], None]:
     yield SQLAlchemyUserDatabase(session, User, OAuthAccount)
+
+
+async def get_active_user_by_id(user_id: str) -> User | None:
+    """Resolve a current account for MCP token verification."""
+    try:
+        parsed = UUID(user_id)
+    except (TypeError, ValueError):
+        return None
+    async with async_session_maker() as session:
+        user = await session.get(User, parsed)
+        if user is None or not bool(user.is_active):
+            return None
+        return user

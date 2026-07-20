@@ -20,8 +20,23 @@ from api.services.audit_service import (
     record_audit_event_async,
 )
 from api.services.workflow_compiler import WorkflowDefinitionError
-from api.services.workflow_run_runtime import cancel_workflow_run, stream_workflow_run
+from api.services.workflow_run_runtime import (
+    cancel_workflow_run,
+    stream_workflow_run,
+    workflow_capability_issues,
+)
 from api.services.workflow_templates import list_workflow_templates
+from api.services.workflow_node_presets import (
+    list_builtin_node_presets,
+    normalize_custom_step_definition,
+    serialize_custom_node_row,
+)
+from api.persistence.workflow_custom_nodes import (
+    delete_custom_node_for_user,
+    get_custom_node_for_user,
+    list_custom_nodes_for_user,
+    upsert_custom_node_for_user,
+)
 from api.services.notification_service import notify_workflow_trigger_failure
 from api.services.workflow_service import (
     create_workflow_for_actor,
@@ -58,6 +73,13 @@ class WorkflowRunRequest(BaseModel):
     run_id: str | None = None
 
 
+class WorkflowCustomNodeRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=500)
+    color: str = Field(default="#1677ff", max_length=32)
+    definition: dict[str, Any] = Field(default_factory=dict)
+
+
 @router.get("/executors")
 async def list_executors(user: User = Depends(require_scope("workflows:read"))):
     data = list_workflow_executor_options()
@@ -83,6 +105,120 @@ async def list_templates(user: User = Depends(require_scope("workflows:read"))):
             total_count=len(data),
         ),
     }
+
+
+@router.get("/node-presets")
+async def list_node_presets(user: User = Depends(require_scope("workflows:read"))):
+    """Business-aligned built-in step presets + the caller's custom nodes."""
+    user_id = actor_id(user) or ""
+    builtin = list_builtin_node_presets()
+    user_rows = await list_custom_nodes_for_user(user_id) if user_id else []
+    custom = [serialize_custom_node_row(row) for row in user_rows]
+    data = [*builtin, *custom]
+    return {
+        "data": data,
+        "meta": pagination_meta(
+            page=1,
+            limit=max(1, len(data)),
+            total_count=len(data),
+            builtin_count=len(builtin),
+            custom_count=len(custom),
+        ),
+    }
+
+
+@router.post("/custom-nodes")
+async def create_custom_node(
+    body: WorkflowCustomNodeRequest,
+    request: Request,
+    user: User = Depends(require_scope("workflows:write")),
+):
+    user_id = actor_id(user)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        definition = normalize_custom_step_definition(body.definition)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    name = body.name.strip() or str(definition.get("name") or "Custom step")
+    row = await upsert_custom_node_for_user(
+        user_id,
+        node_id=None,
+        name=name,
+        description=body.description.strip(),
+        color=(body.color or "#1677ff").strip() or "#1677ff",
+        definition=definition,
+    )
+    item = serialize_custom_node_row(row)
+    await record_audit_event_async(
+        user,
+        action="workflow.custom_node_create",
+        resource_type="workflow_custom_node",
+        resource_id=item["id"],
+        metadata={"name": item["name"]},
+        **audit_request_context(request),
+    )
+    return item
+
+
+@router.put("/custom-nodes/{node_id}")
+async def update_custom_node(
+    node_id: str,
+    body: WorkflowCustomNodeRequest,
+    request: Request,
+    user: User = Depends(require_scope("workflows:write")),
+):
+    user_id = actor_id(user)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    existing = await get_custom_node_for_user(user_id, node_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Custom node not found")
+    try:
+        definition = normalize_custom_step_definition(body.definition)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    name = body.name.strip() or str(definition.get("name") or existing["name"])
+    row = await upsert_custom_node_for_user(
+        user_id,
+        node_id=node_id,
+        name=name,
+        description=body.description.strip(),
+        color=(body.color or "#1677ff").strip() or "#1677ff",
+        definition=definition,
+    )
+    item = serialize_custom_node_row(row)
+    await record_audit_event_async(
+        user,
+        action="workflow.custom_node_update",
+        resource_type="workflow_custom_node",
+        resource_id=item["id"],
+        metadata={"name": item["name"]},
+        **audit_request_context(request),
+    )
+    return item
+
+
+@router.delete("/custom-nodes/{node_id}")
+async def delete_custom_node(
+    node_id: str,
+    request: Request,
+    user: User = Depends(require_scope("workflows:write")),
+):
+    user_id = actor_id(user)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    deleted = await delete_custom_node_for_user(user_id, node_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Custom node not found")
+    await record_audit_event_async(
+        user,
+        action="workflow.custom_node_delete",
+        resource_type="workflow_custom_node",
+        resource_id=node_id,
+        **audit_request_context(request),
+    )
+    return {"success": True}
 
 
 @router.get("")
@@ -509,6 +645,15 @@ async def run_workflow(
     definition = row.get("definition")
     if not isinstance(definition, dict):
         raise HTTPException(status_code=422, detail="Workflow definition is invalid")
+    issues = await workflow_capability_issues(actor=user, definition=definition)
+    if issues:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "REQUIRED_CAPABILITIES_UNAVAILABLE",
+                "capabilities": issues,
+            },
+        )
 
     session_id = (body.session_id or "").strip() or str(uuid4())
     run_id = (body.run_id or "").strip() or str(uuid4())
@@ -523,6 +668,7 @@ async def run_workflow(
                 definition=definition,
                 input_text=input_text,
                 user_id=actor_id(user),
+                actor=user,
                 session_id=session_id,
                 model_id=body.model_id,
                 run_id=run_id,

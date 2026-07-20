@@ -2,9 +2,10 @@ import asyncio
 import re
 import time
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from inspect import isawaitable, iscoroutinefunction
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, AsyncIterator, Callable, Literal
 
 from agno.agent import Agent
@@ -30,7 +31,16 @@ from api.services.knowledge_service import get_async_knowledge_base_async
 from api.services.model_config_service import get_model_for_run
 from api.services.model_factory import build_agno_model
 from api.services.postgres_store import get_async_agno_postgres_db
-from api.services.skill_service import get_enabled_skill_dirs, resolve_enabled_skill_dirs
+from api.mcp.config import issue_delegation_token
+from api.services.capability_policy_service import (
+    effective_mcp_server_names_for_actor,
+    effective_skill_dirs_for_actor,
+)
+from api.services.skill_service import (
+    get_enabled_skill_dirs,
+    parse_skill_metadata,
+    resolve_enabled_skill_dirs,
+)
 from api.services.notification_service import (
     notify_admins_of_hitl_approval,
     notify_hitl_resume_failure,
@@ -435,7 +445,6 @@ def _mcp_header_provider(token: str) -> Callable[..., dict[str, str]]:
             return headers
         headers.update(
             {
-                "X-Agno-User-ID": str(getattr(run_context, "user_id", "") or ""),
                 "X-Agno-Session-ID": str(getattr(run_context, "session_id", "") or ""),
                 "X-Agno-Run-ID": str(getattr(run_context, "run_id", "") or ""),
             }
@@ -572,6 +581,8 @@ class SecurityRunRequest:
     reasoning_effort: str | None
     user_id: str | None
     knowledge_owner_user_id: str | None
+    actor_role: str = "user"
+    actor_is_superuser: bool = False
     memory_enabled: bool = True
     store_raw_tool_io: bool = False
     search_knowledge: bool = True
@@ -581,6 +592,9 @@ class SecurityRunRequest:
     agent_id: str = DEFAULT_AGENT_ID
     # None = all enabled skills; list = enabled ∩ names (Workflow-style).
     skill_names: list[str] | None = None
+    effective_skill_names: tuple[str, ...] = ()
+    effective_mcp_server_names: tuple[str, ...] = ()
+    capability_snapshot_resolved: bool = False
     # Agno media forwarded to the model for this turn.
     images: tuple[Any, ...] = ()
     files: tuple[Any, ...] = ()
@@ -602,6 +616,8 @@ class SecurityRunRequest:
         reasoning_effort: str | None = None,
         user_id: str | None = None,
         knowledge_owner_user_id: str | None = None,
+        actor_role: str = "user",
+        actor_is_superuser: bool = False,
         memory_enabled: bool = True,
         store_raw_tool_io: bool = False,
         search_knowledge: bool = True,
@@ -635,6 +651,8 @@ class SecurityRunRequest:
             reasoning_effort=reasoning_effort,
             user_id=user_id,
             knowledge_owner_user_id=knowledge_owner_user_id,
+            actor_role=actor_role,
+            actor_is_superuser=actor_is_superuser,
             memory_enabled=memory_enabled,
             store_raw_tool_io=store_raw_tool_io,
             search_knowledge=search_knowledge,
@@ -654,6 +672,14 @@ class SecurityRunRequest:
     def agent_user_id(self) -> str:
         return (self.user_id or "anonymous").strip() or "anonymous"
 
+    @property
+    def capability_actor(self) -> Any:
+        return SimpleNamespace(
+            id=self.agent_user_id,
+            role=self.actor_role,
+            is_superuser=self.actor_is_superuser,
+        )
+
     def runtime_metadata(self) -> dict[str, object]:
         payload: dict[str, object] = {
             "version": RUNTIME_METADATA_VERSION,
@@ -661,15 +687,21 @@ class SecurityRunRequest:
             "model_id": self.model_id or "",
             "reasoning_effort": self.reasoning_effort or "",
             "knowledge_owner_user_id": self.knowledge_owner_user_id or "",
+            "actor_role": self.actor_role,
+            "actor_is_superuser": self.actor_is_superuser,
             "memory_enabled": self.memory_enabled,
             "store_raw_tool_io": self.store_raw_tool_io,
             "search_knowledge": self.search_knowledge,
             "live_search": self.live_search,
             "enable_tools": self.enable_tools,
-            "skill_names": list(self.skill_names)
-            if self.skill_names is not None
-            else None,
+            "skill_names": (
+                list(self.effective_skill_names)
+                if self.capability_snapshot_resolved
+                else (list(self.skill_names) if self.skill_names is not None else None)
+            ),
         }
+        if self.capability_snapshot_resolved:
+            payload["mcp_server_names"] = list(self.effective_mcp_server_names)
         if self.attachments:
             payload["attachments"] = [dict(item) for item in self.attachments]
         return payload
@@ -710,6 +742,8 @@ class SecurityRunRequest:
             reasoning_effort=str(context.get("reasoning_effort") or "") or None,
             user_id=user_id,
             knowledge_owner_user_id=str(context.get("knowledge_owner_user_id") or "") or None,
+            actor_role=str(context.get("actor_role") or "user"),
+            actor_is_superuser=bool(context.get("actor_is_superuser", False)),
             memory_enabled=bool(context.get("memory_enabled", True)),
             store_raw_tool_io=bool(context.get("store_raw_tool_io", False)),
             search_knowledge=bool(context.get("search_knowledge", True)),
@@ -726,10 +760,15 @@ class SecurityRunRuntimeDependencies:
     build_model: Callable[..., Any] = _build_model
     get_db: Callable[[], Any] = get_async_agno_postgres_db
     get_async_knowledge_base: Callable[[], Any] = get_async_knowledge_base_async
+    # Legacy hooks remain injectable for existing focused tests and extensions.
+    # Production uses the actor-aware defaults below.
     get_enabled_skill_dirs: Callable[[], Any] = get_enabled_skill_dirs
     resolve_enabled_skill_dirs: Callable[..., Any] = resolve_enabled_skill_dirs
+    effective_skill_dirs_for_actor: Callable[..., Any] = effective_skill_dirs_for_actor
+    effective_mcp_server_names_for_actor: Callable[..., Any] = effective_mcp_server_names_for_actor
     get_mcp_url: Callable[[], str] = _build_mcp_url
     get_mcp_token: Callable[[], str] = _build_mcp_token
+    issue_mcp_delegation_token: Callable[[str], str] = issue_delegation_token
     mcp_tools_factory: Callable[..., Any] = MCPTools
     agent_factory: Callable[..., Any] = Agent
 
@@ -1136,30 +1175,107 @@ class SecurityRunRuntime:
             live_search,
         )
 
+    async def _resolve_effective_capabilities(
+        self, request: SecurityRunRequest
+    ) -> SecurityRunRequest:
+        """Snapshot the user-effective surface once for this Agent run."""
+        if request.capability_snapshot_resolved:
+            return request
+        if not request.enable_tools:
+            return replace(
+                request,
+                effective_skill_names=(),
+                effective_mcp_server_names=(),
+                capability_snapshot_resolved=True,
+            )
+
+        skill_names: tuple[str, ...] = ()
+        if profile_attaches_skills(request.agent_id):
+            dirs_raw = await self._resolve_skill_dirs_for_request(request)
+            skill_names = tuple(
+                parse_skill_metadata(Path(directory)).name for directory in dirs_raw
+            )
+
+        mcp_names_raw: list[str] = []
+        if profile_connects_mcp(request.agent_id) and not self._uses_legacy_skill_hooks():
+            mcp_names_raw = await _run_sync_dependency(
+                self.dependencies.effective_mcp_server_names_for_actor,
+                request.capability_actor,
+            )
+        return replace(
+            request,
+            effective_skill_names=skill_names,
+            effective_mcp_server_names=tuple(str(name) for name in mcp_names_raw),
+            capability_snapshot_resolved=True,
+        )
+
     async def _build_enabled_skills(
-        self,
-        skill_names: list[str] | None = None,
+        self, request: SecurityRunRequest | None = None
     ) -> Skills | None:
         """Load Local Skills.
 
         ``skill_names`` mirrors Workflow step binding:
         None → all enabled; [] → none; list → enabled ∩ names.
         """
-        if skill_names is not None and not skill_names:
-            return None
-        if skill_names is None:
+        if request is None:
             dirs_raw = await _run_sync_dependency(
                 self.dependencies.get_enabled_skill_dirs
             )
-        else:
-            dirs_raw = await _run_sync_dependency(
-                self.dependencies.resolve_enabled_skill_dirs,
-                skill_names,
-            )
+            enabled_dirs = [str(skill_dir) for skill_dir in dirs_raw]
+            if not enabled_dirs:
+                return None
+            return await to_thread.run_sync(_load_local_skills, enabled_dirs)
+        skill_names = request.skill_names
+        if skill_names is not None and not skill_names:
+            return None
+        dirs_raw = await self._resolve_skill_dirs_for_request(request)
         enabled_dirs = [str(skill_dir) for skill_dir in dirs_raw]
         if not enabled_dirs:
             return None
         return await to_thread.run_sync(_load_local_skills, enabled_dirs)
+
+    def _uses_legacy_skill_hooks(self) -> bool:
+        effective_skill_resolver = getattr(
+            self.dependencies,
+            "effective_skill_dirs_for_actor",
+            effective_skill_dirs_for_actor,
+        )
+        legacy_resolver = getattr(
+            self.dependencies,
+            "resolve_enabled_skill_dirs",
+            resolve_enabled_skill_dirs,
+        )
+        legacy_mcp_token = getattr(
+            self.dependencies,
+            "get_mcp_token",
+            _build_mcp_token,
+        )
+        return (
+            effective_skill_resolver is effective_skill_dirs_for_actor
+            and (
+                self.dependencies.get_enabled_skill_dirs is not get_enabled_skill_dirs
+                or legacy_resolver is not resolve_enabled_skill_dirs
+                or legacy_mcp_token is not _build_mcp_token
+            )
+        )
+
+    async def _resolve_skill_dirs_for_request(
+        self, request: SecurityRunRequest
+    ) -> Any:
+        if self._uses_legacy_skill_hooks():
+            if request.skill_names is None:
+                return await _run_sync_dependency(
+                    self.dependencies.get_enabled_skill_dirs
+                )
+            return await _run_sync_dependency(
+                self.dependencies.resolve_enabled_skill_dirs,
+                request.skill_names,
+            )
+        return await _run_sync_dependency(
+            self.dependencies.effective_skill_dirs_for_actor,
+            request.capability_actor,
+            request.skill_names,
+        )
 
     async def _stream_agent_events(
         self,
@@ -1410,9 +1526,8 @@ class SecurityRunRuntime:
                             "enable_tools": bool(request.enable_tools),
                             "lean_mode": lean,
                             "search_knowledge": search_knowledge_active,
-                            "skill_names": list(request.skill_names)
-                            if request.skill_names is not None
-                            else None,
+                            "skill_names": list(request.effective_skill_names),
+                            "mcp_server_names": list(request.effective_mcp_server_names),
                         },
                     )
                 elif _event_matches(event_type, "run_intermediate_content"):
@@ -2069,7 +2184,7 @@ class SecurityRunRuntime:
             if mcp_tools is not None:
                 tools.append(mcp_tools)
         skills = (
-            await self._build_enabled_skills(request.skill_names)
+            await self._build_enabled_skills(request)
             if attaches_skills
             else None
         )
@@ -2160,6 +2275,7 @@ class SecurityRunRuntime:
         # streamed Agent execution.  A nested caller (``stream``/resume) reuses
         # its workspace, while direct callers still get correct cleanup.
         with analysis_workspace_context() as _workspace:
+            request = await self._resolve_effective_capabilities(request)
             if not should_connect_mcp(
                 request.skill_names,
                 enable_tools=bool(request.enable_tools),
@@ -2172,7 +2288,26 @@ class SecurityRunRuntime:
                 yield security_agent
                 return
 
-            token = await _run_sync_dependency(self.dependencies.get_mcp_token)
+            delegation_issuer = getattr(
+                self.dependencies,
+                "issue_mcp_delegation_token",
+                issue_delegation_token,
+            )
+            legacy_mcp_token = getattr(
+                self.dependencies,
+                "get_mcp_token",
+                _build_mcp_token,
+            )
+            if (
+                delegation_issuer is issue_delegation_token
+                and legacy_mcp_token is not _build_mcp_token
+            ):
+                token = await _run_sync_dependency(legacy_mcp_token)
+            else:
+                token = await _run_sync_dependency(
+                    delegation_issuer,
+                    request.agent_user_id,
+                )
             server_params = StreamableHTTPClientParams(
                 url=await _run_sync_dependency(self.dependencies.get_mcp_url),
             )
@@ -2248,6 +2383,7 @@ class SecurityRunRuntime:
         # this async generator is closed on completion/disconnect.
         with analysis_workspace_context() as _workspace:
             try:
+                request = await self._resolve_effective_capabilities(request)
                 if is_team_id(request.agent_id):
                     if not team_feature_enabled():
                         yield ChatRunEvent(

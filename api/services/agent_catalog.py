@@ -152,12 +152,14 @@ def list_chat_agents() -> list[dict[str, Any]]:
     return rows
 
 
-def list_workflow_executor_options() -> list[dict[str, str]]:
+def list_workflow_executor_options() -> list[dict[str, str | bool]]:
     """Product catalog for Workflow Studio executor Select."""
-    rows: list[dict[str, str]] = []
+    rows: list[dict[str, str | bool]] = []
     for ref, meta in AGENT_PROFILES.items():
         if not meta.get("workflow_selectable", True):
             continue
+        capabilities = str(meta.get("capabilities") or "")
+        caps = {part.strip() for part in capabilities.split(",") if part.strip()}
         rows.append(
             {
                 "ref": ref,
@@ -165,9 +167,12 @@ def list_workflow_executor_options() -> list[dict[str, str]]:
                 "name": str(meta["name"]),
                 "description": str(meta["description"]),
                 "category": str(meta.get("category") or "operations"),
-                "capabilities": str(meta.get("capabilities") or ""),
+                "capabilities": capabilities,
                 "recommended_for": str(meta.get("recommended_for") or ""),
                 "role": str(meta.get("role") or ""),
+                "attach_skills": bool(meta.get("attach_skills")),
+                "supports_hitl": "hitl" in caps,
+                "connect_mcp": bool(meta.get("connect_mcp")),
             }
         )
     return rows

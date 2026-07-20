@@ -112,6 +112,34 @@ export type ExecutorOption = {
   capabilities?: string
   recommendedFor?: string
   role?: string
+  attachSkills?: boolean
+  supportsHitl?: boolean
+  connectMcp?: boolean
+}
+
+/** Built-in business preset or user custom step node for the Studio palette. */
+export type WorkflowNodePreset = {
+  id: string
+  name: string
+  description: string
+  color: string
+  source: 'builtin' | 'user'
+  definition: {
+    type: 'step'
+    name: string
+    executor: { kind: 'agent'; ref: string }
+    instructions?: string
+    skills?: string[]
+    requires_confirmation?: boolean
+    confirmation_message?: string
+    requires_user_input?: boolean
+    user_input_message?: string
+    user_input_schema?: UserInputSchemaField[]
+    requires_output_review?: boolean
+    output_review_message?: string
+  }
+  created_at?: number
+  updated_at?: number
 }
 
 export type WorkflowState = {

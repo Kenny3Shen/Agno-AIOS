@@ -19,7 +19,8 @@ Chat 与 Workflow 共用稳定 `agent_id` / executor `ref`（见 `api/services/a
 | `safe-fallback` | 轻量分析助手 | 无工具（Workflow 兜底） |
 
 - Chat：`GET /api/chat/agents`，发消息可带 `agent_id`（multipart/JSON）。
-- Workflow Studio（三栏：左侧节点/模板/工作流 Tab · 页面视图网格 · 右侧属性/运行 Tab · 顶栏纯图标工具条）：步骤 executor 下拉同步 catalog。
+- Workflow Studio（三栏：左侧节点/模板/工作流 Tab · 页面视图网格 · 右侧属性/运行 Tab · 顶栏纯图标工具条）：步骤 executor 下拉同步 catalog；左侧「基础 / 业务 / 自定义」节点预设可拖放或双击添加；步骤可「保存为自定义节点」（按用户隔离）。
+- Skills / MCP：列表「启用」为用户级偏好（稀疏：缺省启用）；管理员另见平台可用开关。运行时与 Workflow 步骤绑定仅加载「平台可用 ∩ 个人有效」的能力；`GET /api/me/capabilities` 提供偏好读写。
 - **Agno Team（beta）**：`TAIS_ENABLE_AGNO_TEAM=1` 时 Chat 可选 `research-analysis-team`（coordinate）/ `research-analysis-route` / `research-analysis-broadcast` / `research-analysis-tasks`；Tasks 模式遵循 Agno 的 `TaskStateUpdated` 快照渲染实时任务看板（负责人、依赖、结果与完成状态），并支持独立任务并行、依赖任务串行汇总。成员事件映射为 ThoughtChain，队长内容为最终回答；成员与 Team 的原始工具 I/O 默认不持久化。历史 Team 会话在 Team 关闭或移除时 fail-closed，不会降级到普通 Agent；默认不启用以避免 HITL/MCP 语义混淆。
 
 ### Agno 对齐（Data / Deep Research）
@@ -79,7 +80,7 @@ TAIS_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
 - CVE 情报源配置为仓库根目录 `cve_sources.toml`（可用 `TAIS_CVE_SOURCE_CONFIG_PATH` 覆盖）。
 Collect 按 `api/utils/url2md_utils.domain_rules` 源站爬取文章入库（`collect_articles`），页面默认从库检索。标题优先 og:title；可选 `TAIS_COLLECT_USE_PLAYWRIGHT` 浏览器兜底。解析侧用 `resolve_domain_rule_key` 归一化 host/`www` 并安全匹配多 class 正文容器（div/article/section/main）；规则未命中、class 漂移或 domain 正文过短（<200）时回退语义容器（article/main 等）；正文抽取含 h1–h4/pre/blockquote；已停用 botcrawl / The Register / securitylab.ru；源站含 BleepingComputer/Krebs/SecurityWeek/Dark Reading/The Record/Unit 42/Cloudflare 等；文章卡可跳转 CVE。同步时并发发现与抓取；跨源 round-robin 选取 URL 并跳过已入库成功项后补齐预算；重复同步返回 409。列表默认不带正文、可筛失败并 reparse/批量重采；源健康计数与按失败源快捷筛选；同步可按当前筛选源站；发现阶段跟进分页列表页；CVE 关键词走全文索引，页面进入即检索最近条目；库更新与 Collect 源站同步均支持 `stream=true` 阶段进度；Collect 同步与 CVE 库更新均可前端 Abort 停止（发现/抓取 sibling 任务一并取消；已写入变更保留）。
 - `POSTGRES_*` / `POSTGRES_URL`：PostgreSQL 连接。
-- 控制面（认证、`app`、`mcp`）表结构仅由 Alembic 管理；发布阶段先执行 `uv run alembic upgrade head`，API 与 Worker 仅校验数据库 revision，未迁移时会拒绝启动。Agno 自有的 session/trace/vector 表仍随已锁定的 Agno 版本管理。
+- 控制面（认证、`app`、`mcp`）表结构仅由 Alembic 管理；发布阶段先执行 `uv run alembic upgrade head`，API 与 Worker 仅校验数据库 revision，未迁移时会拒绝启动。 近期 revision 含用户能力偏好（`user_capability_preferences`）、MCP token 哈希与归属、`workflow_custom_nodes`，以及删除过期 `mcp_servers.default_enabled`。Agno 自有的 session/trace/vector 表仍随已锁定的 Agno 版本管理。
 - `ENVIRONMENT=production`（或 `prod`）启用 fail-closed 启动校验：`AUTH_JWT_SECRET`、重置/验证/OAuth state secret 必须替换默认或模板值，`CORS_ORIGINS` 与 `TRUSTED_HOSTS` 必须列出明确值而非 `*`；配置 OAuth 时还必须设置 `AUTH_COOKIE_SECURE=true`。
 - `AUTH_JWT_SECRET`：JWT 密钥；生产环境必须替换默认值。
 - `/api/health` 是不依赖下游服务的 liveness probe；`/api/ready` 在启动完成且控制面 PostgreSQL `SELECT 1` 成功后才返回 200，失败时返回 503。
@@ -537,6 +538,8 @@ Vitest 默认关闭 CSS 解析、限制 `maxWorkers=4`、使用 instant `user-ev
 | GET/PATCH/DELETE | `/api/workflows/{id}` | read / write | 详情、更新、删除（owner 隔离，admin 可跨用户） |
 | GET | `/api/workflows/executors` | `workflows:read` | 可绑执行器目录 |
 | GET | `/api/workflows/templates` | `workflows:read` | 内置安全模板 |
+| GET | `/api/workflows/node-presets` | `workflows:read` | 业务预设 + 当前用户自定义节点 |
+| POST/PUT/DELETE | `/api/workflows/custom-nodes[/{id}]` | `workflows:write` | 用户自定义 step 预设 CRUD |
 | POST | `/api/workflows/{id}/runs` | `workflows:run` | SSE 运行（body 可选 `run_id` 预分配） |
 | POST | `/api/workflows/runs/{run_id}/cancel` | `workflows:run` | 取消 live Studio 运行 |
 

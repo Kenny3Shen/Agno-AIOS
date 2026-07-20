@@ -176,6 +176,90 @@ describe('workflow list API', () => {
     await expect(listWorkflowTemplates()).resolves.toMatchObject([{ id: 'triage', name: 'Triage' }])
   })
 
+  it('accepts sparse step HITL flags used by built-in templates', async () => {
+    setToken('token')
+    server.use(
+      http.get('/api/workflows/templates', () =>
+        HttpResponse.json({
+          data: [
+            {
+              id: 'ir-triage',
+              name: 'Incident triage (IR)',
+              description: 'Classify severity',
+              category: 'incident_response',
+              tags: ['security'],
+              definition: {
+                name: 'Incident triage',
+                description: 'Security IR',
+                steps: [
+                  {
+                    id: 'triage',
+                    type: 'step',
+                    name: 'Triage alert',
+                    executor: { kind: 'agent', ref: 'security-operations' },
+                    instructions: 'Summarize the alert',
+                    skills: ['cve-intel-skill'],
+                    position: { x: 80, y: 80 },
+                  },
+                  {
+                    id: 'severity',
+                    type: 'condition',
+                    name: 'Critical?',
+                    evaluator: { cel: 'true' },
+                    steps: [
+                      {
+                        id: 'contain',
+                        type: 'step',
+                        name: 'Contain',
+                        executor: { kind: 'agent', ref: 'security-operations' },
+                        instructions: 'Propose containment',
+                        requires_confirmation: true,
+                        confirmation_message: 'Approve containment?',
+                        position: { x: 420, y: 40 },
+                      },
+                    ],
+                    else: [
+                      {
+                        id: 'report',
+                        type: 'step',
+                        name: 'Report',
+                        executor: { kind: 'agent', ref: 'safe-fallback' },
+                        instructions: 'Write a note',
+                        position: { x: 420, y: 200 },
+                      },
+                    ],
+                    position: { x: 280, y: 80 },
+                  },
+                ],
+              },
+            },
+          ],
+          meta: { page: 1, limit: 1, total_count: 1, total_pages: 1, search_time_ms: 0 },
+        }),
+      ),
+    )
+
+    await expect(listWorkflowTemplates()).resolves.toMatchObject([
+      {
+        id: 'ir-triage',
+        definition: {
+          steps: [
+            {
+              id: 'triage',
+              requires_confirmation: false,
+              requires_user_input: false,
+              requires_output_review: false,
+            },
+            {
+              id: 'severity',
+              steps: [{ id: 'contain', requires_confirmation: true }],
+            },
+          ],
+        },
+      },
+    ])
+  })
+
   it('rejects malformed static catalog rows instead of silently omitting or coercing them', async () => {
     setToken('token')
     server.use(

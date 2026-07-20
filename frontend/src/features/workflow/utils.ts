@@ -83,6 +83,44 @@ export const createNode = (type: WorkflowNodeType = 'step'): WorkflowNode => {
   }
 }
 
+/** Materialize a business/custom step preset into a canvas node. */
+export const createNodeFromPreset = (
+  preset: {
+    name: string
+    definition: {
+      name?: string
+      executor?: { ref?: string }
+      instructions?: string
+      skills?: string[]
+      requires_confirmation?: boolean
+      confirmation_message?: string
+      requires_user_input?: boolean
+      user_input_message?: string
+      user_input_schema?: WorkflowNode['userInputSchema']
+      requires_output_review?: boolean
+      output_review_message?: string
+    }
+  },
+): WorkflowNode => {
+  const def = preset.definition
+  const node = createNode('step')
+  return {
+    ...node,
+    name: (def.name || preset.name || '').trim(),
+    kind: 'agent',
+    targetId: def.executor?.ref || 'security-operations',
+    instructions: def.instructions || '',
+    skills: Array.isArray(def.skills) ? def.skills.map(String).filter(Boolean) : [],
+    requiresConfirmation: Boolean(def.requires_confirmation),
+    confirmationMessage: def.confirmation_message || '',
+    requiresUserInput: Boolean(def.requires_user_input),
+    userInputMessage: def.user_input_message || '',
+    userInputSchema: def.user_input_schema,
+    requiresOutputReview: Boolean(def.requires_output_review),
+    outputReviewMessage: def.output_review_message || '',
+  }
+}
+
 
 export const moveStep = (steps: WorkflowNode[], id: string, direction: -1 | 1) => {
   const index = steps.findIndex((step) => step.id === id)

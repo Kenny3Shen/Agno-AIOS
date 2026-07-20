@@ -7,7 +7,7 @@ from typing import Literal
 from sse_starlette.sse import EventSourceResponse
 
 from api.auth.models import User
-from api.auth.claims import ADMIN_SCOPE, actor_id, has_scope, scope_user_id
+from api.auth.claims import ADMIN_SCOPE, actor_id, actor_role, has_scope, scope_user_id
 from api.auth.ownership import assert_owned_resource
 from api.auth.scopes import require_scope
 from api.services.chat_session_service import (
@@ -275,6 +275,8 @@ async def _start_chat_stream(
         model_id=model_id,
         reasoning_effort=reasoning_effort,
         user_id=actor_id(user),
+        actor_role=actor_role(user),
+        actor_is_superuser=bool(getattr(user, "is_superuser", False)),
         knowledge_owner_user_id=None
         if has_scope(user, ADMIN_SCOPE)
         else actor_id(user),

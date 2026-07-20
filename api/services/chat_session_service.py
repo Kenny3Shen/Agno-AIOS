@@ -436,21 +436,27 @@ _MISSING = object()
 
 def _history_runtime_tool_surface(
     run: dict[str, object],
-) -> tuple[bool | None, bool | None, list[str] | None | object, bool | None]:
-    """Extract enable_tools / lean_mode / skill_names / search_knowledge from metadata.
+) -> tuple[
+    bool | None,
+    bool | None,
+    list[str] | None | object,
+    list[str] | object,
+    bool | None,
+]:
+    """Extract the server-resolved tool surface from persisted run metadata.
 
     Returns:
-        (enable_tools, lean_mode, skill_names, search_knowledge)
-        skill_names uses ``_MISSING`` when runtime metadata is absent.
+        (enable_tools, lean_mode, skill_names, mcp_server_names, search_knowledge)
+        Capability lists use ``_MISSING`` when runtime metadata is absent.
         lean_mode is **auto-intent lite only** (tools on + empty skill list), not tools-off.
         search_knowledge is the **effective** mount (false on lean / tools-off).
     """
     metadata = coerce_json_value(run.get("metadata") or {})
     if not isinstance(metadata, dict):
-        return None, None, _MISSING, None
+        return None, None, _MISSING, _MISSING, None
     context = metadata.get("tais_runtime")
     if not isinstance(context, dict):
-        return None, None, _MISSING, None
+        return None, None, _MISSING, _MISSING, None
 
     enable_tools = bool(context.get("enable_tools", True))
     raw_skills = context.get("skill_names", _MISSING)
@@ -463,6 +469,15 @@ def _history_runtime_tool_surface(
         skill_names = [str(item).strip() for item in raw_skills if str(item).strip()]
     else:
         skill_names = _MISSING
+
+    raw_mcp_servers = context.get("mcp_server_names", _MISSING)
+    mcp_server_names: list[str] | object
+    if isinstance(raw_mcp_servers, list):
+        mcp_server_names = [
+            str(item).strip() for item in raw_mcp_servers if str(item).strip()
+        ]
+    else:
+        mcp_server_names = _MISSING
 
     # Auto-lite only when tools are enabled and intent attached no skills.
     if not enable_tools:
@@ -478,7 +493,7 @@ def _history_runtime_tool_surface(
     search_knowledge = bool(
         requested_search and enable_tools and lean_mode is not True
     )
-    return enable_tools, lean_mode, skill_names, search_knowledge
+    return enable_tools, lean_mode, skill_names, mcp_server_names, search_knowledge
 
 
 
@@ -972,7 +987,7 @@ async def get_session_messages_async(
             approval_id = _history_approval_id(raw_tools)
             if approval_id:
                 message["approval_id"] = approval_id
-            enable_tools, lean_mode, skill_names, search_knowledge = (
+            enable_tools, lean_mode, skill_names, mcp_server_names, search_knowledge = (
                 _history_runtime_tool_surface(cast(dict[str, object], run))
             )
             if enable_tools is not None:
@@ -981,6 +996,8 @@ async def get_session_messages_async(
                 message["lean_mode"] = lean_mode
             if skill_names is not _MISSING:
                 message["skill_names"] = skill_names
+            if mcp_server_names is not _MISSING:
+                message["mcp_server_names"] = mcp_server_names
             if search_knowledge is not None:
                 message["search_knowledge"] = search_knowledge
             if chat_settings.show_raw_reasoning:

@@ -6,6 +6,7 @@ Supported steps: step | parallel | condition | loop | router | workflow_ref
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Awaitable, Callable, cast
 
 from agno.agent import Agent
@@ -22,7 +23,7 @@ from api.services.agent_tools import build_tools_for_profile
 from api.services.model_config_service import get_model_for_run
 from api.services.model_factory import build_agno_model
 from api.services.postgres_store import get_async_agno_postgres_db
-from api.services.skill_service import resolve_enabled_skill_dirs
+from api.services.skill_service import parse_skill_metadata, resolve_enabled_skill_dirs
 from api.services.workflow_definition_migration import (
     RETIRED_WORKFLOW_SKILL_NAMES,
     canonicalize_workflow_definition,
@@ -372,6 +373,11 @@ def _normalize_user_input_schema(raw: object, *, path: str) -> list[dict[str, An
             entry["description"] = description
         normalized.append(entry)
     return normalized
+
+
+def normalize_user_input_schema(raw: object, *, path: str = "user_input_schema") -> list[dict[str, Any]]:
+    """Public wrapper for custom-node / external writers."""
+    return _normalize_user_input_schema(raw, path=path)
 
 
 def _normalize_children(
@@ -814,8 +820,54 @@ def collect_workflow_skill_names(definition: dict[str, Any] | list[Any] | None) 
     return names
 
 
-def _load_skills_for_names(skill_names: list[str]) -> Skills | None:
-    dirs = resolve_enabled_skill_dirs(skill_names)
+def collect_workflow_reference_ids(
+    definition: dict[str, Any] | list[Any] | None,
+) -> list[str]:
+    """Unique nested workflow IDs referenced anywhere in a definition."""
+    references: list[str] = []
+    seen: set[str] = set()
+
+    def walk(nodes: object) -> None:
+        if not isinstance(nodes, list):
+            return
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            if str(node.get("type") or "step") == "workflow_ref":
+                workflow_id = str(node.get("workflow_id") or "").strip()
+                if workflow_id and workflow_id not in seen:
+                    seen.add(workflow_id)
+                    references.append(workflow_id)
+            walk(node.get("steps"))
+            walk(node.get("else"))
+            choices = node.get("choices")
+            if isinstance(choices, list):
+                for choice in choices:
+                    if isinstance(choice, dict):
+                        walk(choice.get("steps"))
+
+    if isinstance(definition, dict):
+        walk(definition.get("steps"))
+    elif isinstance(definition, list):
+        walk(definition)
+    return references
+
+
+def _load_skills_for_names(
+    skill_names: list[str], *, available_skill_dirs: list[Path] | None = None
+) -> Skills | None:
+    if available_skill_dirs is None:
+        dirs = resolve_enabled_skill_dirs(skill_names)
+    else:
+        wanted = {name.strip() for name in skill_names if name.strip()}
+        dirs = [
+            path
+            for path in available_skill_dirs
+            if (
+                parse_skill_metadata(path).name in wanted
+                or parse_skill_metadata(path).capability_key in wanted
+            )
+        ]
     if not dirs:
         return None
     return Skills(loaders=[LocalSkills(str(path)) for path in dirs])
@@ -828,8 +880,8 @@ async def _build_agent(
     instructions: str,
     model_id: str | None,
     skill_names: list[str] | None = None,
+    available_skill_dirs: list[Path] | None = None,
 ) -> Agent:
-    from pathlib import Path
     from anyio import Path as AsyncPath
 
     meta = BUILTIN_AGENT_REFS[ref]
@@ -851,7 +903,9 @@ async def _build_agent(
         instruction_parts.append(instructions)
     # Skills only for profiles that attach them (security); specialists stay skill-free.
     skills = (
-        _load_skills_for_names(list(skill_names or []))
+        _load_skills_for_names(
+            list(skill_names or []), available_skill_dirs=available_skill_dirs
+        )
         if profile.get("attach_skills")
         else None
     )
@@ -877,6 +931,7 @@ async def _compile_node(
     model_id: str | None,
     resolve_nested: "Callable[[str], Awaitable[dict[str, Any]]] | None" = None,
     nesting_stack: set[str] | None = None,
+    available_skill_dirs: list[Path] | None = None,
 ) -> Any:
     node_type = str(node.get("type") or "step")
     name = str(node.get("name") or node.get("id") or node_type)
@@ -896,6 +951,7 @@ async def _compile_node(
             instructions=instructions,
             model_id=model_id,
             skill_names=skill_names,
+            available_skill_dirs=available_skill_dirs,
         )
         return Step(
             name=name,
@@ -921,7 +977,7 @@ async def _compile_node(
 
     if node_type == "parallel":
         children = [
-            await _compile_node(child, model_id=model_id, resolve_nested=resolve_nested, nesting_stack=nesting_stack)
+            await _compile_node(child, model_id=model_id, resolve_nested=resolve_nested, nesting_stack=nesting_stack, available_skill_dirs=available_skill_dirs)
             for child in list(node.get("steps") or [])
         ]
         return Parallel(*children, name=name)
@@ -937,11 +993,11 @@ async def _compile_node(
         else:
             raise WorkflowDefinitionError(f"condition {name!r} missing evaluator")
         then_steps = [
-            await _compile_node(child, model_id=model_id, resolve_nested=resolve_nested, nesting_stack=nesting_stack)
+            await _compile_node(child, model_id=model_id, resolve_nested=resolve_nested, nesting_stack=nesting_stack, available_skill_dirs=available_skill_dirs)
             for child in list(node.get("steps") or [])
         ]
         else_steps = [
-            await _compile_node(child, model_id=model_id, resolve_nested=resolve_nested, nesting_stack=nesting_stack)
+            await _compile_node(child, model_id=model_id, resolve_nested=resolve_nested, nesting_stack=nesting_stack, available_skill_dirs=available_skill_dirs)
             for child in list(node.get("else") or [])
         ]
         return Condition(
@@ -968,7 +1024,7 @@ async def _compile_node(
         elif isinstance(end_raw, str) and end_raw.strip():
             end_condition = end_raw.strip()
         children = [
-            await _compile_node(child, model_id=model_id, resolve_nested=resolve_nested, nesting_stack=nesting_stack)
+            await _compile_node(child, model_id=model_id, resolve_nested=resolve_nested, nesting_stack=nesting_stack, available_skill_dirs=available_skill_dirs)
             for child in list(node.get("steps") or [])
         ]
         return Loop(
@@ -997,6 +1053,7 @@ async def _compile_node(
                     model_id=model_id,
                     resolve_nested=resolve_nested,
                     nesting_stack=nesting_stack,
+                    available_skill_dirs=available_skill_dirs,
                 )
                 for child in list(choice.get("steps") or [])
             ]
@@ -1032,6 +1089,7 @@ async def _compile_node(
             model_id=model_id,
             resolve_nested=resolve_nested,
             nesting_stack=nested_stack,
+            available_skill_dirs=available_skill_dirs,
         )
         nested_wf.name = name or nested_wf.name
         return nested_wf
@@ -1064,6 +1122,7 @@ async def compile_workflow(
     model_id: str | None = None,
     resolve_nested: Callable[[str], Awaitable[dict[str, Any]]] | None = None,
     nesting_stack: set[str] | None = None,
+    available_skill_dirs: list[Path] | None = None,
 ) -> Workflow:
     """Build an Agno Workflow from a validated nested definition."""
     normalized = validate_and_normalize_definition(
@@ -1081,6 +1140,7 @@ async def compile_workflow(
             model_id=model_id,
             resolve_nested=loader,
             nesting_stack=stack,
+            available_skill_dirs=available_skill_dirs,
         )
         for node in normalized["steps"]
     ]

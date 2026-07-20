@@ -19,6 +19,7 @@ from api.persistence.agent_evals import (
     agent_eval_suites_table,
 )
 from api.persistence.audit_logs import audit_logs_table
+from api.persistence.capability_preferences import capability_preferences_table
 from api.persistence.chat_settings import chat_settings_table
 from api.persistence.collect_articles import collect_articles_table
 from api.persistence.cves import cves_table
@@ -33,6 +34,7 @@ from api.persistence.model_configs import model_configs_table
 from api.persistence.notifications import _table as notifications_table
 from api.persistence.upload_approvals import upload_approvals_table
 from api.persistence.workflows import workflow_versions_table, workflows_table
+from api.persistence.workflow_custom_nodes import workflow_custom_nodes_table
 
 
 def _copy_tables(target: MetaData, tables: list[Table]) -> None:
@@ -62,6 +64,7 @@ def control_plane_metadata() -> MetaData:
         agent_eval_suite_runs_table(),
         agent_eval_case_runs_table(),
         audit_logs_table(),
+        capability_preferences_table(),
         chat_settings_table(),
         collect_articles_table(),
         cves_table(),
@@ -70,6 +73,7 @@ def control_plane_metadata() -> MetaData:
         model_configs_table(),
         notifications_table(),
         upload_approvals_table(),
+        workflow_custom_nodes_table(),
     ]
     settings = get_settings()
     workflow_metadata = MetaData(schema=settings.agno_app_schema)

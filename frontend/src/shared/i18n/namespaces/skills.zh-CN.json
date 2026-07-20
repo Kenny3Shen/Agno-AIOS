@@ -1,6 +1,6 @@
 {
   "title": "Skills",
-  "description": "管理 Agent 可调用技能、脚本与资源可见性",
+  "description": "管理 Agent 可调用技能；每位用户可独立选择启用哪些 Skill",
   "visibilityUpdated": "可见性已更新",
   "visibilityFailed": "更新技能可见性失败",
   "deleted": "技能已删除",
@@ -31,9 +31,13 @@
   "colSkill": "Skill",
   "colDescription": "描述",
   "colVisibility": "可见性",
-  "colEnabled": "启用",
+  "colEnabled": "平台可用",
   "colActions": "操作",
   "contentTab": "SKILL.md",
   "metadataTab": "元数据",
-  "scriptsTag": "脚本"
+  "scriptsTag": "脚本",
+  "colForMe": "启用",
+  "forMeFor": "启用 {{name}}",
+  "forMeUpdated": "已更新启用状态",
+  "forMeUpdateFailed": "更新启用状态失败"
 }

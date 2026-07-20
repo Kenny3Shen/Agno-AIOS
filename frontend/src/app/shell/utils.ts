@@ -10,9 +10,16 @@ export function defaultOpenNavigationGroupKeys<T>(groups: NavigationGroup<T>[]) 
   return groups.slice(0, 2).map((group) => navigationGroupMenuKey(group.key))
 }
 
-export function filterNavigationGroups<T extends { scope?: string }>(groups: NavigationGroup<T>[], canAccess: (scope: string) => boolean) {
+export function filterNavigationGroups<T extends { scope?: string; scopes?: readonly string[] }>(
+  groups: NavigationGroup<T>[],
+  canAccess: (scope: string) => boolean,
+) {
   return groups.flatMap((group) => {
-    const items = group.items.filter((item) => !item.scope || canAccess(item.scope))
+    const items = group.items.filter(
+      (item) =>
+        (!item.scope && !item.scopes?.length) ||
+        (item.scope ? canAccess(item.scope) : item.scopes?.some(canAccess)),
+    )
     return items.length ? [{ ...group, items }] : []
   })
 }

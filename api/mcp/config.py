@@ -6,6 +6,7 @@ import time
 from typing import Any
 
 from anyio import Path as AsyncPath
+from fastapi_users.jwt import decode_jwt, generate_jwt
 from loguru import logger
 
 from api.persistence.mcp import (
@@ -20,6 +21,7 @@ from api.persistence.mcp import (
     upsert_server_row,
     upsert_token_row,
 )
+from api.config import get_settings
 from api.services.runtime_paths import CONFIG_DIR
 from api.utils.async_once import AsyncOnce
 
@@ -30,6 +32,8 @@ SERVICE_IDS = ("basic", "hitl")
 RETIRED_SERVICE_IDS = frozenset({"playbook"})
 MCP_CONFIG_FILE = CONFIG_DIR / "mcp" / "mcp_config.json"
 MCP_TOKENS_TABLE = "mcp_tokens"
+MCP_DELEGATION_AUDIENCE = "tais-mcp-delegation"
+MCP_DELEGATION_LIFETIME_SECONDS = 120
 
 
 def normalize_namespace(value: str) -> str:
@@ -139,11 +143,18 @@ async def set_component_override(
     )
 
 
-async def list_tokens() -> list[dict[str, Any]]:
-    return await list_token_rows()
+async def list_tokens(*, owner_user_id: str | None = None) -> list[dict[str, Any]]:
+    return await list_token_rows(owner_user_id=owner_user_id)
 
 
-async def insert_token(name: str, expires_in: int, token: str | None = None) -> str:
+async def insert_token(
+    name: str,
+    expires_in: int,
+    token: str | None = None,
+    *,
+    owner_user_id: str | None = None,
+    token_kind: str = "user",
+) -> str:
     now = int(time.time())
     token_value = token or secrets.token_urlsafe(32)
     await upsert_token_row(
@@ -151,6 +162,8 @@ async def insert_token(name: str, expires_in: int, token: str | None = None) -> 
             "id": None,
             "name": name,
             "token": token_value,
+            "owner_user_id": owner_user_id,
+            "token_kind": token_kind,
             "created_at": now,
             "expires_at": 0 if expires_in == 0 else now + expires_in,
         }
@@ -158,8 +171,13 @@ async def insert_token(name: str, expires_in: int, token: str | None = None) -> 
     return token_value
 
 
-async def delete_token(token_id: int | None, token_value: str | None) -> bool:
-    return await delete_token_row(token_id, token_value)
+async def delete_token(
+    token_id: int | None,
+    token_value: str | None,
+    *,
+    owner_user_id: str | None = None,
+) -> bool:
+    return await delete_token_row(token_id, token_value, owner_user_id=owner_user_id)
 
 
 async def find_token(token: str) -> dict[str, Any] | None:
@@ -174,7 +192,43 @@ async def is_valid_token(token: str) -> bool:
     return expires_at == 0 or int(time.time()) < expires_at
 
 
+def issue_delegation_token(user_id: str) -> str:
+    """Mint a short-lived bearer for the in-process Chat MCP client.
+
+    The FastMCP verifier re-loads the user on every request, so the signed
+    token only conveys subject identity and cannot freeze a stale role.
+    """
+    return generate_jwt(
+        {
+            "sub": user_id,
+            "aud": [MCP_DELEGATION_AUDIENCE],
+            "kind": "delegation",
+        },
+        get_settings().auth_jwt_secret,
+        lifetime_seconds=MCP_DELEGATION_LIFETIME_SECONDS,
+        algorithm="HS256",
+    )
+
+
+def delegation_subject(token: str) -> str | None:
+    try:
+        claims = decode_jwt(
+            token,
+            get_settings().auth_jwt_secret,
+            audience=[MCP_DELEGATION_AUDIENCE],
+            algorithms=["HS256"],
+        )
+    except Exception:
+        return None
+    if claims.get("kind") != "delegation":
+        return None
+    subject = str(claims.get("sub") or "").strip()
+    return subject or None
+
+
 async def ensure_bootstrap_token(token: str | None) -> None:
     token_value = (token or "").strip()
     if token_value:
-        await insert_token("T.A.I.S Agent", 0, token_value)
+        await insert_token(
+            "T.A.I.S Agent", 0, token_value, token_kind="service"
+        )

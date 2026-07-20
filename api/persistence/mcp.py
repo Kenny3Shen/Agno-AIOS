@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from hashlib import sha256
+
 from api.utils.async_once import AsyncOnce
 
 from typing import Any
@@ -10,6 +12,7 @@ from sqlalchemy import (
     Column,
     ForeignKey,
     Identity,
+    Index,
     MetaData,
     String,
     Table,
@@ -39,15 +42,20 @@ def _metadata() -> MetaData:
 
 
 def mcp_tokens_table(metadata: MetaData | None = None) -> Table:
-    return Table(
+    table = Table(
         MCP_TOKENS_TABLE,
         metadata or _metadata(),
         Column("id", BigInteger, Identity(), primary_key=True),
         Column("name", Text, nullable=False),
         Column("token", Text, nullable=False, unique=True),
+        Column("token_hash", Text, nullable=False),
+        Column("owner_user_id", String(255), nullable=True),
+        Column("token_kind", String(16), nullable=False, server_default="service"),
         Column("created_at", BigInteger, nullable=False),
         Column("expires_at", BigInteger, nullable=False),
     )
+    Index("uq_mcp_tokens_token_hash", table.c.token_hash, unique=True)
+    return table
 
 
 def mcp_servers_table(metadata: MetaData | None = None) -> Table:
@@ -291,19 +299,33 @@ async def upsert_component_override_row(record: dict[str, Any]) -> None:
         await conn.execute(stmt)
 
 
-async def list_token_rows(*, limit: int = 100) -> list[dict[str, Any]]:
+async def list_token_rows(
+    *, owner_user_id: str | None = None, limit: int = 100
+) -> list[dict[str, Any]]:
     """Recent MCP tokens (newest first). Capped so admin UI cannot dump unbounded history."""
     await ensure_mcp_tables()
     table = mcp_tokens_table()
     safe_limit = max(1, min(int(limit or 100), 200))
     stmt = select(table).order_by(desc(table.c.created_at)).limit(safe_limit)
+    if owner_user_id is not None:
+        stmt = stmt.where(table.c.owner_user_id == owner_user_id)
     async with get_async_control_plane_engine().begin() as conn:
         return [dict(row) for row in (await conn.execute(stmt)).mappings().all()]
 
 
 def _token_insert_values(record: dict[str, Any]) -> dict[str, Any]:
+    raw_token = str(record.get("token") or "")
+    token_hash = str(record.get("token_hash") or _hash_token(raw_token))
     values = {
-        key: record.get(key) for key in ("name", "token", "created_at", "expires_at")
+        "name": record.get("name"),
+        # ``token`` was the legacy plaintext column.  Keep its uniqueness
+        # constraint while persisting only the digest after this migration.
+        "token": token_hash,
+        "token_hash": token_hash,
+        "owner_user_id": record.get("owner_user_id"),
+        "token_kind": record.get("token_kind") or "service",
+        "created_at": record.get("created_at"),
+        "expires_at": record.get("expires_at"),
     }
     if record.get("id") is not None:
         values["id"] = record["id"]
@@ -318,6 +340,8 @@ async def upsert_token_row(record: dict[str, Any]) -> None:
         index_elements=[table.c.token],
         set_={
             "name": stmt.excluded.name,
+            "owner_user_id": stmt.excluded.owner_user_id,
+            "token_kind": stmt.excluded.token_kind,
             "created_at": stmt.excluded.created_at,
             "expires_at": stmt.excluded.expires_at,
         },
@@ -326,15 +350,26 @@ async def upsert_token_row(record: dict[str, Any]) -> None:
         await conn.execute(stmt)
 
 
-async def delete_token_row(token_id: int | None, token_value: str | None) -> bool:
+def _hash_token(value: str) -> str:
+    return sha256(value.encode("utf-8")).hexdigest()
+
+
+async def delete_token_row(
+    token_id: int | None,
+    token_value: str | None,
+    *,
+    owner_user_id: str | None = None,
+) -> bool:
     await ensure_mcp_tables()
     table = mcp_tokens_table()
     if token_id is not None:
         stmt = delete(table).where(table.c.id == token_id)
     elif token_value:
-        stmt = delete(table).where(table.c.token == token_value)
+        stmt = delete(table).where(table.c.token_hash == _hash_token(token_value))
     else:
         return False
+    if owner_user_id is not None:
+        stmt = stmt.where(table.c.owner_user_id == owner_user_id)
     async with get_async_control_plane_engine().begin() as conn:
         result = await conn.execute(stmt)
     return int(result.rowcount or 0) > 0
@@ -345,7 +380,11 @@ async def find_token_row(token: str) -> dict[str, Any] | None:
     table = mcp_tokens_table()
     async with get_async_control_plane_engine().begin() as conn:
         row = (
-            (await conn.execute(select(table).where(table.c.token == token)))
+            (
+                await conn.execute(
+                    select(table).where(table.c.token_hash == _hash_token(token))
+                )
+            )
             .mappings()
             .first()
         )

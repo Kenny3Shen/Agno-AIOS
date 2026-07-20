@@ -5,7 +5,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from api.auth.claims import actor_id, actor_role
+from api.auth.claims import ADMIN_SCOPE, actor_id, actor_role, has_scope
 from api.auth.models import User
 from api.auth.scopes import require_scope
 from api.auth.visibility import normalize_visibility
@@ -71,6 +71,8 @@ class McpVisibilityRequest(BaseModel):
     visibility: str
 
 
+
+
 class ComponentToggle(BaseModel):
     server_id: int
     enabled: bool
@@ -104,9 +106,9 @@ async def update_config(request: Request, body: ServiceToggle, user: User = Depe
 async def get_components(
     component_type: Literal["tool", "resource", "template", "prompt"] | None = None,
     namespace: str | None = None,
-    _user: User = Depends(require_scope("mcp:read")),
+    user: User = Depends(require_scope("mcp:read")),
 ):
-    components = await list_components(component_type)
+    components = await list_components(component_type, actor=user)
     items = [item for item in components if namespace is None or item["namespace"] == namespace]
     return {
         "data": items,
@@ -140,7 +142,10 @@ async def invoke_tool(
     request: Request, name: str, body: ToolCallRequest,
     user: User = Depends(require_scope("mcp:write")),
 ):
-    result = await call_tool(name, body.arguments)
+    try:
+        result = await call_tool(name, body.arguments, actor=user)
+    except PermissionError as exc:
+        raise HTTPException(status_code=404, detail="MCP tool not found") from exc
     await record_audit_event_async(
         user, action="mcp.tool_call", resource_type="mcp_tool", resource_id=name,
         metadata={"argument_names": sorted(body.arguments)}, **audit_request_context(request),
@@ -149,8 +154,16 @@ async def invoke_tool(
 
 
 @router.get("/tokens")
-async def get_tokens(_user: User = Depends(require_scope("mcp:read"))):
-    items = [{key: value for key, value in row.items() if key != "token"} for row in await list_tokens()]
+async def get_tokens(user: User = Depends(require_scope("mcp:read"))):
+    owner_user_id = None if has_scope(user, ADMIN_SCOPE) else actor_id(user)
+    items = [
+        {
+            key: value
+            for key, value in row.items()
+            if key not in {"token", "token_hash"}
+        }
+        for row in await list_tokens(owner_user_id=owner_user_id)
+    ]
     return {
         "data": items,
         "meta": pagination_meta(
@@ -162,10 +175,15 @@ async def get_tokens(_user: User = Depends(require_scope("mcp:read"))):
 
 
 @router.post("/tokens/issue")
-async def issue_token(request: Request, body: TokenIssue, user: User = Depends(require_scope("mcp:write"))):
+async def issue_token(request: Request, body: TokenIssue, user: User = Depends(require_scope("mcp:read"))):
     if body.expires_in < 0 or (body.expires_in != 0 and body.expires_in < 86400):
         raise HTTPException(status_code=400, detail="Expires in must be zero or at least 1 day")
-    token = await insert_token(body.name.strip() or "未命名 Token", body.expires_in)
+    token = await insert_token(
+        body.name.strip() or "未命名 Token",
+        body.expires_in,
+        owner_user_id=actor_id(user),
+        token_kind="user",
+    )
     await record_audit_event_async(
         user, action="mcp.token_issue", resource_type="mcp_token",
         resource_id=body.name.strip() or "未命名 Token", metadata={"expires_in": body.expires_in},
@@ -175,8 +193,9 @@ async def issue_token(request: Request, body: TokenIssue, user: User = Depends(r
 
 
 @router.post("/tokens/delete")
-async def remove_token(request: Request, body: TokenDelete, user: User = Depends(require_scope("mcp:write"))):
-    if not await delete_token(body.id, None):
+async def remove_token(request: Request, body: TokenDelete, user: User = Depends(require_scope("mcp:read"))):
+    owner_user_id = None if has_scope(user, ADMIN_SCOPE) else actor_id(user)
+    if not await delete_token(body.id, None, owner_user_id=owner_user_id):
         raise HTTPException(status_code=404, detail="Token not found")
     await record_audit_event_async(
         user, action="mcp.token_delete", resource_type="mcp_token", resource_id=str(body.id or ""),
@@ -241,6 +260,8 @@ async def update_mcp_server_enabled(
     change = await apply_mcp_server_toggle(server_id, body.enabled, user)
     await _audit(request, user, change)
     return change.response
+
+
 
 
 @router.delete("/servers/{server_id}")

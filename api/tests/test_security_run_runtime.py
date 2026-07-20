@@ -718,9 +718,11 @@ async def test_stream_agent_events_persists_and_projects_required_approval_pause
             "version": 1,
             "agent_id": "security-operations",
             "model_id": "model-1",
-            "reasoning_effort": "",
-            "knowledge_owner_user_id": "",
-            "memory_enabled": True,
+                "reasoning_effort": "",
+                "knowledge_owner_user_id": "",
+                "actor_role": "user",
+                "actor_is_superuser": False,
+                "memory_enabled": True,
             "store_raw_tool_io": False,
             "search_knowledge": True,
             "live_search": None,
@@ -991,7 +993,6 @@ def test_mcp_header_provider_injects_current_run_identity():
     )
     assert headers == {
         "Authorization": "Bearer secret",
-        "X-Agno-User-ID": "user-1",
         "X-Agno-Session-ID": "session-1",
         "X-Agno-Run-ID": "run-1",
     }

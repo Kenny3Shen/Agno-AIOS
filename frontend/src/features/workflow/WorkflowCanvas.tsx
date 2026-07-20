@@ -75,6 +75,7 @@ import {
 const nodeTypes = { workflow: WorkflowFlowNode } as const
 
 const PALETTE_MIME = 'application/x-workflow-node'
+const PRESET_MIME = 'application/x-workflow-preset'
 
 const NODE_SETTLE_MS = 220
 
@@ -158,6 +159,11 @@ type Props = {
   onConnectBranch: (sourceId: string, targetId: string, sourceHandle?: string | null) => void
   onDropNode: (
     type: WorkflowNodeType,
+    position: { x: number; y: number },
+    target?: ReparentTarget | null
+  ) => void
+  onDropPreset?: (
+    presetId: string,
     position: { x: number; y: number },
     target?: ReparentTarget | null
   ) => void
@@ -329,6 +335,7 @@ function CanvasInner({
   onConnectSequence,
   onConnectBranch,
   onDropNode,
+  onDropPreset,
   onReparent,
   onEmptySlot,
   onDeleteSelected,
@@ -1079,17 +1086,22 @@ function CanvasInner({
     (event: DragEvent) => {
       event.preventDefault()
       if (running) return
-      const type = event.dataTransfer.getData(PALETTE_MIME) as WorkflowNodeType
-      if (!type) return
       const position = screenToFlowPosition({ x: event.clientX, y: event.clientY })
       const hit = findContainerAtPoint(position)
-      onDropNode(type, position, hit?.target ?? null)
+      const presetId = event.dataTransfer.getData(PRESET_MIME).trim()
+      if (presetId) {
+        onDropPreset?.(presetId, position, hit?.target ?? null)
+      } else {
+        const type = event.dataTransfer.getData(PALETTE_MIME) as WorkflowNodeType
+        if (!type) return
+        onDropNode(type, position, hit?.target ?? null)
+      }
       // Only nudge viewport when dropping into empty canvas (first node).
       if (!stepsRef.current.length) {
         requestAnimationFrame(() => void fitView({ ...FIT_VIEW_OPTIONS }))
       }
     },
-    [screenToFlowPosition, onDropNode, fitView, findContainerAtPoint, running]
+    [screenToFlowPosition, onDropNode, onDropPreset, fitView, findContainerAtPoint, running]
   )
 
   const onKeyDown = useCallback(
@@ -1324,5 +1336,10 @@ export function WorkflowCanvas(props: Props) {
 
 export function paletteDragStart(event: DragEvent, type: WorkflowNodeType) {
   event.dataTransfer.setData(PALETTE_MIME, type)
+  event.dataTransfer.effectAllowed = 'copy'
+}
+
+export function palettePresetDragStart(event: DragEvent, presetId: string) {
+  event.dataTransfer.setData(PRESET_MIME, presetId)
   event.dataTransfer.effectAllowed = 'copy'
 }

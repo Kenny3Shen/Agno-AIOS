@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -20,6 +21,13 @@ async def test_hitl_tool_is_mounted_with_schema_and_executes_with_request_audit(
                 "x-agno-session-id": "session-1",
                 "x-agno-run-id": "run-1",
             },
+        ),
+        patch.object(
+            hitl,
+            "get_access_token",
+            return_value=SimpleNamespace(
+                claims={"sub": "user-1"}, subject="user-1"
+            ),
         ),
         patch.object(hitl, "record_audit_event_async", new=AsyncMock()) as audit,
     ):

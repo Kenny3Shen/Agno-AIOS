@@ -29,6 +29,7 @@ from api.services.upload_approval_service import submit_skill_upload
 from api.services.notification_service import notify_admins_of_submission
 from api.utils.pagination import pagination_meta
 from api.services.skill_reference_service import list_skill_workflow_references
+from api.persistence.capability_preferences import clear_capability_preferences_for_resource
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
 
@@ -57,6 +58,7 @@ async def read_skill_archive(file: UploadFile) -> bytes:
 # ── Pydantic models ──────────────────────────────────────────
 
 class SkillInfo(BaseModel):
+    capability_key: str = ""
     name: str
     description: str
     enabled: bool
@@ -77,6 +79,8 @@ class SkillToggleRequest(BaseModel):
 class SkillToggleResponse(BaseModel):
     name: str
     enabled: bool
+
+
 
 
 class SkillVisibilityResponse(BaseModel):
@@ -178,6 +182,8 @@ async def toggle_skill(
     return SkillToggleResponse(name=public_name, enabled=body.enabled)
 
 
+
+
 @router.post("/upload", response_model=SkillUploadResponse)
 async def upload_skill(
     request: Request,
@@ -258,6 +264,7 @@ async def delete_skill_route(
     user: User = Depends(require_scope(ADMIN_SCOPE)),
 ):
     """Permanently delete a Skill. This operation is restricted to admins."""
+    info = get_skill_info(skill_name, None, include_detail=False)
     try:
         public_name = await to_thread.run_sync(delete_skill, skill_name, user)
     except FileNotFoundError:
@@ -266,6 +273,11 @@ async def delete_skill_route(
         raise HTTPException(status_code=403, detail="Administrator permission required") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if info is not None:
+        await clear_capability_preferences_for_resource(
+            capability_type="skill", capability_key=str(info["capability_key"])
+        )
 
     await record_audit_event_async(
         user,

@@ -9,6 +9,7 @@ import type {
   ExecutorOption,
   WorkflowDefinition,
   WorkflowDefinitionNode,
+  WorkflowNodePreset,
   WorkflowNodeType,
   WorkflowRecord,
   WorkflowRunLogItem,
@@ -220,10 +221,17 @@ function parseWorkflowNode(
     const outputReviewMessage = optionalWorkflowString(row.output_review_message, context, label)
     const skills = optionalWorkflowSkills(row.skills, context, label)
     const userInputSchema = optionalUserInputSchema(row.user_input_schema, context, label)
+    // Sparse definitions (templates + toDefinition) omit false HITL flags.
+    const requiresConfirmation =
+      row.requires_confirmation === undefined ? false : row.requires_confirmation
+    const requiresUserInput =
+      row.requires_user_input === undefined ? false : row.requires_user_input
+    const requiresOutputReview =
+      row.requires_output_review === undefined ? false : row.requires_output_review
     if (
-      typeof row.requires_confirmation !== 'boolean' ||
-      typeof row.requires_user_input !== 'boolean' ||
-      typeof row.requires_output_review !== 'boolean'
+      typeof requiresConfirmation !== 'boolean' ||
+      typeof requiresUserInput !== 'boolean' ||
+      typeof requiresOutputReview !== 'boolean'
     ) {
       return invalidWorkflowValue(context, label)
     }
@@ -231,10 +239,15 @@ function parseWorkflowNode(
       ...common,
       type: 'step',
       executor: parseWorkflowExecutor(row.executor, context, label),
-      instructions: requireWorkflowString(row.instructions, context, label),
-      requires_confirmation: row.requires_confirmation,
-      requires_user_input: row.requires_user_input,
-      requires_output_review: row.requires_output_review,
+      // Templates may omit empty instructions; treat missing as "".
+      instructions: requireWorkflowString(
+        row.instructions === undefined ? '' : row.instructions,
+        context,
+        label,
+      ),
+      requires_confirmation: requiresConfirmation,
+      requires_user_input: requiresUserInput,
+      requires_output_review: requiresOutputReview,
       ...(confirmationMessage === undefined ? {} : { confirmation_message: confirmationMessage }),
       ...(userInputMessage === undefined ? {} : { user_input_message: userInputMessage }),
       ...(outputReviewMessage === undefined ? {} : { output_review_message: outputReviewMessage }),
@@ -404,6 +417,69 @@ const parseExecutorOption = (value: unknown, context: string): ExecutorOption =>
     capabilities: row.capabilities,
     recommendedFor: row.recommended_for,
     role: row.role,
+    attachSkills: row.attach_skills === undefined ? undefined : Boolean(row.attach_skills),
+    supportsHitl: row.supports_hitl === undefined ? undefined : Boolean(row.supports_hitl),
+    connectMcp: row.connect_mcp === undefined ? undefined : Boolean(row.connect_mcp),
+  }
+}
+
+const parseNodePreset = (value: unknown, context: string): WorkflowNodePreset => {
+  const row = asRecord(value)
+  if (!row) throw new Error(`${context}: invalid workflow node preset payload`)
+  const id = typeof row.id === 'string' ? row.id.trim() : ''
+  const name = typeof row.name === 'string' ? row.name.trim() : ''
+  const source = row.source === 'user' || row.source === 'builtin' ? row.source : ''
+  const definition = asRecord(row.definition)
+  const executor = asRecord(definition?.executor)
+  const ref = typeof executor?.ref === 'string' ? executor.ref.trim() : ''
+  if (
+    !id ||
+    !name ||
+    !source ||
+    !definition ||
+    typeof row.description !== 'string' ||
+    typeof row.color !== 'string' ||
+    definition.type !== 'step' ||
+    !ref
+  ) {
+    throw new Error(`${context}: invalid workflow node preset payload`)
+  }
+  const skills = Array.isArray(definition.skills)
+    ? definition.skills.filter((item): item is string => typeof item === 'string')
+    : []
+  return {
+    id,
+    name,
+    description: row.description,
+    color: row.color || '#1677ff',
+    source,
+    definition: {
+      type: 'step',
+      name: typeof definition.name === 'string' ? definition.name : name,
+      executor: { kind: 'agent', ref },
+      instructions: typeof definition.instructions === 'string' ? definition.instructions : '',
+      skills,
+      requires_confirmation: Boolean(definition.requires_confirmation),
+      confirmation_message:
+        typeof definition.confirmation_message === 'string'
+          ? definition.confirmation_message
+          : undefined,
+      requires_user_input: Boolean(definition.requires_user_input),
+      user_input_message:
+        typeof definition.user_input_message === 'string' ? definition.user_input_message : undefined,
+      user_input_schema: optionalUserInputSchema(
+        definition.user_input_schema,
+        context,
+        'workflow definition',
+      ),
+      requires_output_review: Boolean(definition.requires_output_review),
+      output_review_message:
+        typeof definition.output_review_message === 'string'
+          ? definition.output_review_message
+          : undefined,
+    },
+    created_at: typeof row.created_at === 'number' ? row.created_at : undefined,
+    updated_at: typeof row.updated_at === 'number' ? row.updated_at : undefined,
   }
 }
 
@@ -565,6 +641,48 @@ export const listExecutors = async () => {
   })
   return data
 }
+
+export const listNodePresets = async () => {
+  const raw = await requestJson<unknown>('/workflows/node-presets')
+  const { data } = normalizePaginatedList(raw, {
+    mapItem: (item) => parseNodePreset(item, 'listNodePresets'),
+  })
+  return data
+}
+
+export const createCustomNode = async (body: {
+  name: string
+  description?: string
+  color?: string
+  definition: WorkflowNodePreset['definition']
+}) =>
+  parseNodePreset(
+    await requestJson<unknown>('/workflows/custom-nodes', jsonInit('POST', body)),
+    'createCustomNode',
+  )
+
+export const updateCustomNode = async (
+  id: string,
+  body: {
+    name: string
+    description?: string
+    color?: string
+    definition: WorkflowNodePreset['definition']
+  },
+) =>
+  parseNodePreset(
+    await requestJson<unknown>(
+      `/workflows/custom-nodes/${encodeURIComponent(id)}`,
+      jsonInit('PUT', body),
+    ),
+    'updateCustomNode',
+  )
+
+export const deleteCustomNode = async (id: string) =>
+  requestJson<{ success: boolean }>(
+    `/workflows/custom-nodes/${encodeURIComponent(id)}`,
+    { method: 'DELETE' },
+  )
 
 type WorkflowSseHandler = (item: WorkflowRunLogItem) => void
 

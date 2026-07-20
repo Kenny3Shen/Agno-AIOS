@@ -459,3 +459,44 @@ async def test_stream_registers_and_unregisters_workflow():
     assert events[-1].event == "workflow.completed"
     # After stream completes, cancel should miss (unregistered).
     assert not workflow_run_runtime.cancel_workflow_run(user_id="u1", run_id="run-reg")
+
+
+@pytest.mark.asyncio
+async def test_workflow_preflight_includes_nested_workflow_skill_bindings():
+    root = {
+        "name": "root",
+        "steps": [
+            {"type": "step", "skills": ["root-skill"]},
+            {"type": "workflow_ref", "workflow_id": "nested-1"},
+        ],
+    }
+    nested = {
+        "name": "nested",
+        "steps": [{"type": "step", "skills": ["nested-skill"]}],
+    }
+    preflight = AsyncMock(return_value=[])
+    with (
+        patch.object(
+            workflow_run_runtime.workflow_store,
+            "get_workflow",
+            AsyncMock(return_value={"definition": nested}),
+        ),
+        patch.object(
+            workflow_run_runtime,
+            "canonicalize_workflow_definition",
+            return_value=nested,
+        ),
+        patch.object(
+            workflow_run_runtime,
+            "required_skill_issues_for_actor",
+            preflight,
+        ),
+    ):
+        issues = await workflow_run_runtime.workflow_capability_issues(
+            actor=SimpleNamespace(id="u1", role="user", is_superuser=False),
+            definition=root,
+        )
+
+    assert issues == []
+    assert preflight.await_args is not None
+    assert preflight.await_args.args[1] == ["root-skill", "nested-skill"]

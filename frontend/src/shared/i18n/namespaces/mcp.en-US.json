@@ -1,6 +1,6 @@
 {
   "title": "MCP",
-  "description": "Manage MCP servers in PostgreSQL and inspect FastMCP components",
+  "description": "Manage MCP servers and components; each user can independently enable MCPs",
   "neverExpires": "Never expires",
   "visibilityUpdated": "Server visibility updated",
   "visibilityFailed": "Failed to update server visibility",
@@ -43,7 +43,7 @@
   "testConnectionFailed": "MCP connection test failed. Check the configuration and try again.",
   "colServer": "Server / Namespace",
   "colTransport": "Transport",
-  "colEnabled": "Enabled",
+  "colEnabled": "Platform available",
   "colVisibility": "Visibility",
   "colActions": "Actions",
   "colComponent": "Component",
@@ -68,5 +68,9 @@
   "fieldMetadata": "Metadata",
   "inputSchema": "Input schema",
   "outputSchema": "Output schema",
-  "callResult": "Result"
+  "callResult": "Result",
+  "colForMe": "Enabled",
+  "forMeFor": "Enable {{name}}",
+  "forMeUpdated": "Enablement updated",
+  "forMeUpdateFailed": "Failed to update enablement"
 }

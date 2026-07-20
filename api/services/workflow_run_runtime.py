@@ -16,10 +16,16 @@ from api.services.chat_run_events import event_value
 from api.services.postgres_store import get_async_agno_postgres_db
 from api.services.workflow_compiler import (
     collect_workflow_skill_names,
+    collect_workflow_reference_ids,
     compile_workflow,
 )
 from api.services.workflow_definition_migration import canonicalize_workflow_definition
-from api.services.skill_service import resolve_enabled_skill_dirs
+from api.services.capability_policy_service import (
+    RequiredSkillIssue,
+    effective_skill_dirs_for_actor,
+    required_skill_issues_for_actor,
+)
+from api.services.skill_service import parse_skill_metadata
 from api.services.audit_service import record_audit_event_async
 from api.services.notification_service import notify_workflow_hitl_pending
 from api.persistence import workflows as workflow_store
@@ -32,6 +38,58 @@ from api.services.durable_job_service import enqueue_durable_job
 class WorkflowRunEventOut:
     event: str
     data: dict[str, Any]
+
+
+class WorkflowCapabilityUnavailable(ValueError):
+    """Explicit workflow bindings are not usable for the run actor."""
+
+    def __init__(self, issues: list[RequiredSkillIssue]) -> None:
+        super().__init__("Required workflow capabilities are unavailable")
+        self.issues = issues
+
+
+async def workflow_capability_issues(
+    *, actor: Any, definition: dict[str, Any]
+) -> list[RequiredSkillIssue]:
+    """Preflight explicit Skill bindings before an SSE response begins."""
+    skill_names = await resolve_workflow_skill_names(definition)
+    return await required_skill_issues_for_actor(
+        actor, skill_names
+    )
+
+
+async def resolve_workflow_skill_names(definition: dict[str, Any]) -> list[str]:
+    """Collect Skill bindings from the root and all persisted nested workflows."""
+    names: list[str] = []
+    seen_names: set[str] = set()
+    pending = collect_workflow_reference_ids(definition)
+    visited_refs: set[str] = set()
+
+    def add_names(candidate: dict[str, Any]) -> None:
+        for name in collect_workflow_skill_names(candidate):
+            if name not in seen_names:
+                seen_names.add(name)
+                names.append(name)
+
+    add_names(definition)
+    while pending:
+        workflow_id = pending.pop(0)
+        if workflow_id in visited_refs:
+            continue
+        visited_refs.add(workflow_id)
+        row = await workflow_store.get_workflow(workflow_id)
+        if row is None:
+            continue
+        nested = canonicalize_workflow_definition(row.get("definition"))
+        if nested is None:
+            continue
+        add_names(nested)
+        pending.extend(
+            reference
+            for reference in collect_workflow_reference_ids(nested)
+            if reference not in visited_refs
+        )
+    return names
 
 
 # Live Studio / webhook runs keyed by (user_id, run_id) for cancel_run.
@@ -378,6 +436,7 @@ async def stream_workflow_run(
     definition: dict[str, Any],
     input_text: str,
     user_id: str,
+    actor: Any | None = None,
     session_id: str | None = None,
     model_id: str | None = None,
     run_id: str | None = None,
@@ -385,12 +444,19 @@ async def stream_workflow_run(
     """Compile and stream one workflow in a freshly isolated workspace."""
     active_run_id = (run_id or "").strip() or str(uuid4())
     active_session_id = (session_id or "").strip() or str(uuid4())
+    effective_actor = actor or SimpleNamespace(
+        id=user_id or "system",
+        email="",
+        role="user",
+        is_superuser=False,
+    )
     with analysis_workspace_context(run_id=active_run_id):
         async for event in _stream_workflow_run_in_workspace(
             workflow_id=workflow_id,
             definition=definition,
             input_text=input_text,
             user_id=user_id,
+            actor=effective_actor,
             active_session_id=active_session_id,
             model_id=model_id,
             active_run_id=active_run_id,
@@ -404,20 +470,23 @@ async def _stream_workflow_run_in_workspace(
     definition: dict[str, Any],
     input_text: str,
     user_id: str,
+    actor: Any,
     active_session_id: str,
     model_id: str | None = None,
     active_run_id: str,
 ) -> AsyncIterator[WorkflowRunEventOut]:
     """Compile definition and stream lifecycle events in a bound workspace."""
-    bound_skill_names = collect_workflow_skill_names(definition)
-    loaded_skill_dirs = resolve_enabled_skill_dirs(bound_skill_names)
-    loaded_skill_names = [
-        path.name for path in loaded_skill_dirs
-    ]
+    bound_skill_names = await resolve_workflow_skill_names(definition)
+    issues = await workflow_capability_issues(actor=actor, definition=definition)
+    if issues:
+        raise WorkflowCapabilityUnavailable(issues)
+    loaded_skill_dirs = await effective_skill_dirs_for_actor(actor, bound_skill_names)
+    loaded_skill_names = [parse_skill_metadata(path).name for path in loaded_skill_dirs]
     workflow = await compile_workflow(
         definition,
         workflow_id=workflow_id,
         model_id=model_id,
+        available_skill_dirs=loaded_skill_dirs,
     )
 
     if bound_skill_names:

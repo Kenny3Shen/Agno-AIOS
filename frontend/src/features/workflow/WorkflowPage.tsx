@@ -59,7 +59,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useBlocker, useRouter } from '@tanstack/react-router'
 import { useWorkflow } from './useWorkflow'
 import { runEventLabelKey } from './runStatus'
-import { WorkflowCanvas, paletteDragStart } from './WorkflowCanvas'
+import { WorkflowCanvas, paletteDragStart, palettePresetDragStart } from './WorkflowCanvas'
 import type { WorkflowNodeType } from './types'
 import {
   buildWorkflowCode,
@@ -75,6 +75,7 @@ import {
 import { PayloadViewer } from '@/shared/ui/PayloadViewer'
 import { listWorkflowTriggerHistory } from './api'
 import { listSkills } from '@/features/skills/api'
+import { listCapabilities } from '@/features/capabilities/api'
 import { CelExpressionField } from './CelExpressionField'
 import { currentUserQuery } from '@/features/auth'
 import { hasScope } from '@/shared/auth/permissions'
@@ -438,6 +439,16 @@ export function WorkflowPage() {
     queryFn: listSkills,
     staleTime: 60_000,
   })
+  const capabilitiesQuery = useQuery({
+    queryKey: ['capabilities', 'workflow-bind'],
+    queryFn: listCapabilities,
+    staleTime: 60_000,
+  })
+  const skillCapabilities = new Map(
+    (capabilitiesQuery.data ?? [])
+      .filter((item) => item.kind === 'skill')
+      .map((item) => [item.name, item]),
+  )
   const enabledSkillOptions = (skillsQuery.data ?? [])
     .filter((skill) => skill.enabled)
     .map((skill) => {
@@ -445,7 +456,13 @@ export function WorkflowPage() {
       const label = skill.description
         ? `${skill.description} (${short})`
         : short
-      return { value: skill.name, label }
+      const capability = skillCapabilities.get(skill.name)
+      const unavailable = capability?.effective_enabled === false
+      return {
+        value: skill.name,
+        label: unavailable ? `${label} · ${t('skillUnavailableForMe')}` : label,
+        disabled: unavailable,
+      }
     })
   const step = workflow.selected
   const stepInsideParallel = Boolean(
@@ -592,6 +609,58 @@ export function WorkflowPage() {
     })
   }, [paletteFilter, t])
 
+  const nodePresets = useMemo(
+    () => workflow.nodePresetsQuery.data ?? [],
+    [workflow.nodePresetsQuery.data],
+  )
+  const filteredNodePresets = useMemo(() => {
+    const q = paletteFilter.trim().toLowerCase()
+    if (!q) return nodePresets
+    return nodePresets.filter((item) => {
+      const hay = `${item.name} ${item.description} ${item.definition.executor.ref}`.toLowerCase()
+      return hay.includes(q)
+    })
+  }, [nodePresets, paletteFilter])
+  const builtinPresets = useMemo(
+    () => filteredNodePresets.filter((item) => item.source === 'builtin'),
+    [filteredNodePresets],
+  )
+  const customPresets = useMemo(
+    () => filteredNodePresets.filter((item) => item.source === 'user'),
+    [filteredNodePresets],
+  )
+  const selectedExecutor = useMemo(
+    () =>
+      executors.find(
+        (item) => item.ref === (step?.type === 'step' ? step.targetId : undefined),
+      ),
+    [executors, step],
+  )
+  const executorAttachSkills = Boolean(
+    selectedExecutor?.attachSkills ?? selectedExecutor?.capabilities?.includes('skills'),
+  )
+  const executorSupportsHitl = Boolean(
+    selectedExecutor?.supportsHitl ?? selectedExecutor?.capabilities?.includes('hitl'),
+  )
+
+  const applyExecutorChange = (value: string, target: typeof step) => {
+    if (!target || target.type !== 'step') return
+    const nextExecutor = executors.find((item) => item.ref === value)
+    const attachSkills = Boolean(
+      nextExecutor?.attachSkills ?? nextExecutor?.capabilities?.includes('skills'),
+    )
+    const supportsHitl = Boolean(
+      nextExecutor?.supportsHitl ?? nextExecutor?.capabilities?.includes('hitl'),
+    )
+    workflow.update({
+      ...target,
+      targetId: value,
+      skills: attachSkills ? target.skills : [],
+      requiresConfirmation: supportsHitl ? target.requiresConfirmation : false,
+      requiresUserInput: supportsHitl ? target.requiresUserInput : false,
+      requiresOutputReview: supportsHitl ? target.requiresOutputReview : false,
+    })
+  }
 
   return (
     <main className="page workflow-studio">
@@ -914,44 +983,174 @@ export function WorkflowPage() {
             />
                     </div>
                     <div className="workflow-studio__tab-pane-body">
-                      <div className="workflow-palette workflow-palette--icons">
-              {filteredPalette.map((item) => (
-                <div
-                  key={item.type}
-                  className="workflow-palette__item workflow-palette__item--icon"
-                  draggable={!workflow.state.running && canWrite}
-                  aria-disabled={workflow.state.running || !canWrite}
-                  onDragStart={(event) => {
-                    if (workflow.state.running || !canWrite) {
-                      event.preventDefault()
-                      return
-                    }
-                    paletteDragStart(event, item.type)
-                  }}
-                  onDoubleClick={() => {
-                    if (workflow.state.running || !canWrite) return
-                    workflow.add(item.type)
-                  }}
-                  style={{ borderColor: item.color, color: item.color }}
-                  title={
-                    workflow.state.running
-                      ? t('errorEditWhileRunning')
-                      : `${paletteLabel(item.type)} · ${t('paletteDragHint')}`
-                  }
-                >
-                  <span className="workflow-palette__icon" style={{ color: item.color }}>
-                    {item.icon}
-                  </span>
-                  <span className="workflow-palette__label">{paletteLabel(item.type)}</span>
-                </div>
-              ))}
-              {!filteredPalette.length ? (
-                <Typography.Text type="secondary" className="workflow-palette__empty">
-                  {t('shapesSearchEmpty')}
-                </Typography.Text>
-              ) : null}
-            </div>
-            <p className="workflow-studio__hint">{t('shapesDropHint')}</p>
+                      {filteredPalette.length ? (
+                        <>
+                          <div className="workflow-palette__section-title">{t('paletteBasicNodes')}</div>
+                          <div className="workflow-palette workflow-palette--icons">
+                            {filteredPalette.map((item) => (
+                              <div
+                                key={item.type}
+                                className="workflow-palette__item workflow-palette__item--icon"
+                                draggable={!workflow.state.running && canWrite}
+                                aria-disabled={workflow.state.running || !canWrite}
+                                onDragStart={(event) => {
+                                  if (workflow.state.running || !canWrite) {
+                                    event.preventDefault()
+                                    return
+                                  }
+                                  paletteDragStart(event, item.type)
+                                }}
+                                onDoubleClick={() => {
+                                  if (workflow.state.running || !canWrite) return
+                                  workflow.add(item.type)
+                                }}
+                                style={{ borderColor: item.color, color: item.color }}
+                                title={
+                                  workflow.state.running
+                                    ? t('errorEditWhileRunning')
+                                    : `${paletteLabel(item.type)} · ${t('paletteDragHint')}`
+                                }
+                              >
+                                <span className="workflow-palette__icon" style={{ color: item.color }}>
+                                  {item.icon}
+                                </span>
+                                <span className="workflow-palette__label">{paletteLabel(item.type)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      ) : null}
+
+                      {builtinPresets.length ? (
+                        <>
+                          <div className="workflow-palette__section-title">{t('paletteBusinessNodes')}</div>
+                          <div className="workflow-palette workflow-palette--presets">
+                            {builtinPresets.map((item) => (
+                              <div
+                                key={item.id}
+                                className="workflow-palette__item workflow-palette__item--preset"
+                                draggable={!workflow.state.running && canWrite}
+                                aria-disabled={workflow.state.running || !canWrite}
+                                onDragStart={(event) => {
+                                  if (workflow.state.running || !canWrite) {
+                                    event.preventDefault()
+                                    return
+                                  }
+                                  palettePresetDragStart(event, item.id)
+                                }}
+                                onDoubleClick={() => {
+                                  if (workflow.state.running || !canWrite) return
+                                  workflow.addPreset(item)
+                                }}
+                                style={{ borderColor: item.color }}
+                                title={
+                                  workflow.state.running
+                                    ? t('errorEditWhileRunning')
+                                    : `${item.name} · ${t('palettePresetDragHint')}`
+                                }
+                              >
+                                <span
+                                  className="workflow-palette__swatch"
+                                  style={{ background: item.color }}
+                                />
+                                <span className="workflow-palette__preset-body">
+                                  <span className="workflow-palette__label">{item.name}</span>
+                                  {item.description ? (
+                                    <span className="workflow-palette__desc">{item.description}</span>
+                                  ) : null}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      ) : null}
+
+                      {!paletteFilter.trim() || customPresets.length ? (
+                        <>
+                          <div className="workflow-palette__section-title">{t('paletteCustomNodes')}</div>
+                          {customPresets.length ? (
+                            <div className="workflow-palette workflow-palette--presets">
+                              {customPresets.map((item) => (
+                                <div
+                                  key={item.id}
+                                  className="workflow-palette__item workflow-palette__item--preset"
+                                  draggable={!workflow.state.running && canWrite}
+                                  aria-disabled={workflow.state.running || !canWrite}
+                                  onDragStart={(event) => {
+                                    if (workflow.state.running || !canWrite) {
+                                      event.preventDefault()
+                                      return
+                                    }
+                                    palettePresetDragStart(event, item.id)
+                                  }}
+                                  onDoubleClick={() => {
+                                    if (workflow.state.running || !canWrite) return
+                                    workflow.addPreset(item)
+                                  }}
+                                  style={{ borderColor: item.color }}
+                                  title={
+                                    workflow.state.running
+                                      ? t('errorEditWhileRunning')
+                                      : `${item.name} · ${t('palettePresetDragHint')}`
+                                  }
+                                >
+                                  <span
+                                    className="workflow-palette__swatch"
+                                    style={{ background: item.color }}
+                                  />
+                                  <span className="workflow-palette__preset-body">
+                                    <span className="workflow-palette__label">{item.name}</span>
+                                    {item.description ? (
+                                      <span className="workflow-palette__desc">{item.description}</span>
+                                    ) : null}
+                                  </span>
+                                  {canWrite ? (
+                                    <Button
+                                      type="text"
+                                      danger
+                                      size="small"
+                                      className="workflow-palette__delete"
+                                      icon={<DeleteOutlined />}
+                                      aria-label={t('deleteCustomNodeTitle')}
+                                      disabled={workflow.state.running}
+                                      onClick={(event) => {
+                                        event.stopPropagation()
+                                        event.preventDefault()
+                                        modal.confirm({
+                                          title: t('deleteCustomNodeTitle'),
+                                          content: t('deleteCustomNodeBody', { name: item.name }),
+                                          okText: t('common:delete'),
+                                          cancelText: t('common:cancel'),
+                                          okButtonProps: { danger: true },
+                                          onOk: async () => {
+                                            try {
+                                              await workflow.removeCustomNode(item.id)
+                                              message.success(t('customNodeDeleted'))
+                                            } catch {
+                                              message.error(t('customNodeDeleteFailed'))
+                                            }
+                                          },
+                                        })
+                                      }}
+                                    />
+                                  ) : null}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <Typography.Text type="secondary" className="workflow-palette__empty-block">
+                              {t('customNodesEmpty')}
+                            </Typography.Text>
+                          )}
+                        </>
+                      ) : null}
+
+                      {!filteredPalette.length && !filteredNodePresets.length ? (
+                        <Typography.Text type="secondary" className="workflow-palette__empty-block">
+                          {t('shapesSearchEmpty')}
+                        </Typography.Text>
+                      ) : null}
+                      <p className="workflow-studio__hint">{t('shapesDropHint')}</p>
                     </div>
                   </div>
                 ),
@@ -1140,6 +1339,14 @@ export function WorkflowPage() {
               onConnectSequence={workflow.connectSequence}
               onConnectBranch={connectBranchWithHitlGuard}
               onDropNode={(type, position, target) => workflow.addAt(type, position, target)}
+              onDropPreset={(presetId, position, target) => {
+                const preset = nodePresets.find((item) => item.id === presetId)
+                if (!preset) return
+                const result = workflow.addPresetAt(preset, position, target)
+                if (result.divertedHitl) {
+                  message.warning(t('pasteHitlDiverted', { count: 1 }))
+                }
+              }}
               onReparent={reparentWithHitlGuard}
               onEmptySlot={(parentId, slotKey) => workflow.addToSlot(parentId, slotKey)}
               onDeleteSelected={workflow.removeSelected}
@@ -1344,10 +1551,41 @@ export function WorkflowPage() {
                           }}
                           onChange={(value) => {
                             if (!value) return
-                            workflow.updateSelectedSteps({ targetId: value })
+                            const nextExecutor = executors.find((item) => item.ref === value)
+                            const attachSkills = Boolean(
+                              nextExecutor?.attachSkills ??
+                                nextExecutor?.capabilities?.includes('skills'),
+                            )
+                            const supportsHitl = Boolean(
+                              nextExecutor?.supportsHitl ??
+                                nextExecutor?.capabilities?.includes('hitl'),
+                            )
+                            workflow.updateSelectedSteps({
+                              targetId: value,
+                              ...(attachSkills ? {} : { skills: [] }),
+                              ...(supportsHitl
+                                ? {}
+                                : {
+                                    requiresConfirmation: false,
+                                    requiresUserInput: false,
+                                    requiresOutputReview: false,
+                                  }),
+                            })
                           }}
                         />
                       </div>
+                      {(() => {
+                        const sharedExec = sharedTarget
+                          ? executors.find((item) => item.ref === sharedTarget)
+                          : undefined
+                        const multiAttachSkills =
+                          !sharedTarget ||
+                          Boolean(
+                            sharedExec?.attachSkills ??
+                              sharedExec?.capabilities?.includes('skills'),
+                          )
+                        if (!multiAttachSkills) return null
+                        return (
                       <div data-inspector-field="skills">
                         <Typography.Text
                           type="secondary"
@@ -1365,7 +1603,7 @@ export function WorkflowPage() {
                           options={enabledSkillOptions}
                           showSearch={{ optionFilterProp: 'label' }}
                           value={sharedSkills}
-                          loading={skillsQuery.isLoading}
+                          loading={skillsQuery.isLoading || capabilitiesQuery.isLoading}
                           getPopupContainer={studioPopupContainer}
                           onChange={(value) =>
                             workflow.updateSelectedSteps({
@@ -1381,6 +1619,8 @@ export function WorkflowPage() {
                           {skillsMixed ? t('multiSelectSkillsMixed') : t('stepSkillsHint')}
                         </Typography.Paragraph>
                       </div>
+                        )
+                      })()}
                       <div data-inspector-field="instructions">
                         <Typography.Text
                           type="secondary"
@@ -1410,50 +1650,68 @@ export function WorkflowPage() {
                           </Typography.Paragraph>
                         ) : null}
                       </div>
-                      {agentSteps.some((node) => isInsideParallel(workflow.state.steps, node.id)) ? (
-                        <Typography.Paragraph
-                          type="secondary"
-                          style={{ fontSize: 11, marginBottom: 4 }}
-                        >
-                          {t('multiSelectHitlParallelHint')}
-                        </Typography.Paragraph>
-                      ) : null}
-                      <Checkbox
-                        className="nodrag"
-                        checked={allConfirm}
-                        indeterminate={!allConfirm && !noneConfirm}
-                        onChange={(e) =>
-                          bulkHitlWithGuard({
-                            requiresConfirmation: e.target.checked,
-                          })
-                        }
-                      >
-                        {t('requiresConfirmation')}
-                      </Checkbox>
-                      <Checkbox
-                        className="nodrag"
-                        checked={allUserInput}
-                        indeterminate={!allUserInput && !noneUserInput}
-                        onChange={(e) =>
-                          bulkHitlWithGuard({
-                            requiresUserInput: e.target.checked,
-                          })
-                        }
-                      >
-                        {t('requiresUserInput')}
-                      </Checkbox>
-                      <Checkbox
-                        className="nodrag"
-                        checked={allOutputReview}
-                        indeterminate={!allOutputReview && !noneOutputReview}
-                        onChange={(e) =>
-                          bulkHitlWithGuard({
-                            requiresOutputReview: e.target.checked,
-                          })
-                        }
-                      >
-                        {t('requiresOutputReview')}
-                      </Checkbox>
+                      {(() => {
+                        const sharedExec = sharedTarget
+                          ? executors.find((item) => item.ref === sharedTarget)
+                          : undefined
+                        const multiSupportsHitl =
+                          !sharedTarget ||
+                          Boolean(
+                            sharedExec?.supportsHitl ??
+                              sharedExec?.capabilities?.includes('hitl'),
+                          )
+                        if (!multiSupportsHitl) return null
+                        return (
+                          <>
+                            {agentSteps.some((node) =>
+                              isInsideParallel(workflow.state.steps, node.id),
+                            ) ? (
+                              <Typography.Paragraph
+                                type="secondary"
+                                style={{ fontSize: 11, marginBottom: 4 }}
+                              >
+                                {t('multiSelectHitlParallelHint')}
+                              </Typography.Paragraph>
+                            ) : null}
+                            <Checkbox
+                              className="nodrag"
+                              checked={allConfirm}
+                              indeterminate={!allConfirm && !noneConfirm}
+                              onChange={(e) =>
+                                bulkHitlWithGuard({
+                                  requiresConfirmation: e.target.checked,
+                                })
+                              }
+                            >
+                              {t('requiresConfirmation')}
+                            </Checkbox>
+                            <Checkbox
+                              className="nodrag"
+                              checked={allUserInput}
+                              indeterminate={!allUserInput && !noneUserInput}
+                              onChange={(e) =>
+                                bulkHitlWithGuard({
+                                  requiresUserInput: e.target.checked,
+                                })
+                              }
+                            >
+                              {t('requiresUserInput')}
+                            </Checkbox>
+                            <Checkbox
+                              className="nodrag"
+                              checked={allOutputReview}
+                              indeterminate={!allOutputReview && !noneOutputReview}
+                              onChange={(e) =>
+                                bulkHitlWithGuard({
+                                  requiresOutputReview: e.target.checked,
+                                })
+                              }
+                            >
+                              {t('requiresOutputReview')}
+                            </Checkbox>
+                          </>
+                        )
+                      })()}
                       <Space size={8} wrap>
                         <Button size="small" onClick={() => workflow.select(null)}>
                           {t('clearSelection')}
@@ -1531,7 +1789,7 @@ export function WorkflowPage() {
                             </div>
                           )
                         }}
-                        onChange={(value) => workflow.update({ ...step, targetId: value })}
+                        onChange={(value) => applyExecutorChange(value, step)}
                       />
                       {(() => {
                         const selected = executors.find((item) => item.ref === step.targetId)
@@ -1561,6 +1819,8 @@ export function WorkflowPage() {
                       placeholder={t('instructionsPlaceholder')}
                       rows={4}
                     />
+                    {executorAttachSkills ? (
+                      <>
                     <Typography.Text
                       type="secondary"
                       style={{ fontSize: 11, display: 'block', marginTop: 8 }}
@@ -1576,7 +1836,7 @@ export function WorkflowPage() {
                       options={enabledSkillOptions}
                       showSearch={{ optionFilterProp: 'label' }}
                       value={step.skills ?? []}
-                      loading={skillsQuery.isLoading}
+                      loading={skillsQuery.isLoading || capabilitiesQuery.isLoading}
                       getPopupContainer={studioPopupContainer}
                       onChange={(value) =>
                         workflow.update({
@@ -1592,6 +1852,10 @@ export function WorkflowPage() {
                     >
                       {t('stepSkillsHint')}
                     </Typography.Paragraph>
+                      </>
+                    ) : null}
+                    {executorSupportsHitl ? (
+                    <>
                     <div className="workflow-inspector__switch" data-inspector-field="hitl">
                       <Switch
                         size="small"
@@ -1856,6 +2120,26 @@ export function WorkflowPage() {
                         placeholder={t('outputReviewMessagePlaceholder')}
                         rows={2}
                       />
+                    ) : null}
+                    </>
+                    ) : null}
+                    {canWrite ? (
+                      <Button
+                        size="small"
+                        icon={<SaveOutlined />}
+                        style={{ marginTop: 12 }}
+                        disabled={workflow.state.running}
+                        onClick={() => {
+                          void workflow
+                            .saveSelectedAsCustomNode()
+                            .then((created) =>
+                              message.success(t('customNodeSaved', { name: created.name })),
+                            )
+                            .catch(() => message.error(t('customNodeSaveFailed')))
+                        }}
+                      >
+                        {t('saveAsCustomNode')}
+                      </Button>
                     ) : null}
                   </>
                 ) : null}

@@ -623,6 +623,11 @@ function MessageBody({ message, retry, sessionId, requesting = false }: { messag
             <span className="run-metric run-metric--skills">{t('skillsAttachedBadge', { count: message.skillNames.length })}</span>
           </Tooltip>
         ) : null}
+        {message.enableTools !== false && Array.isArray(message.mcpServerNames) && message.mcpServerNames.length > 0 ? (
+          <Tooltip title={t('mcpAttached', { names: message.mcpServerNames.join(', ') })}>
+            <span className="run-metric run-metric--mcp">{t('mcpAttachedBadge', { count: message.mcpServerNames.length })}</span>
+          </Tooltip>
+        ) : null}
         {message.enableTools !== false && !message.leanMode && message.searchKnowledge === false ? (
           <Tooltip title={t('knowledgeSearchHelp')}>
             <span className="run-metric run-metric--lean">{t('knowledgeOffBadge')}</span>

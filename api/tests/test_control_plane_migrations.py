@@ -7,6 +7,8 @@ import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
 from api.persistence import migrations
+from api.config import get_settings
+from api.persistence.schema_metadata import control_plane_metadata
 from api.utils.async_once import AsyncOnce
 
 
@@ -39,6 +41,29 @@ class _RevisionEngine:
 
     def connect(self) -> _RevisionConnectionContext:
         return _RevisionConnectionContext(self.connection)
+
+
+def test_control_plane_metadata_contains_capability_and_owned_token_schema() -> None:
+    settings = get_settings()
+    metadata = control_plane_metadata()
+    preferences = metadata.tables[
+        f"{settings.agno_app_schema}.user_capability_preferences"
+    ]
+    servers = metadata.tables[f"{settings.agno_mcp_schema}.mcp_servers"]
+    tokens = metadata.tables[f"{settings.agno_mcp_schema}.mcp_tokens"]
+
+    assert list(preferences.primary_key.columns.keys()) == [
+        "user_id",
+        "capability_type",
+        "capability_key",
+    ]
+    assert "default_enabled" not in servers.c
+    custom_nodes = metadata.tables[
+        f"{settings.agno_app_schema}.workflow_custom_nodes"
+    ]
+    assert list(custom_nodes.primary_key.columns.keys()) == ["id"]
+    assert {"user_id", "name", "definition"}.issubset(custom_nodes.c.keys())
+    assert {"token_hash", "owner_user_id", "token_kind"}.issubset(tokens.c.keys())
 
 
 @pytest.mark.asyncio

@@ -11,13 +11,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
-import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getModels } from '@/features/settings/api'
 import { ApiError } from '@/shared/api/client'
 import {
   createWorkflow,
   deleteWorkflow,
   listExecutors,
+  listNodePresets,
+  createCustomNode,
+  deleteCustomNode,
   listWorkflowVersions,
   getWorkflow,
   listWorkflows,
@@ -47,6 +50,7 @@ import {
   applyAutoLayout,
   cloneNodeDeep,
   createNode,
+  createNodeFromPreset,
   defaultTriggers,
   findNode,
   fromDefinition,
@@ -54,6 +58,7 @@ import {
   insertChild,
   isInsideParallel,
   locateNode,
+  nodeTreeHasHitl,
   pasteNodesIntoSelection,
   preserveSelectionAfterReload,
   triggerEnableBlocked,
@@ -120,6 +125,7 @@ const snapOf = (state: Pick<WorkflowState, 'steps' | 'selectedId' | 'selectedIds
 
 export function useWorkflow() {
   const { t } = useTranslation('workflow')
+  const queryClient = useQueryClient()
   const [state, setState] = useState<WorkflowState>(initialState)
   const abortRef = useRef<AbortController | null>(null)
   const pastRef = useRef<HistorySnap[]>([])
@@ -146,6 +152,10 @@ export function useWorkflow() {
   const executorsQuery = useQuery({
     queryKey: ['workflows', 'executors'],
     queryFn: listExecutors,
+  })
+  const nodePresetsQuery = useQuery({
+    queryKey: ['workflows', 'node-presets'],
+    queryFn: listNodePresets,
   })
   const modelsQuery = useQuery({
     queryKey: ['models'],
@@ -309,6 +319,75 @@ export function useWorkflow() {
         dirty: true,
       }
     })
+  }
+
+  const addPresetAt = (
+    preset: Parameters<typeof createNodeFromPreset>[0],
+    position?: { x: number; y: number },
+    target?: ReparentTarget | null,
+  ): { divertedHitl: boolean } => {
+    if (rejectIfRunning()) return { divertedHitl: false }
+    const node = createNodeFromPreset(preset)
+    if (position) node.position = { x: position.x, y: position.y }
+    // Agno Parallel cannot host HITL steps — divert to root like paste/reparent.
+    const divertedHitl = Boolean(
+      target &&
+        target.kind !== 'root' &&
+        isInsideParallel(state.steps, target.parentId) &&
+        nodeTreeHasHitl(node),
+    )
+    const placeAt = divertedHitl ? null : target
+    withHistory((current) => {
+      const steps = placeAt
+        ? insertChild(current.steps, placeAt, node)
+        : [...current.steps, node]
+      return {
+        ...current,
+        steps,
+        selectedId: node.id,
+        selectedIds: [node.id],
+        dirty: true,
+      }
+    })
+    return { divertedHitl }
+  }
+
+  const addPreset = (preset: Parameters<typeof createNodeFromPreset>[0]) => {
+    return addPresetAt(preset)
+  }
+
+  const saveSelectedAsCustomNode = async (meta?: { name?: string; description?: string; color?: string }) => {
+    const selected = state.selectedId ? findNode(state.steps, state.selectedId) : null
+    if (!selected || selected.type !== 'step') {
+      throw new Error('Select a step node first')
+    }
+    const name = (meta?.name || selected.name || selected.targetId || 'Custom step').trim()
+    const created = await createCustomNode({
+      name,
+      description: meta?.description || '',
+      color: meta?.color || '#1677ff',
+      definition: {
+        type: 'step',
+        name,
+        executor: { kind: 'agent', ref: selected.targetId || 'security-operations' },
+        instructions: selected.instructions || '',
+        skills: selected.skills || [],
+        requires_confirmation: Boolean(selected.requiresConfirmation),
+        confirmation_message: selected.confirmationMessage || undefined,
+        requires_user_input: Boolean(selected.requiresUserInput),
+        user_input_message: selected.userInputMessage || undefined,
+        user_input_schema: selected.userInputSchema,
+        requires_output_review: Boolean(selected.requiresOutputReview),
+        output_review_message: selected.outputReviewMessage || undefined,
+      },
+    })
+    await queryClient.invalidateQueries({ queryKey: ['workflows', 'node-presets'] })
+    return created
+  }
+
+  const removeCustomNode = async (id: string) => {
+    await deleteCustomNode(id)
+    await queryClient.invalidateQueries({ queryKey: ['workflows', 'node-presets'] })
   }
 
   const addChild = (
@@ -1292,6 +1371,7 @@ export function useWorkflow() {
     librarySearch,
     setLibrarySearch,
     executorsQuery,
+    nodePresetsQuery,
     modelsQuery,
     versionsQuery,
     templatesQuery,
@@ -1302,6 +1382,10 @@ export function useWorkflow() {
     selectMany,
     add,
     addAt,
+    addPreset,
+    addPresetAt,
+    saveSelectedAsCustomNode,
+    removeCustomNode,
     addChild,
     addToSlot,
     update,

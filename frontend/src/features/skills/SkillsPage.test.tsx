@@ -19,6 +19,7 @@ describe('SkillsPage', () => {
               scripts: [],
               skill_markdown: '# Web search',
               visibility: 'private',
+              capability_key: 'web-search',
               owner_user_id: 'admin-1',
               can_manage: true,
               can_delete: true,
@@ -26,7 +27,28 @@ describe('SkillsPage', () => {
           ],
           meta: { page: 1, limit: 1, total_pages: 1, total_count: 1, search_time_ms: 0 },
         })
-      )
+      ),
+      http.get('/api/me/capabilities', () =>
+        HttpResponse.json({
+          data: [
+            {
+              kind: 'skill',
+              capability_key: 'web-search',
+              name: 'web-search',
+              description: 'Searches the web',
+              platform_enabled: true,
+              preference: 'enabled',
+              effective_enabled: true,
+              unavailable_reason: null,
+              visibility: 'private',
+              owner_user_id: 'admin-1',
+              server_id: null,
+              namespace: null,
+              risk: 'standard',
+            },
+          ],
+        })
+      ),
     )
 
     renderWithQuery(<SkillsPage />)

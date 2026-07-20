@@ -1,6 +1,7 @@
 import { jsonInit, requestJson } from '@/shared/api/client'
 import type { ResourceVisibility } from '@/shared/types/common'
 export interface Skill {
+  capability_key?: string
   name: string
   description: string
   enabled: boolean

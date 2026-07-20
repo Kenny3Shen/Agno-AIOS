@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { App, Button, Card, Drawer, Empty, Form, Input, Popconfirm, Space, Switch, Table, Tabs, Tag, Typography, Upload } from 'antd'
 import { DeleteOutlined, InboxOutlined, UploadOutlined } from '@ant-design/icons'
@@ -9,12 +9,25 @@ import { getSkillBody, getSkillDetailMetadata } from './utils'
 import { VisibilitySelect } from '@/shared/ui/VisibilitySelect'
 import { MetadataDescriptions } from '@/shared/ui/MetadataDescriptions'
 import { useTranslation } from 'react-i18next'
+import { currentUserQuery } from '@/features/auth'
+import { roleOf } from '@/shared/auth/permissions'
+import {
+  listCapabilities,
+  setCapabilityPreference,
+  type CapabilityItem,
+  type CapabilityPreference,
+} from '@/features/capabilities'
+
+const skillCapabilityKey = (skill: Skill) => skill.capability_key || skill.name
 
 export function SkillsPage() {
   const { t } = useTranslation('skills')
   const { message } = App.useApp()
   const client = useQueryClient()
   const query = useQuery({ queryKey: ['skills'], queryFn: listSkills })
+  const capabilitiesQuery = useQuery({ queryKey: ['capabilities'], queryFn: listCapabilities })
+  const currentUser = useQuery(currentUserQuery())
+  const isAdmin = roleOf(currentUser.data) === 'admin'
   const [selectedName, setSelectedName] = useState<string | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
   const detailQuery = useQuery({
@@ -28,7 +41,17 @@ export function SkillsPage() {
     enabled: Boolean(selectedName),
   })
   const selected = detailQuery.data ?? query.data?.find((skill) => skill.name === selectedName) ?? null
+  const capabilityByKey = useMemo(() => {
+    const map = new Map<string, CapabilityItem>()
+    for (const item of capabilitiesQuery.data ?? []) {
+      if (item.kind !== 'skill') continue
+      map.set(item.capability_key, item)
+      map.set(item.name, item)
+    }
+    return map
+  }, [capabilitiesQuery.data])
   const refresh = () => client.invalidateQueries({ queryKey: ['skills'] })
+  const refreshCapabilities = () => client.invalidateQueries({ queryKey: ['capabilities'] })
   const updateVisibility = async (name: string, visibility: 'private' | 'public') => {
     try {
       await setVisibility(name, visibility)
@@ -44,6 +67,7 @@ export function SkillsPage() {
       if (selectedName === skill.name) setSelectedName(null)
       message.success(t('deleted'))
       await refresh()
+      await refreshCapabilities()
     } catch (error) {
       message.error(error instanceof Error ? error.message : t('deleteFailed'))
     }
@@ -53,8 +77,22 @@ export function SkillsPage() {
     onSuccess: async (_, { enabled }) => {
       message.success(enabled ? t('enabled') : t('disabled'))
       await refresh()
+      await refreshCapabilities()
     },
     onError: (error) => message.error(error instanceof Error ? error.message : t('statusFailed')),
+  })
+  const updatePreference = useMutation({
+    mutationFn: ({ item, state }: { item: CapabilityItem; state: CapabilityPreference }) =>
+      setCapabilityPreference(item, state),
+    onSuccess: (updated) => {
+      client.setQueryData<CapabilityItem[]>(['capabilities'], (current) =>
+        (current ?? []).map((item) =>
+          item.kind === updated.kind && item.capability_key === updated.capability_key ? updated : item,
+        ),
+      )
+      message.success(t('forMeUpdated'))
+    },
+    onError: (error) => message.error(error instanceof Error ? error.message : t('forMeUpdateFailed')),
   })
   const body = selected ? getSkillBody(selected.skill_markdown) : ''
   const detailMetadata = selected ? getSkillDetailMetadata(selected) : null
@@ -74,8 +112,8 @@ export function SkillsPage() {
         <Table<Skill>
           rowKey="name"
           dataSource={query.data ?? []}
-          loading={query.isLoading}
-          scroll={{ x: 760 }}
+          loading={query.isLoading || capabilitiesQuery.isLoading}
+          scroll={{ x: 900 }}
           rowClassName={(row) => (row.name === selectedName ? 'selected-table-row' : '')}
           onRow={(row) => ({
             tabIndex: 0,
@@ -114,19 +152,48 @@ export function SkillsPage() {
                 />
               ),
             },
+            ...(isAdmin
+              ? [
+                  {
+                    title: t('colEnabled'),
+                    dataIndex: 'enabled' as const,
+                    width: 100,
+                    render: (value: boolean, row: Skill) => {
+                      const pending = toggle.isPending && toggle.variables?.skill.name === row.name
+                      return (
+                        <Switch
+                          checked={value}
+                          loading={pending}
+                          disabled={!row.can_manage}
+                          onClick={(_checked, event) => event?.stopPropagation()}
+                          onChange={(enabled) => toggle.mutate({ skill: row, enabled })}
+                        />
+                      )
+                    },
+                  },
+                ]
+              : []),
             {
-              title: t('colEnabled'),
-              dataIndex: 'enabled',
-              width: 100,
-              render: (value, row) => {
-                const pending = toggle.isPending && toggle.variables?.skill.name === row.name
+              title: t('colForMe'),
+              key: 'for_me',
+              width: 110,
+              render: (_: unknown, row: Skill) => {
+                const capability = capabilityByKey.get(skillCapabilityKey(row)) ?? capabilityByKey.get(row.name)
+                const pending =
+                  updatePreference.isPending &&
+                  updatePreference.variables?.item.capability_key === capability?.capability_key
+                const platformReady = Boolean(capability?.platform_enabled ?? row.enabled)
                 return (
                   <Switch
-                    checked={value}
-                    loading={pending}
-                    disabled={!row.can_manage}
-                    onClick={(_, event) => event?.stopPropagation()}
-                    onChange={(enabled) => toggle.mutate({ skill: row, enabled })}
+                    checked={Boolean(capability?.effective_enabled)}
+                    loading={pending || capabilitiesQuery.isLoading}
+                    disabled={!capability || !platformReady || pending}
+                    aria-label={t('forMeFor', { name: row.name })}
+                    onClick={(_checked, event) => event?.stopPropagation()}
+                    onChange={(enabled) => {
+                      if (!capability) return
+                      updatePreference.mutate({ item: capability, state: enabled ? 'enabled' : 'disabled' })
+                    }}
                   />
                 )
               },
@@ -252,6 +319,7 @@ export function SkillsPage() {
               } else {
                 message.success(t('uploaded'))
                 await refresh()
+                await refreshCapabilities()
               }
               setUploadOpen(false)
             } catch (error) {
