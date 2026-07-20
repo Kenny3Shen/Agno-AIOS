@@ -1,8 +1,13 @@
 
-## 已完成：Chat 业务测试收敛
+## 已完成：项目关键业务测试收敛
 
-- 删除臃肿 Chat 单测（原 `test_security_run_runtime` ~2.7k 行及多数前端 chat unit）。
-- 仅保留关键业务：leave-page 不 cancel、anyio disconnect、live hub reattach、同 session supersede、cancel 归属、load-more 失败保留列表、reducer attach-live/cancel/complete、activeChatStream detach。
+- Chat：删除臃肿单测；仅保留 leave-page / live hub reattach / supersede / cancel / load-more / reducer 核心路径。
+- Team / Workflow run / Compiler：stream cancel、tools-off、lifecycle、resume 幂等、validate 拒绝路径。
+- Knowledge lifecycle：归属拒绝、public+private 检索、列表分页、clear 仅管理资源。
+- Chat session service/permissions：归档过滤/分页、history session_id/HITL、owner 隔离与 cancel 归属。
+- Approvals / Trace / Overview：resolve 冲突、拒绝需理由、resume、非管理员过滤、overview 窗口错误计数。
+- 前端 Workflow utils/list：definition/validate/reparent HITL、data/meta 列表与畸形定义拒绝。
+- Approvals/Trace 页面测已较聚焦，未再砍；其余 <300 行绿测未强制重写。
 
 ## 已完成：离开 Chat 页不取消进行中的对话
 
