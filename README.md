@@ -90,6 +90,7 @@ Collect 按 `api/utils/url2md_utils.domain_rules` 源站爬取文章入库（`co
 - PgVector 索引核验：`uv run verify-pgvector-indexes` 只读检查实际 schema/table、embedding 维度、`pg_indexes` 定义、向量/全文 GIN/JSONB metadata GIN 索引，并输出 JSON 报告；不会调用 Agno `optimize()` 或创建索引。只有明确传入 `--explain-sql "SELECT ..."` 时才捕获非 `ANALYZE` 的 JSON plan。先用真实语料验证 corpus 规模、召回与延迟，再把批准的 HNSW/IVFFlat/GIN 变更写入 Alembic migration。
 - MCP 服务配置以 Settings / PostgreSQL 为准；残留 `.config/mcp/mcp_config.json` 只会归档为 `.migrated`，不会再导入。
 - `VITE_API_PROXY_TARGET`：前端开发代理地址。生产环境应把 `frontend/dist` 交给具备 immutable cache + Brotli/gzip 的反向代理或 CDN；直接由 FastAPI StaticFiles 托管的开发路径不负责资源压缩。
+- Dashboard 的趋势与分布图表使用 `echarts/core` 按需注册（line / bar / pie），且只在 Overview 返回可视化数据时动态加载；空窗口显示统一的运行可视化空态，不请求 ECharts 图表 chunk。
 
 ### 模型运行策略
 

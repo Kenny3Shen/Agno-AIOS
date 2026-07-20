@@ -35,6 +35,23 @@ def test_collect_crawl_rejects_non_admin_user():
     assert exc.value.status_code == 403
 
 
+@pytest.mark.parametrize("role", ["user", "analyst", "author", "approver", "auditor", "guest"])
+def test_collect_bulk_reparse_rejects_non_admin_roles(role: str):
+    """A bulk retry can trigger network work and is restricted to administrators."""
+    dependency = route_dependency(collect.router, "reparse_failed_collect_articles_route")
+
+    with pytest.raises(HTTPException) as exc:
+        dependency(user=user(role))
+
+    assert exc.value.status_code == 403
+
+
+def test_collect_bulk_reparse_allows_admin():
+    dependency = route_dependency(collect.router, "reparse_failed_collect_articles_route")
+
+    assert dependency(user=user("admin")).role == "admin"
+
+
 def test_collect_parse_rejects_guest_without_write_permission():
     dependency = route_dependency(collect.router, "parse_url_to_markdown")
 

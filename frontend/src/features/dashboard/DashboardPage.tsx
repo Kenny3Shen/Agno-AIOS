@@ -1,8 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
-import ReactECharts from 'echarts-for-react'
-import type { EChartsOption } from 'echarts'
 import { type Dayjs } from 'dayjs'
 import {
   Alert,
@@ -43,6 +41,7 @@ const duration = (value: number | null | undefined) => (value == null ? '—' : 
 const percent = (value: number | null | undefined) => (value == null ? '—' : `${(value * 100).toFixed(1)}%`)
 const integer = (value: number | null | undefined) => (value == null ? '—' : Intl.NumberFormat().format(value))
 const { RangePicker } = DatePicker
+const DashboardCharts = lazy(() => import('./DashboardCharts'))
 
 export function DashboardPage() {
   const { t } = useTranslation('dashboard')
@@ -88,109 +87,6 @@ export function DashboardPage() {
     const [dimension, items] = Object.entries(source).find(([, values]) => values.length > 0) ?? ['agent', []]
     return { dimension, items }
   }, [data?.distributions])
-  const common = useMemo(
-    () => ({ textStyle: { color: token.colorTextSecondary }, backgroundColor: 'transparent' }),
-    [token.colorTextSecondary]
-  )
-
-  const volumeOption = useMemo<EChartsOption>(
-    () => ({
-      ...common,
-      animation: true,
-      animationDuration: 260,
-      animationDurationUpdate: 260,
-      animationEasing: 'cubicOut',
-      animationEasingUpdate: 'cubicOut',
-      color: [token.colorPrimary, token.colorError, token.colorInfo, token.colorWarning],
-      tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-      grid: { top: 24, right: 112, bottom: 26, left: 40 },
-      xAxis: { type: 'category', data: timeline.map((item) => item.time), axisLabel: { formatter: (value: string) => formatDate(value) } },
-      yAxis: [
-        { type: 'value', name: t('chartRuns'), minInterval: 1 },
-        { type: 'value', name: t('chartErrorPct'), axisLabel: { formatter: '{value}%' } },
-        { type: 'value', name: t('chartTokens'), position: 'right', offset: 56, axisLabel: { formatter: (value: number) => integer(value) } },
-      ],
-      series: [
-        { name: t('chartRuns'), type: 'line', data: timeline.map((item) => item.runs), symbol: 'circle', symbolSize: 6, lineStyle: { width: 2 } },
-        { name: t('chartErrorRate'), type: 'line', yAxisIndex: 1, data: timeline.map((item) => item.errorRate), smooth: true, symbol: 'none' },
-        {
-          name: t('seriesInputTokens'),
-          type: 'bar',
-          yAxisIndex: 2,
-          stack: 'tokens',
-          data: timeline.map((item) => item.inputTokens),
-          barMaxWidth: 22,
-        },
-        {
-          name: t('seriesOutputTokens'),
-          type: 'bar',
-          yAxisIndex: 2,
-          stack: 'tokens',
-          data: timeline.map((item) => item.outputTokens),
-          barMaxWidth: 22,
-          itemStyle: { borderRadius: [3, 3, 0, 0] },
-        },
-      ],
-    }),
-    [common, formatDate, t, timeline, token.colorError, token.colorInfo, token.colorPrimary, token.colorWarning]
-  )
-
-  const latencyOption = useMemo<EChartsOption>(
-    () => ({
-      ...common,
-      animation: true,
-      animationDuration: 260,
-      animationDurationUpdate: 260,
-      animationEasing: 'cubicOut',
-      animationEasingUpdate: 'cubicOut',
-      color: [token.colorInfo, token.colorWarning],
-      tooltip: { trigger: 'axis' },
-      grid: { top: 24, right: 24, bottom: 26, left: 52 },
-      xAxis: { type: 'category', data: timeline.map((item) => item.time), axisLabel: { formatter: (value: string) => formatDate(value) } },
-      yAxis: { type: 'value', name: t('axisMs') },
-      series: [
-        { name: t('seriesP50'), type: 'line', data: timeline.map((item) => item.p50), smooth: true, symbol: 'none' },
-        { name: t('seriesP95'), type: 'line', data: timeline.map((item) => item.p95), smooth: true, symbol: 'none', lineStyle: { width: 3 } },
-      ],
-    }),
-    [common, formatDate, t, timeline, token.colorInfo, token.colorWarning]
-  )
-
-  const distributionOption = useMemo<EChartsOption>(
-    () => ({
-      ...common,
-      animation: true,
-      animationDuration: 260,
-      animationDurationUpdate: 260,
-      animationEasing: 'cubicOut',
-      animationEasingUpdate: 'cubicOut',
-      color: [token.colorPrimary, token.colorSuccess, token.colorWarning, token.colorError, token.colorInfo],
-      tooltip: { trigger: 'item' },
-      series: [
-        {
-          name: distribution.dimension,
-          type: 'pie',
-          radius: ['46%', '76%'],
-          avoidLabelOverlap: true,
-          itemStyle: { borderColor: token.colorBgContainer, borderWidth: 2 },
-          label: { formatter: '{b}  {d}%' },
-          data: distribution.items.map((item) => ({ name: item.name, value: item.value })),
-        },
-      ],
-    }),
-    [
-      common,
-      distribution.dimension,
-      distribution.items,
-      token.colorBgContainer,
-      token.colorError,
-      token.colorInfo,
-      token.colorPrimary,
-      token.colorSuccess,
-      token.colorWarning,
-    ]
-  )
-
   const openTrace = (trace: OverviewTrace) => {
     const filters = {
       ...emptyTraceFilters(),
@@ -202,9 +98,30 @@ export function DashboardPage() {
     void router.history.push(`/trace${search ? `?${search}` : ''}`)
   }
   const hasTimeline = timeline.some((item) => item.runs > 0)
+  const hasVisualizationData = hasTimeline || distribution.items.length > 0
   const healthStatus = data?.health.status ?? 'checking'
   const isHealthy = healthStatus === 'ok' || healthStatus === 'ready'
   const healthClassName = `dashboard-health-indicator ${isHealthy ? 'healthy' : 'degraded'} ${isHealthy ? '' : 'is-pulsing'}`
+  const failedRuns = data?.metrics.failed_runs ?? 0
+  const pendingApprovals = data?.snapshots?.approvals?.pending ?? 0
+  const focusState: 'attention' | 'checking' | 'stable' = !data
+    ? 'checking'
+    : !isHealthy || failedRuns > 0 || pendingApprovals > 0
+      ? 'attention'
+      : 'stable'
+  const dataCoverage = data
+    ? data.metrics.truncated
+      ? t('sampleOfWindow', {
+          sample: data.metrics.sample_size ?? data.metrics.total_runs,
+          total: data.metrics.window_total ?? data.metrics.total_runs,
+        })
+      : t('fullWindow')
+    : '—'
+  const focusLabel = {
+    attention: t('focusAttention'),
+    checking: t('focusChecking'),
+    stable: t('focusStable'),
+  }[focusState]
 
   return (
     <main className={`page dashboard-page dashboard-data-${dataMotion}`}>
@@ -228,24 +145,23 @@ export function DashboardPage() {
               onChange={(value) => setCustomRange(value as [Dayjs, Dayjs] | null)}
             />
             <Tooltip title={t('common:refresh')}>
-              <Button aria-label={t('refreshOverview')} icon={<ReloadOutlined />} loading={query.isFetching} onClick={() => void query.refetch()} />
+              <Button
+                aria-label={t('refreshOverview')}
+                icon={<ReloadOutlined />}
+                loading={query.isFetching}
+                onClick={() => void query.refetch()}
+              />
             </Tooltip>
           </Space>
         }
       />
       {query.isError && (
-        <Alert
-          className="dashboard-error"
-          type="error"
-          showIcon
-          title={t('loadFailed')}
-          description={t('loadFailedHint')}
-        />
+        <Alert className="dashboard-error" type="error" showIcon title={t('loadFailed')} description={t('loadFailedHint')} />
       )}
       <section className="dashboard-signal-rail" aria-label={t('runtimeStatus')}>
         <span>
           <i className={healthClassName} />
-          Runtime <b>{healthStatus}</b>
+          {t('runtime')} <b>{healthStatus}</b>
         </span>
         <span>
           {t('observationWindow')}{' '}
@@ -255,8 +171,29 @@ export function DashboardPage() {
           {t('updatedAt')} <b>{data?.generated_at ? formatDate(data.generated_at) : '—'}</b>
         </span>
       </section>
-      <Row gutter={[12, 12]} className="dashboard-kpis dashboard-motion-group">
-        <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi">
+      <section className={`dashboard-focus-strip is-${focusState} dashboard-motion-item`} aria-label={t('operationalFocus')}>
+        <div className="dashboard-focus-heading">
+          <span className="dashboard-focus-eyebrow">{t('operationalFocus')}</span>
+          <strong>{focusLabel}</strong>
+          <span className="dashboard-focus-hint">{t('operationalFocusHint')}</span>
+        </div>
+        <div className="dashboard-focus-metrics">
+          <div>
+            <span>{t('failedRuns')}</span>
+            <strong>{integer(failedRuns)}</strong>
+          </div>
+          <div>
+            <span>{t('pendingReviews')}</span>
+            <strong>{integer(pendingApprovals)}</strong>
+          </div>
+          <div>
+            <span>{t('dataCoverage')}</span>
+            <strong>{dataCoverage}</strong>
+          </div>
+        </div>
+      </section>
+      <Row align="stretch" gutter={[12, 12]} className="dashboard-kpis dashboard-motion-group">
+        <Col xs={24} sm={12} lg={6} className="dashboard-motion-item dashboard-motion-kpi">
           <Card className="workbench-card dashboard-kpi" loading={query.isLoading}>
             <Statistic
               title={t('totalRuns')}
@@ -273,7 +210,7 @@ export function DashboardPage() {
             />
           </Card>
         </Col>
-        <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi">
+        <Col xs={24} sm={12} lg={6} className="dashboard-motion-item dashboard-motion-kpi">
           <Card className="workbench-card dashboard-kpi" loading={query.isLoading}>
             <Statistic
               title={
@@ -292,84 +229,58 @@ export function DashboardPage() {
             </Typography.Text>
           </Card>
         </Col>
-        <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi">
+        <Col xs={24} sm={12} lg={6} className="dashboard-motion-item dashboard-motion-kpi">
           <Card className="workbench-card dashboard-kpi" loading={query.isLoading}>
             <Statistic title={t('p95Latency')} value={data?.metrics.p95_duration_ms ?? 0} suffix="ms" prefix={<ClockCircleOutlined />} />
           </Card>
         </Col>
-        <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi">
-          <Card className="workbench-card dashboard-kpi" loading={query.isLoading}>
+        <Col xs={24} sm={12} lg={6} className="dashboard-motion-item dashboard-motion-kpi">
+          <Card className="workbench-card dashboard-kpi dashboard-token-kpi" loading={query.isLoading}>
             <Statistic
               title={
                 <Tooltip title={t('tokenSampleHint')}>
-                  <span>{t('inputTokens')}</span>
-                </Tooltip>
-              }
-              value={data?.metrics.input_tokens ?? 0}
-              prefix={<DatabaseOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi">
-          <Card className="workbench-card dashboard-kpi" loading={query.isLoading}>
-            <Statistic
-              title={
-                <Tooltip title={t('tokenSampleHint')}>
-                  <span>{t('outputTokens')}</span>
-                </Tooltip>
-              }
-              value={data?.metrics.output_tokens ?? 0}
-              prefix={<DatabaseOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col xs={12} md={8} className="dashboard-motion-item dashboard-motion-kpi">
-          <Card className="workbench-card dashboard-kpi" loading={query.isLoading}>
-            <Statistic
-              title={
-                <Tooltip title={t('tokenSampleHint')}>
-                  <span>{t('reportedTokens')}</span>
+                  <span>{t('tokenBreakdown')}</span>
                 </Tooltip>
               }
               value={data?.metrics.total_tokens ?? 0}
               prefix={<DatabaseOutlined />}
             />
+            <div className="dashboard-token-breakdown">
+              <span>
+                <small>{t('inputTokens')}</small>
+                <b>{integer(data?.metrics.input_tokens)}</b>
+              </span>
+              <span>
+                <small>{t('outputTokens')}</small>
+                <b>{integer(data?.metrics.output_tokens)}</b>
+              </span>
+            </div>
           </Card>
         </Col>
       </Row>
-      <section className="dashboard-grid dashboard-primary-grid dashboard-motion-group">
+      {hasVisualizationData ? (
+        <Suspense fallback={<DashboardChartsLoading />}>
+          <DashboardCharts timeline={timeline} distribution={distribution} formatDate={formatDate} />
+        </Suspense>
+      ) : (
+        <Card className="workbench-card dashboard-observability-empty dashboard-motion-item" loading={query.isLoading}>
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={
+              <div className="dashboard-observability-empty-copy">
+                <Typography.Text strong>{t('observability')}</Typography.Text>
+                <Typography.Text type="secondary">{t('noObservabilityDataHint')}</Typography.Text>
+              </div>
+            }
+          />
+        </Card>
+      )}
+      <section className="dashboard-grid dashboard-governance-grid dashboard-motion-group">
         <Card
-          className="workbench-card dashboard-chart-card dashboard-motion-item"
-          title={t('timelineTitle')}
+          className="workbench-card dashboard-summary-card dashboard-motion-item"
+          title={t('qualityGovernance')}
           loading={query.isLoading}
         >
-          {hasTimeline ? (
-            <ReactECharts option={volumeOption} style={{ height: 300 }} opts={{ renderer: 'canvas' }} />
-          ) : (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('noRunsInWindow')} />
-          )}
-        </Card>
-        <Card
-          className="workbench-card dashboard-chart-card dashboard-motion-item"
-          title={t('distributionTitle', { dimension: distribution.dimension })}
-          loading={query.isLoading}
-        >
-          {distribution.items.length > 0 ? (
-            <ReactECharts option={distributionOption} style={{ height: 300 }} opts={{ renderer: 'canvas' }} />
-          ) : (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('noSubjects')} />
-          )}
-        </Card>
-      </section>
-      <section className="dashboard-grid dashboard-secondary-grid dashboard-motion-group">
-        <Card className="workbench-card dashboard-chart-card dashboard-motion-item" title={t('latencyTrend')} loading={query.isLoading}>
-          {hasTimeline ? (
-            <ReactECharts option={latencyOption} style={{ height: 260 }} opts={{ renderer: 'canvas' }} />
-          ) : (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('noLatency')} />
-          )}
-        </Card>
-        <Card className="workbench-card dashboard-summary-card dashboard-motion-item" title={t('qualityGovernance')} loading={query.isLoading}>
           <div className="dashboard-summary-list">
             <SummaryMetric
               icon={<ExperimentOutlined />}
@@ -421,6 +332,7 @@ export function DashboardPage() {
             rowKey="trace_id"
             dataSource={data?.recent_failures ?? []}
             pagination={false}
+            scroll={{ x: 640 }}
             locale={{ emptyText: t('noFailures') }}
             onRow={(record) => ({
               onClick: () => openTrace(record),
@@ -436,29 +348,44 @@ export function DashboardPage() {
             })}
             columns={[
               { title: t('run'), dataIndex: 'name', ellipsis: true, render: (value) => value || t('unnamedRun') },
-              { title: t('subject'), ellipsis: true, render: (_, item) => {
-                const workflowId = item.workflow_id?.trim()
-                if (workflowId) {
-                  return (
-                    <Button
-                      type="link"
-                      size="small"
-                      style={{ paddingInline: 0, height: 'auto' }}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        void router.history.push(
-                          `/workflow?workflow_id=${encodeURIComponent(workflowId)}`,
-                        )
-                      }}
-                    >
-                      {workflowId}
-                    </Button>
-                  )
-                }
-                return item.agent_id || '—'
-              } },
-              { title: t('latency'), dataIndex: 'duration_ms', width: 106, sorter: (a, b) => (a.duration_ms ?? 0) - (b.duration_ms ?? 0), render: duration },
-              { title: t('startTime'), dataIndex: 'start_time', width: 164, defaultSortOrder: 'descend' as const, sorter: (a, b) => compareTimestamp(a.start_time, b.start_time), render: formatDate },
+              {
+                title: t('subject'),
+                ellipsis: true,
+                render: (_, item) => {
+                  const workflowId = item.workflow_id?.trim()
+                  if (workflowId) {
+                    return (
+                      <Button
+                        type="link"
+                        size="small"
+                        style={{ paddingInline: 0, height: 'auto' }}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          void router.history.push(`/workflow?workflow_id=${encodeURIComponent(workflowId)}`)
+                        }}
+                      >
+                        {workflowId}
+                      </Button>
+                    )
+                  }
+                  return item.agent_id || '—'
+                },
+              },
+              {
+                title: t('latency'),
+                dataIndex: 'duration_ms',
+                width: 106,
+                sorter: (a, b) => (a.duration_ms ?? 0) - (b.duration_ms ?? 0),
+                render: duration,
+              },
+              {
+                title: t('startTime'),
+                dataIndex: 'start_time',
+                width: 164,
+                defaultSortOrder: 'descend' as const,
+                sorter: (a, b) => compareTimestamp(a.start_time, b.start_time),
+                render: formatDate,
+              },
               { title: t('common:status'), dataIndex: 'status', width: 92, render: (value) => <Tag color="error">{value}</Tag> },
             ]}
           />
@@ -490,6 +417,18 @@ export function DashboardPage() {
         )}
       </section>
     </main>
+  )
+}
+
+function DashboardChartsLoading() {
+  const { t } = useTranslation('dashboard')
+
+  return (
+    <section className="dashboard-grid dashboard-primary-grid dashboard-motion-group" aria-live="polite" aria-label={t('observability')}>
+      <Card className="workbench-card dashboard-chart-card dashboard-motion-item" title={t('observability')} loading>
+        <span className="dashboard-chart-loading">{t('chartLoading')}</span>
+      </Card>
+    </section>
   )
 }
 

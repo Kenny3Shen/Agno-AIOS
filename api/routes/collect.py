@@ -101,7 +101,7 @@ class CollectBulkReparseRequest(BaseModel):
 async def reparse_failed_collect_articles_route(
     request_ctx: Request,
     request: CollectBulkReparseRequest,
-    user: User = Depends(require_scope("collect:write")),
+    user: User = Depends(require_scope(ADMIN_SCOPE)),
 ) -> dict:
     """Re-fetch the newest failed Collect articles (bounded batch)."""
     try:

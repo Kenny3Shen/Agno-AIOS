@@ -15,8 +15,18 @@
 ## 下一步：以端点与交付链路为主的性能治理
 
 - Dashboard Overview 在同机 6 并发请求下 p95 约 866ms（单并发样本 p50 约 169ms）；先做按用户/时间窗的短 TTL 请求合并或缓存，并用 `EXPLAIN` 验证 trace `(user_id, start_time)` / `(user_id, status, start_time)` 复合索引需求，再考虑扩大 API worker 数。
-- Dashboard 默认路由会下载约 3.70MB 原始（约 1.16MB gzip）的 CSS/JS；生产部署应先提供 immutable cache + Brotli/gzip，随后将全量 `echarts` 换成 `echarts/core` 按需注册或在无图表数据时延后加载。
+- [x] Dashboard 图表已改为 `echarts/core` 按需注册（line / bar / pie + 必需组件），并仅在 Overview 返回趋势或分布数据时加载；生产构建的 ECharts chunk 已由约 1.14MB / 377KB gzip 降至约 567KB / 190KB gzip。生产部署仍应提供 immutable cache + Brotli/gzip。
 - Chat 当前每条 SSE event 都会遍历消息列表，且历史接口没有分页窗口；先补最近消息窗口/向前分页和 SSE rAF 合并，再以 100/500 条真实历史决定是否引入虚拟列表，避免过早改变 Bubble.List 的滚动锚定语义。
+
+## 下一步：资产—漏洞—告警调查闭环
+
+- [ ] 定义租户/owner 隔离的安全对象模型：`asset`、`asset_service`、`finding`、`evidence`、`case` 与 `case_task`；每条记录保留来源、外部 ID、时间戳、可信度与审计字段，并通过 Alembic 管理。
+- [ ] 建设资产与暴露面中心：支持 CSV/API 导入和后续 CMDB、云资产、EDR、扫描器连接器；展示负责人、关键性、标签、互联网暴露、服务与最近观测时间。
+- [ ] 建设漏洞风险关联：把 CVE、扫描 finding 与资产服务映射，按可利用性、暴露面、资产关键性、补丁状态和情报时效计算可解释的优先级；保留人工覆盖与评分依据。
+- [ ] 建设 Case 工作台：从告警或高风险漏洞创建案件，沉淀证据、时间线、责任人、SLA、状态和结论；将 Chat、Team、Workflow Run 与审批记录关联到同一 Case。
+- [ ] 为 Team 增加 Case-aware 协作：将 Case 范围、已知证据、任务依赖和验收条件作为上下文；默认采用 route，只有独立子任务才并行 broadcast/tasks，并记录成员产出与成本。
+- [ ] 扩展受控处置编排：在现有 HITL 上接入创建工单、通知负责人、IOC 封禁、隔离主机、修复核验等真实动作；每个动作必须具备权限、预览、审批、幂等键、回滚/补偿与审计。
+- [ ] 增加安全运营指标：MTTA、MTTR、漏洞 SLA、风险队列积压、自动化处置成功率、人工接管率、Agent/Team token 与成本，并可按资产组/责任团队筛选。
 
 ## 已完成：PgVector 索引只读核验
 

@@ -6,11 +6,24 @@ export const runtimeRanges = [
   { label: '7d', value: '7d' },
 ] as const
 
+export interface TimelineChartPoint {
+  time: string
+  runs: number
+  errors: number
+  errorRate: number
+  p50: number | null
+  p95: number | null
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+  bucketEnd?: string
+}
+
 function failureRate(errors: number, runs: number) {
   return runs > 0 ? Number(((errors / runs) * 100).toFixed(2)) : 0
 }
 
-export function timelineChartData(items: OverviewBucket[]) {
+export function timelineChartData(items: OverviewBucket[]): TimelineChartPoint[] {
   return items.map((item) => ({
     time: item.timestamp,
     runs: item.runs,

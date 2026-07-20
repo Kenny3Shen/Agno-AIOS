@@ -19,7 +19,7 @@ export interface OverviewBucket {
   bucket_end?: string
 }
 
-interface OverviewDimension {
+export interface OverviewDimension {
   name: string
   value: number
 }

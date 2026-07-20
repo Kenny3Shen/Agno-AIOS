@@ -465,7 +465,7 @@ export function CollectPage() {
               </Button>
             )
           ) : null}
-          {canWrite && (statusFilter === 'error' || errorTotal > 0) ? (
+          {isAdmin && (statusFilter === 'error' || errorTotal > 0) ? (
             <Button
               loading={bulkReparseMutation.isPending}
               onClick={() => bulkReparseMutation.mutate()}
