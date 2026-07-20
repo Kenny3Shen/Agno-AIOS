@@ -141,9 +141,39 @@ def _fit_content_to_payload_limit(
 
 
 def _configured_webhook_url() -> str:
+    """Process-wide fallback (FEISHU_WEBHOOK_URL). Prefer resolve_webhook_url()."""
     from api.config import get_settings
 
     return get_settings().feishu_webhook_url.get_secret_value().strip()
+
+
+async def _current_mcp_user_id() -> str:
+    """Best-effort MCP caller id; empty when unauthenticated or outside request."""
+    try:
+        from api.mcp.server import _access_actor
+
+        actor = _access_actor()
+        return str(getattr(actor, "id", "") or "").strip() if actor is not None else ""
+    except Exception:  # noqa: BLE001 — tests / early import without full app
+        return ""
+
+
+async def _user_webhook_url(user_id: str) -> str:
+    """Load personal webhook; isolated for unit tests that only patch get_settings."""
+    if not user_id:
+        return ""
+    from api.persistence.user_notification_settings import get_user_feishu_webhook_url
+
+    return await get_user_feishu_webhook_url(user_id)
+
+
+async def _resolve_webhook_url() -> str:
+    """Per-user webhook when MCP is called as that user; else global env fallback."""
+    user_id = await _current_mcp_user_id()
+    personal = await _user_webhook_url(user_id)
+    if personal:
+        return personal
+    return _configured_webhook_url()
 
 
 def _is_secure_webhook_url(value: str) -> bool:
@@ -255,10 +285,13 @@ async def send_feishu_notify(
         ),
     ] = DEFAULT_REQUEST_TIMEOUT_SECONDS,
 ) -> FeishuNotifyResult:
-    """发送服务端已配置 Webhook 的飞书机器人通知。
+    """发送飞书机器人通知。
 
-    Webhook URL 只从服务端 `FEISHU_WEBHOOK_URL` 读取，不接受 MCP 调用方
-    提供的 URL，避免意外泄露密钥或把通知工具用作任意 HTTP 请求代理。
+    Webhook 解析顺序：
+    1. 当前 MCP 调用用户在「设置 → 通知」中保存的个人 Webhook
+    2. 服务端全局 ``FEISHU_WEBHOOK_URL``
+
+    不接受 MCP 调用方传入 URL，避免泄露密钥或把本工具当任意 HTTP 代理。
 
     Args:
         title: 飞书卡片标题。
@@ -285,11 +318,14 @@ async def send_feishu_notify(
             failure_reason="validation",
         )
 
-    webhook_url = _configured_webhook_url()
+    webhook_url = await _resolve_webhook_url()
     if not webhook_url:
         return _failure(
             code=-3,
-            msg="飞书 Webhook 未配置。请在服务端配置 FEISHU_WEBHOOK_URL。",
+            msg=(
+                "飞书 Webhook 未配置。请在「设置 → 通知」填写个人 Webhook，"
+                "或由管理员配置服务端 FEISHU_WEBHOOK_URL。"
+            ),
             attempts=0,
             content_truncated=False,
             failure_reason="configuration",

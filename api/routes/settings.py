@@ -18,10 +18,15 @@ from api.services.model_config_service import (
     save_model_config,
 )
 from api.services.model_factory import build_agno_model
+from api.auth.claims import actor_id
 from api.services.chat_settings_service import get_chat_settings, update_chat_settings
 from api.services.knowledge_rag_settings_service import (
     get_knowledge_rag_settings,
     update_knowledge_rag_settings,
+)
+from api.services.user_notification_settings_service import (
+    read_user_notification_settings,
+    update_user_feishu_webhook,
 )
 
 router = APIRouter(prefix="/api", tags=["Settings"])
@@ -44,6 +49,12 @@ class KnowledgeRagSettingsUpdate(BaseModel):
     rerank_enabled: bool | None = None
     rerank_candidate_multiplier: int | None = None
     rerank_min_candidates: int | None = None
+
+
+class UserNotificationSettingsUpdate(BaseModel):
+    """Per-user notification prefs. Omit field to leave unchanged; empty string clears."""
+
+    feishu_webhook_url: str | None = None
 
 
 class ModelConnectivityTestResponse(BaseModel):
@@ -143,6 +154,42 @@ async def patch_chat_settings(
         action="settings.chat.update",
         resource_type="chat_settings",
         metadata={"keys": sorted(values)},
+        **audit_request_context(request),
+    )
+    return result
+
+
+@router.get("/settings/notifications")
+async def read_notification_settings(
+    user: User = Depends(require_scope("sessions:read")),
+) -> dict[str, Any]:
+    """Read the current user's notification preferences (webhook never returned in full)."""
+    return await read_user_notification_settings(actor_id(user))
+
+
+@router.patch("/settings/notifications")
+async def patch_notification_settings(
+    request: Request,
+    body: UserNotificationSettingsUpdate,
+    user: User = Depends(require_scope("sessions:read")),
+) -> dict[str, Any]:
+    """Update the current user's Feishu webhook (or clear with empty string)."""
+    try:
+        result = await update_user_feishu_webhook(
+            actor_id(user),
+            body.feishu_webhook_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    await record_audit_event_async(
+        user,
+        action="settings.notifications.update",
+        resource_type="user_notification_settings",
+        resource_id=actor_id(user),
+        metadata={
+            "feishu_webhook_configured": result.get("feishu_webhook_configured"),
+            "cleared": body.feishu_webhook_url == "",
+        },
         **audit_request_context(request),
     )
     return result

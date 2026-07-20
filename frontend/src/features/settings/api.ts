@@ -72,6 +72,17 @@ export const getChatSettings = () => requestJson<ChatSettings>('/settings/chat')
 export const saveChatSettings = (payload: Partial<ChatSettings>) =>
   requestJson<ChatSettings>('/settings/chat', jsonInit('PATCH', payload))
 
+export interface UserNotificationSettings {
+  feishu_webhook_configured: boolean
+  feishu_webhook_hint: string
+  global_feishu_webhook_configured: boolean
+}
+
+export const getNotificationSettings = () =>
+  requestJson<UserNotificationSettings>('/settings/notifications')
+export const saveNotificationSettings = (payload: { feishu_webhook_url?: string }) =>
+  requestJson<UserNotificationSettings>('/settings/notifications', jsonInit('PATCH', payload))
+
 export const getKnowledgeRagSettings = () =>
   requestJson<KnowledgeRagSettings>('/settings/knowledge')
 export const saveKnowledgeRagSettings = (payload: Partial<KnowledgeRagSettings>) =>

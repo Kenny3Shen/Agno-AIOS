@@ -35,6 +35,7 @@ from api.persistence.mcp import (
 from api.persistence.model_configs import model_configs_table
 from api.persistence.notifications import _table as notifications_table
 from api.persistence.upload_approvals import upload_approvals_table
+from api.persistence.user_notification_settings import user_notification_settings_table
 from api.persistence.workflows import workflow_versions_table, workflows_table
 from api.persistence.workflow_custom_nodes import workflow_custom_nodes_table
 
@@ -77,6 +78,7 @@ def control_plane_metadata() -> MetaData:
         model_configs_table(),
         notifications_table(),
         upload_approvals_table(),
+        user_notification_settings_table(),
         workflow_custom_nodes_table(),
     ]
     settings = get_settings()

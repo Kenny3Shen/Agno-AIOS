@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
+import { App, Button, Card, Flex, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
 import { ApiOutlined, CheckCircleOutlined, DeleteOutlined, EditOutlined, PlusOutlined, QuestionCircleOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { currentUserQuery } from '@/features/auth'
@@ -9,11 +9,13 @@ import {
   getChatSettings,
   getKnowledgeRagSettings,
   getModels,
+  getNotificationSettings,
   listAdminUsers,
   listRolePresets,
   saveChatSettings,
   saveKnowledgeRagSettings,
   saveModels,
+  saveNotificationSettings,
   SERVER_DEFAULTED_MODEL_FIELDS,
   setUserRole,
   testModel,
@@ -84,6 +86,13 @@ export function SettingsPage() {
     enabled: isAdmin && activeTab === 'users',
   })
   const [roleUpdatingId, setRoleUpdatingId] = useState<string | null>(null)
+  const notificationSettings = useQuery({
+    queryKey: ['settings', 'notifications'],
+    queryFn: getNotificationSettings,
+    enabled: activeTab === 'notifications',
+  })
+  const [feishuWebhookDraft, setFeishuWebhookDraft] = useState('')
+  const [notificationSaving, setNotificationSaving] = useState(false)
 
   const roleLabel = (role: string) => {
     const key = `role_${role}` as const
@@ -120,6 +129,34 @@ export function SettingsPage() {
       message.success(t('chatUpdated'))
     } catch (error) {
       message.error(error instanceof Error ? error.message : t('chatUpdateFailed'))
+    }
+  }
+
+  const saveFeishuWebhook = async () => {
+    setNotificationSaving(true)
+    try {
+      await saveNotificationSettings({ feishu_webhook_url: feishuWebhookDraft.trim() })
+      setFeishuWebhookDraft('')
+      await client.invalidateQueries({ queryKey: ['settings', 'notifications'] })
+      message.success(t('notificationSaved'))
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('notificationSaveFailed'))
+    } finally {
+      setNotificationSaving(false)
+    }
+  }
+
+  const clearFeishuWebhook = async () => {
+    setNotificationSaving(true)
+    try {
+      await saveNotificationSettings({ feishu_webhook_url: '' })
+      setFeishuWebhookDraft('')
+      await client.invalidateQueries({ queryKey: ['settings', 'notifications'] })
+      message.success(t('notificationCleared'))
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('notificationSaveFailed'))
+    } finally {
+      setNotificationSaving(false)
     }
   }
 
@@ -718,6 +755,45 @@ export function SettingsPage() {
     </div>
   )
 
+  const notificationControls = (
+    <div className="settings-param-block">
+      <Typography.Paragraph type="secondary">{t('notificationIntro')}</Typography.Paragraph>
+      <Typography.Paragraph type="secondary">
+        {notificationSettings.data?.feishu_webhook_configured
+          ? t('feishuConfigured', { hint: notificationSettings.data.feishu_webhook_hint || '…' })
+          : notificationSettings.data?.global_feishu_webhook_configured
+            ? t('feishuUsingGlobal')
+            : t('feishuNotConfigured')}
+      </Typography.Paragraph>
+      <Flex vertical gap="middle" style={{ width: '100%', maxWidth: 560 }}>
+        <Input.Password
+          value={feishuWebhookDraft}
+          onChange={(event) => setFeishuWebhookDraft(event.target.value)}
+          placeholder={t('feishuWebhookPlaceholder')}
+          autoComplete="off"
+        />
+        <Space wrap>
+          <Button type="primary" loading={notificationSaving} onClick={() => void saveFeishuWebhook()}>
+            {t('saveFeishuWebhook')}
+          </Button>
+          <Popconfirm
+            title={t('clearFeishuConfirm')}
+            onConfirm={() => void clearFeishuWebhook()}
+            disabled={!notificationSettings.data?.feishu_webhook_configured}
+          >
+            <Button
+              danger
+              loading={notificationSaving}
+              disabled={!notificationSettings.data?.feishu_webhook_configured}
+            >
+              {t('clearFeishuWebhook')}
+            </Button>
+          </Popconfirm>
+        </Space>
+      </Flex>
+    </div>
+  )
+
   return (
     <main className="page">
       <PageHeader title={t('title')} description={t('description')} />
@@ -735,6 +811,7 @@ export function SettingsPage() {
           }
           items={[
             { key: 'models', label: t('modelConnections'), children: modelConnections },
+            { key: 'notifications', label: t('notificationsTab'), children: notificationControls },
             ...(isAdmin
               ? [
                   { key: 'chat', label: t('chatSettings'), children: chatControls },

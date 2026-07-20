@@ -1,3 +1,10 @@
+## 已完成：按用户配置飞书 Webhook
+
+- 表 `user_notification_settings`（Alembic `20260721_0005`）按 `user_id` 存个人 Webhook。
+- MCP `send_feishu_notify`：优先当前用户个人配置 → 全局 `FEISHU_WEBHOOK_URL`；仍不接受工具参数传入 URL。
+- API：`GET/PATCH /api/settings/notifications`（返回是否已配置 + 脱敏 hint，不回传完整密钥）。
+- 设置页「通知」Tab：任意登录用户可保存/清除个人 Webhook。
+
 ## 已完成：IP 黑名单威胁情报
 
 - 新增 `ip_blacklist` 表（Alembic `20260721_0004`）与 FireHOL level1 源（`ip_blacklist_sources.toml`）。
