@@ -1,8 +1,9 @@
 /**
  * Process-wide handle for the single live Chat SSE stream.
  *
- * ChatPage owns the stream via useChat(); ChatTaskPanel only lists sessions
- * but can abort the live stream when the user switches or archives a session.
+ * ChatPage owns the stream via useChat(); ChatTaskPanel aborts only when the
+ * user switches sessions or archives a session. Leaving the Chat route detaches
+ * the consumer without cancelling the server run.
  */
 
 export type ActiveChatStream = {

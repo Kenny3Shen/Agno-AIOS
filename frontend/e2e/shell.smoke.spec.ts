@@ -57,7 +57,7 @@ test.describe('shell critical path', () => {
     await expect(sider.getByText('观测', { exact: true })).toHaveCount(0)
   })
 
-  test('desktop sider shows account above settings; chat auto-collapses nav', async ({ page }) => {
+  test('desktop sider shows account above settings; chat keeps nav expanded', async ({ page }) => {
     await openAuthed(page, '/dashboard')
 
     await expect(page.locator('.shell-sider')).toBeVisible()
@@ -68,7 +68,8 @@ test.describe('shell critical path', () => {
 
     await page.locator('.shell-sider').getByRole('menuitem', { name: /智能体/ }).click()
     await expect(page).toHaveURL(/#\/chat/)
-    await expect(page.locator('.shell-sider.ant-layout-sider-collapsed')).toBeVisible()
+    // Collapse is user-controlled; entering Chat must not force-collapse the sider.
+    await expect(page.locator('.shell-sider.ant-layout-sider-collapsed')).toHaveCount(0)
     await expect(page.locator('.chat-conversations-rail').getByText('对话', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: '返回运行概览' })).toBeVisible()
   })

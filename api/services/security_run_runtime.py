@@ -878,6 +878,64 @@ def _install_stream_retry_notifier(
     return restore
 
 
+class _LiveChatStreamHub:
+    """Fan-out buffer for one detached chat worker.
+
+    Primary SSE and later re-attach clients all subscribe here. Leave-page
+    cancels only the subscriber; the worker keeps publishing until COMPLETED.
+    """
+
+    __slots__ = ("buffer", "subscribers", "done", "error", "_lock")
+
+    def __init__(self) -> None:
+        self.buffer: list[ChatRunEvent] = []
+        self.subscribers: list[asyncio.Queue[ChatRunEvent | BaseException | None]] = []
+        self.done = False
+        self.error: BaseException | None = None
+        self._lock = asyncio.Lock()
+
+    async def publish(self, event: ChatRunEvent) -> None:
+        async with self._lock:
+            self.buffer.append(event)
+            targets = list(self.subscribers)
+        for queue in targets:
+            queue.put_nowait(event)
+
+    async def finish(self, error: BaseException | None = None) -> None:
+        async with self._lock:
+            if self.done:
+                return
+            self.done = True
+            self.error = error
+            targets = list(self.subscribers)
+            self.subscribers.clear()
+        sentinel: BaseException | None = error
+        for queue in targets:
+            queue.put_nowait(sentinel)
+
+    async def subscribe(self) -> AsyncIterator[ChatRunEvent]:
+        queue: asyncio.Queue[ChatRunEvent | BaseException | None] = asyncio.Queue()
+        async with self._lock:
+            for event in self.buffer:
+                queue.put_nowait(event)
+            if self.done:
+                queue.put_nowait(self.error)
+            else:
+                self.subscribers.append(queue)
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    return
+                if isinstance(item, BaseException):
+                    raise item
+                yield item
+        finally:
+            async with self._lock:
+                if queue in self.subscribers:
+                    self.subscribers.remove(queue)
+
+
 class SecurityRunRuntime:
     """把安全运营助手 Run orchestration 收到一个 deep module 后面。"""
 
@@ -891,6 +949,15 @@ class SecurityRunRuntime:
         # user_id -> cancel event for the in-flight chat stream (covers retry
         # backoff before run.started is processed / registered under run_id).
         self._user_stream_cancels: dict[str, asyncio.Event] = {}
+        # (user_id, session_id) -> cancel event for the latest live stream on that
+        # session. Leave-page keeps a detached worker; regenerate / a new turn on
+        # the same session must supersede that worker so two Agno runs do not
+        # race session persistence.
+        self._session_stream_cancels: dict[tuple[str, str], asyncio.Event] = {}
+        # (user_id, session_id) -> run_ids currently registered for that stream.
+        self._session_run_ids: dict[tuple[str, str], set[str]] = {}
+        # (user_id, session_id) -> live event hub for leave/return re-attach.
+        self._session_live_hubs: dict[tuple[str, str], _LiveChatStreamHub] = {}
 
     def register_run(
         self,
@@ -899,6 +966,7 @@ class SecurityRunRuntime:
         run_id: str,
         agent: Any,
         cancel_event: asyncio.Event | None = None,
+        session_id: str | None = None,
     ) -> None:
         if not run_id:
             return
@@ -906,12 +974,28 @@ class SecurityRunRuntime:
         self._active_agents[key] = agent
         if cancel_event is not None:
             self._stream_cancels[key] = cancel_event
+        session = str(session_id or "").strip()
+        if user_id and session:
+            self._session_run_ids.setdefault((user_id, session), set()).add(run_id)
 
-    def unregister_run(self, *, user_id: str, run_id: str) -> None:
+    def unregister_run(
+        self,
+        *,
+        user_id: str,
+        run_id: str,
+        session_id: str | None = None,
+    ) -> None:
         if run_id:
             key = (user_id, run_id)
             self._active_agents.pop(key, None)
             self._stream_cancels.pop(key, None)
+            session = str(session_id or "").strip()
+            if user_id and session:
+                runs = self._session_run_ids.get((user_id, session))
+                if runs is not None:
+                    runs.discard(run_id)
+                    if not runs:
+                        self._session_run_ids.pop((user_id, session), None)
 
     def cancel_run(self, *, user_id: str, run_id: str) -> bool:
         key = (user_id, run_id)
@@ -928,6 +1012,51 @@ class SecurityRunRuntime:
         except Exception as exc:  # noqa: BLE001 — cancel is best-effort
             logger.debug("cancel_run on runner failed run_id={}: {}", run_id, exc)
         return cancelled or cancel_event is not None
+
+    def supersede_session_stream(
+        self,
+        *,
+        user_id: str,
+        session_id: str,
+        keep_cancel: asyncio.Event | None = None,
+    ) -> bool:
+        """Cancel any prior live stream for this session (regenerate / new turn).
+
+        Leave-page detaches the SSE consumer but keeps Agno running. Starting a
+        new chat on the same session must stop that background worker so the
+        new run is the only writer of session history.
+        """
+        owner = str(user_id or "").strip()
+        session = str(session_id or "").strip()
+        if not owner or not session:
+            return False
+        session_key = (owner, session)
+        previous = self._session_stream_cancels.get(session_key)
+        cancelled = False
+        if previous is not None and previous is not keep_cancel:
+            previous.set()
+            cancelled = True
+            # Only drop the hub when we actually superseded a prior stream.
+            # Same-stream re-entry (keep_cancel is the active event) must leave
+            # the live hub registered for leave/return re-attach.
+            self._session_live_hubs.pop(session_key, None)
+        run_ids = list(self._session_run_ids.get(session_key) or ())
+        for run_id in run_ids:
+            if self.cancel_run(user_id=owner, run_id=run_id):
+                cancelled = True
+        return cancelled
+
+    def get_live_hub(
+        self, *, user_id: str, session_id: str
+    ) -> _LiveChatStreamHub | None:
+        owner = str(user_id or "").strip()
+        session = str(session_id or "").strip()
+        if not owner or not session:
+            return None
+        hub = self._session_live_hubs.get((owner, session))
+        if hub is None:
+            return None
+        return hub
 
     @staticmethod
     def _is_security_chat_approval(approval_record: dict[str, Any]) -> bool:
@@ -1292,6 +1421,20 @@ class SecurityRunRuntime:
         registered_run_ids: set[str] = set()
         stream_cancel = asyncio.Event()
         owner_user_id = str(request.agent_user_id or "")
+        session_id_key = str(request.session_id or "").strip()
+        session_key = (
+            (owner_user_id, session_id_key) if owner_user_id and session_id_key else None
+        )
+        # Stop any prior leave-page worker for this session (also covered by
+        # stream_security_run before hub registration; kept for direct tests).
+        if session_key is not None:
+            self.supersede_session_stream(
+                user_id=owner_user_id,
+                session_id=session_id_key,
+                keep_cancel=stream_cancel,
+            )
+            self._session_stream_cancels[session_key] = stream_cancel
+            self._session_run_ids.setdefault(session_key, set())
         if owner_user_id:
             self._user_stream_cancels[owner_user_id] = stream_cancel
         retry_queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
@@ -1302,6 +1445,22 @@ class SecurityRunRuntime:
         )
         active_run_id = ""
         agent_queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
+
+        def _register_live_run(run_id: str) -> None:
+            self.register_run(
+                user_id=request.agent_user_id,
+                run_id=run_id,
+                agent=agent,
+                cancel_event=stream_cancel,
+                session_id=session_id_key or None,
+            )
+
+        def _unregister_live_run(run_id: str) -> None:
+            self.unregister_run(
+                user_id=request.agent_user_id,
+                run_id=run_id,
+                session_id=session_id_key or None,
+            )
 
         async def _produce_agent_events() -> None:
             try:
@@ -1468,21 +1627,11 @@ class SecurityRunRuntime:
                     # Team member runs share parent_run_id; only register leader/top-level.
                     if run_id not in registered_run_ids:
                         registered_run_ids.add(run_id)
-                        self.register_run(
-                            user_id=request.agent_user_id,
-                            run_id=run_id,
-                            agent=agent,
-                            cancel_event=stream_cancel,
-                        )
+                        _register_live_run(run_id)
                 if _event_matches(event_type, "run_started"):
                     if run_id and not is_member_event and run_id not in registered_run_ids:
                         registered_run_ids.add(run_id)
-                        self.register_run(
-                            user_id=request.agent_user_id,
-                            run_id=run_id,
-                            agent=agent,
-                            cancel_event=stream_cancel,
-                        )
+                        _register_live_run(run_id)
                     if is_member_event and show_thought_chain:
                         yield ChatRunEvent(
                             "thought.update",
@@ -1826,9 +1975,7 @@ class SecurityRunRuntime:
                         )
                     run_finished_naturally = True
                     yield ChatRunEvent("run.paused", paused)
-                    self.unregister_run(
-                        user_id=request.agent_user_id, run_id=run_id
-                    )
+                    _unregister_live_run(run_id)
                     registered_run_ids.discard(run_id)
                 elif _event_matches(event_type, "run_continued"):
                     yield ChatRunEvent(
@@ -1986,9 +2133,7 @@ class SecurityRunRuntime:
                     # Set before yield: consumer may close the stream at this event.
                     run_finished_naturally = True
                     yield ChatRunEvent("run.completed", completed)
-                    self.unregister_run(
-                        user_id=request.agent_user_id, run_id=run_id
-                    )
+                    _unregister_live_run(run_id)
                     registered_run_ids.discard(run_id)
                 elif _event_matches(event_type, "run_cancelled"):
                     if is_member_event:
@@ -2033,9 +2178,7 @@ class SecurityRunRuntime:
                             ),
                         },
                     )
-                    self.unregister_run(
-                        user_id=request.agent_user_id, run_id=run_id
-                    )
+                    _unregister_live_run(run_id)
                     registered_run_ids.discard(run_id)
                 elif _event_matches(event_type, "run_error"):
                     detail = (
@@ -2089,43 +2232,87 @@ class SecurityRunRuntime:
                             "retryable": True,
                         },
                     )
-                    self.unregister_run(
-                        user_id=request.agent_user_id, run_id=run_id
-                    )
+                    _unregister_live_run(run_id)
                     registered_run_ids.discard(run_id)
         finally:
             # User cancel was requested via stream_cancel Event (Stop / cancel API).
-            # Client disconnect (leave page) closes this generator without setting
-            # stream_cancel — let Agno finish and persist COMPLETED so the user can
-            # return to the session and load history.
+            # Client disconnect is handled above stream_security_run (detached worker):
+            # this generator normally runs inside that worker and is not cancelled on
+            # leave-page. If the generator is still closed mid-run (tests / aclose),
+            # drain Agno without treating CancelledError as Stop.
             user_stop = stream_cancel.is_set()
             if owner_user_id:
                 current = self._user_stream_cancels.get(owner_user_id)
                 if current is stream_cancel:
                     self._user_stream_cancels.pop(owner_user_id, None)
+            if session_key is not None:
+                current_session = self._session_stream_cancels.get(session_key)
+                if current_session is stream_cancel:
+                    self._session_stream_cancels.pop(session_key, None)
             restore_retry()
-            if not producer.done():
-                if user_stop:
+            request_cancelled = False
+            detached_producer = False
+            drain_timeout = 60 if run_finished_naturally else 600
+            registered_snapshot = set(registered_run_ids)
+            agent_user_id = request.agent_user_id
+            session_for_cleanup = session_id_key or None
+
+            async def _finish_producer(*, force_cancel: bool) -> None:
+                if producer.done():
+                    return
+                if force_cancel:
                     producer.cancel()
                     try:
                         await producer
                     except asyncio.CancelledError:
                         pass
                     _request_runner_cancel()
-                else:
-                    # Natural completion: short drain. SSE disconnect: longer drain.
+                    return
+                try:
+                    await asyncio.wait_for(producer, timeout=drain_timeout)
+                except asyncio.TimeoutError:
+                    producer.cancel()
                     try:
-                        await asyncio.wait_for(
-                            producer,
-                            timeout=60 if run_finished_naturally else 600,
-                        )
-                    except (asyncio.TimeoutError, asyncio.CancelledError):
-                        producer.cancel()
+                        await producer
+                    except asyncio.CancelledError:
+                        pass
+                    _request_runner_cancel()
+
+            if not producer.done():
+                if user_stop:
+                    await _finish_producer(force_cancel=True)
+                else:
+                    # Natural completion: short drain. Generator close: longer drain.
+                    # Prefer finishing under the current task; if the parent is
+                    # cancelled, detach so Agno is not cancelled via await chain.
+                    drain_task = asyncio.create_task(
+                        _finish_producer(force_cancel=False),
+                        name="security-run-producer-drain",
+                    )
+
+                    async def _detach_after_drain() -> None:
                         try:
-                            await producer
-                        except asyncio.CancelledError:
-                            pass
-                        _request_runner_cancel()
+                            await drain_task
+                        except Exception:  # noqa: BLE001 — best-effort background drain
+                            logger.exception("detached chat producer drain failed")
+                        finally:
+                            for run_id in registered_snapshot:
+                                self.unregister_run(
+                                    user_id=agent_user_id,
+                                    run_id=run_id,
+                                    session_id=session_for_cleanup,
+                                )
+
+                    try:
+                        await asyncio.shield(drain_task)
+                    except asyncio.CancelledError:
+                        request_cancelled = True
+                        if not drain_task.done():
+                            detached_producer = True
+                            asyncio.create_task(
+                                _detach_after_drain(),
+                                name="security-run-detach-drain",
+                            )
             waiters = tuple(
                 waiter
                 for waiter in (agent_waiter, retry_waiter, cancel_waiter)
@@ -2135,7 +2322,10 @@ class SecurityRunRuntime:
                 if not waiter.done():
                     waiter.cancel()
             if waiters:
-                await asyncio.gather(*waiters, return_exceptions=True)
+                try:
+                    await asyncio.gather(*waiters, return_exceptions=True)
+                except asyncio.CancelledError:
+                    request_cancelled = True
             while True:
                 try:
                     retry_info = retry_queue.get_nowait()
@@ -2143,8 +2333,11 @@ class SecurityRunRuntime:
                     break
                 if isinstance(retry_info, dict):
                     yield _retry_event(retry_info)
-            for run_id in registered_run_ids:
-                self.unregister_run(user_id=request.agent_user_id, run_id=run_id)
+            if not detached_producer:
+                for run_id in registered_run_ids:
+                    _unregister_live_run(run_id)
+            if request_cancelled:
+                raise asyncio.CancelledError()
 
     async def build_fallback_agent(
         self,
@@ -2457,13 +2650,101 @@ async def stream_security_run(
     *,
     runtime: SecurityRunRuntime | None = None,
 ) -> AsyncIterator[ChatRunEvent]:
+    """SSE-facing chat stream.
+
+    Agno work (MCP, tools, model) runs on a **detached** asyncio Task backed by
+    a session live hub. Leaving Chat cancels only this SSE subscriber; the
+    worker keeps publishing so a later ``attach_live_security_run`` can catch
+    up and continue streaming. Explicit Stop still uses ``cancel_run``.
+    """
     active_runtime = runtime or DEFAULT_SECURITY_RUN_RUNTIME
-    async for event in active_runtime.stream(request):
+    owner = str(request.agent_user_id or "").strip()
+    session = str(request.session_id or "").strip()
+    session_key = (owner, session) if owner and session else None
+    # Cancel any prior leave-page worker *before* publishing a new hub, so
+    # supersede inside _stream_agent_events does not wipe this stream's hub.
+    if session_key is not None:
+        active_runtime.supersede_session_stream(
+            user_id=owner, session_id=session, keep_cancel=None
+        )
+    hub = _LiveChatStreamHub()
+    if session_key is not None:
+        active_runtime._session_live_hubs[session_key] = hub
+
+    async def _run_to_completion() -> None:
+        try:
+            async for event in active_runtime.stream(request):
+                await hub.publish(event)
+            await hub.finish()
+        except BaseException as exc:
+            try:
+                await hub.finish(exc if isinstance(exc, Exception) else None)
+            except Exception:  # noqa: BLE001
+                logger.exception("chat live hub failed to finish after error")
+            if isinstance(exc, asyncio.CancelledError):
+                return
+            if not isinstance(exc, Exception):
+                raise
+            # Exception already stored on hub for subscribers.
+        finally:
+            if session_key is not None:
+                current = active_runtime._session_live_hubs.get(session_key)
+                if current is hub:
+                    active_runtime._session_live_hubs.pop(session_key, None)
+
+    worker = asyncio.create_task(
+        _run_to_completion(),
+        name="security-run-detached-worker",
+    )
+    try:
+        async for event in hub.subscribe():
+            yield event
+        if not worker.done():
+            await worker
+    except (asyncio.CancelledError, GeneratorExit):
+        # Leave page / SSE aclose: do not cancel the worker. Agno keeps running
+        # with MCP + analysis workspace until COMPLETED is stored.
+        raise
+    except Exception:
+        # Subscriber-side failure: stop the worker so we do not leak a long
+        # Agno task for a broken pipe that is not a deliberate leave-page detach.
+        if not worker.done():
+            worker.cancel()
+            try:
+                await worker
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
+        raise
+
+
+async def attach_live_security_run(
+    *,
+    user_id: str,
+    session_id: str,
+    runtime: SecurityRunRuntime | None = None,
+) -> AsyncIterator[ChatRunEvent]:
+    """Re-attach to a leave-page detached chat worker (catch-up + live)."""
+    active_runtime = runtime or DEFAULT_SECURITY_RUN_RUNTIME
+    hub = active_runtime.get_live_hub(user_id=user_id, session_id=session_id)
+    if hub is None:
+        return
+    async for event in hub.subscribe():
         yield event
 
 
 def cancel_security_run(*, user_id: str, run_id: str) -> bool:
     return DEFAULT_SECURITY_RUN_RUNTIME.cancel_run(user_id=user_id, run_id=run_id)
+
+
+def has_live_security_run(
+    *,
+    user_id: str,
+    session_id: str,
+    runtime: SecurityRunRuntime | None = None,
+) -> bool:
+    active_runtime = runtime or DEFAULT_SECURITY_RUN_RUNTIME
+    hub = active_runtime.get_live_hub(user_id=user_id, session_id=session_id)
+    return hub is not None and not hub.done
 
 
 

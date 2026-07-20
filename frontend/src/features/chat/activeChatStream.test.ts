@@ -91,4 +91,16 @@ describe('activeChatStream registry', () => {
     expect(abortSpy).not.toHaveBeenCalled()
     expect(controller.signal.aborted).toBe(false)
   })
+
+  it('clearChatStream detaches without aborting (leave-page path)', () => {
+    const controller = new AbortController()
+    registerChatStream(controller, 's-leave')
+    updateChatStreamRunId('run-leave')
+    clearChatStream(controller)
+    expect(controller.signal.aborted).toBe(false)
+    expect(getActiveChatStream()).toBeNull()
+    // Leave-page cleanup aborts only after clear so registry no longer owns the run.
+    controller.abort()
+    expect(controller.signal.aborted).toBe(true)
+  })
 })

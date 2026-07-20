@@ -167,13 +167,6 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const [deletingNotificationId, setDeletingNotificationId] = useState<number | null>(null)
   const lastNotificationIdRef = useRef(0)
   const path = useRouterState({ select: (state) => state.location.pathname })
-  // Chat / Workflow: auto-collapse desktop nav for more canvas room.
-  useEffect(() => {
-    if (mobile) return
-    if (path === '/chat' || path === '/workflow') {
-      setCollapsed(true)
-    }
-  }, [mobile, path])
   const searchStr = useRouterState({ select: (state) => state.location.searchStr })
   // Deep links (e.g. /trace, /cve): ensure the owning group is open on desktop without collapsing others.
   useEffect(() => {

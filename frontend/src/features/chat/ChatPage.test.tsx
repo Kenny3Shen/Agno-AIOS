@@ -120,8 +120,6 @@ vi.mock('@tanstack/react-router', async (importOriginal) => ({
   }),
   useRouterState: ({ select }: { select: (state: { location: { searchStr: string; pathname: string } }) => unknown }) =>
     select({ location: { searchStr: '', pathname: '/chat' } }),
-  // useBlocker needs a real RouterProvider; no-op in unit tests.
-  useBlocker: () => undefined,
 }))
 vi.mock('./ChatTaskPanel', () => ({ ChatTaskPanel: () => null }))
 vi.mock('./useChat', () => ({ useChat: () => chat }))

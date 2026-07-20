@@ -132,6 +132,55 @@ export const getChatAgents = async (): Promise<ChatAgentCatalogItem[]> =>
 export const cancelRun = (runId: string) =>
   requestJson<{ success?: boolean }>(`/chat/runs/${encodeURIComponent(runId)}/cancel`, jsonInit('POST'))
 
+/** Re-attach to a leave-page detached server run (catch-up + live SSE). */
+export const attachLiveSessionStream = async (
+  sessionId: string,
+  onEvent: (event: ChatRunEvent) => void,
+  signal: AbortSignal,
+) => {
+  const response = await apiFetch(`/chat/sessions/${encodeURIComponent(sessionId)}/live`, {
+    method: 'GET',
+    headers: { Accept: 'text/event-stream' },
+    signal,
+  })
+  if (response.status === 404) {
+    // No live worker — caller falls back to history.
+    return { attached: false as const }
+  }
+  if (!response.ok || !response.body) {
+    let detail = `Live attach failed (${response.status})`
+    try {
+      const errorPayload: unknown = await response.json()
+      if (errorPayload && typeof errorPayload === 'object') {
+        const record = errorPayload as Record<string, unknown>
+        if (typeof record.detail === 'string' && record.detail.trim()) detail = record.detail
+      }
+    } catch {
+      // non-JSON
+    }
+    throw new Error(detail)
+  }
+  let terminal = false
+  await consumeSse(
+    response.body,
+    ({ event, data }) => {
+      const chatEvent = parseEvent(event, data)
+      if (!chatEvent) return
+      terminal ||=
+        chatEvent.type === 'run.paused' ||
+        chatEvent.type === 'run.completed' ||
+        chatEvent.type === 'run.cancelled' ||
+        chatEvent.type === 'run.failed'
+      onEvent(chatEvent)
+    },
+    signal,
+  )
+  if (!terminal && !signal.aborted) {
+    throw new Error('Live stream ended before a terminal event')
+  }
+  return { attached: true as const }
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object'
 const stringValue = (record: Record<string, unknown>, key: string) => (typeof record[key] === 'string' ? record[key] : undefined)
 const TEAM_TASK_STATUSES = new Set<TeamTaskStatus>([

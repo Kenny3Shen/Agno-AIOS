@@ -254,6 +254,29 @@ describe('chat behavior', () => {
     expect(withHistory.messages).toHaveLength(1)
   })
 
+  it('attach-live marks requesting and a streaming assistant bubble', () => {
+    const base = chatReducer(initialChatState, {
+      type: 'history',
+      messages: [
+        { id: 'u1', role: 'user', content: 'hi', final: true },
+        { id: 'run-1', role: 'assistant', content: '', final: true, status: 'completed' },
+      ],
+    })
+    const attached = chatReducer(base, {
+      type: 'attach-live',
+      messages: [{ id: 'u1', role: 'user', content: 'hi', final: true }],
+      assistantId: 'run-live',
+    })
+    expect(attached.requesting).toBe(true)
+    expect(attached.messages).toHaveLength(2)
+    expect(attached.messages[1]).toMatchObject({
+      id: 'run-live',
+      role: 'assistant',
+      status: 'streaming',
+      final: false,
+    })
+  })
+
   it('marks a run cancelled and clears requesting', () => {
     const assistant: Message = { id: 'a', role: 'assistant', content: 'partial', final: false, status: 'streaming' }
     const started = chatReducer(initialChatState, { type: 'start', assistant, modelId: 'model' })

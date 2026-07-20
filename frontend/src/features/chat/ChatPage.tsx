@@ -35,7 +35,7 @@ import { markSessionActiveInCaches } from './sessionCache'
 import type { Message, TeamTaskState, ThoughtStep, ToolStep } from './types'
 import type { ModelConfig, ReasoningEffort } from '@/shared/types/common'
 import { useTranslation } from 'react-i18next'
-import { useBlocker, useRouter } from '@tanstack/react-router'
+import { useRouter } from '@tanstack/react-router'
 import { buildTraceSearch, emptyTraceFilters } from '@/features/trace/utils'
 import { copyToClipboard } from '@/shared/lib/clipboard'
 import { isOverlayEscapeTarget } from '@/shared/lib/keyboard'
@@ -665,7 +665,7 @@ function MessageBody({ message, retry, sessionId, requesting = false }: { messag
 
 export function ChatPage() {
   const { t } = useTranslation('chat')
-  const { modal, message: toastMessage } = App.useApp()
+  const { message: toastMessage } = App.useApp()
   const router = useRouter()
   const chat = useChat()
   const queryClient = useQueryClient()
@@ -892,35 +892,17 @@ export function ChatPage() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
-  // SPA nav + tab close while a run is streaming / retrying.
-  const cancelForLeaveRef = useRef(chat.cancel)
-  cancelForLeaveRef.current = chat.cancel
-  useBlocker({
-    disabled: !chat.state.requesting,
-    enableBeforeUnload: chat.state.requesting,
-    shouldBlockFn: async ({ current, next }) => {
-      if (!requestingRef.current) return false
-      // Same-route session switches (/chat?session=…) are handled by setSession cancel
-      // without a second confirm dialog.
-      const curPath = String(current.pathname || '')
-      const nextPath = String(next.pathname || '')
-      if (curPath === nextPath) return false
-      const leave = await new Promise<boolean>((resolve) => {
-        modal.confirm({
-          title: t('leaveWhileGeneratingTitle'),
-          content: t('leaveWhileGeneratingContent'),
-          okText: t('stopAndLeave'),
-          cancelText: t('common:cancel'),
-          okButtonProps: { danger: true },
-          onOk: () => resolve(true),
-          onCancel: () => resolve(false),
-        })
-      })
-      if (!leave) return true
-      void cancelForLeaveRef.current()
-      return false
-    },
-  })
+  // Full page unload (close tab / refresh) still drops the SSE socket; warn the user.
+  // In-app navigation keeps the server run running (see useChat unmount detach).
+  useEffect(() => {
+    if (!chat.state.requesting) return
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [chat.state.requesting])
 
 
   useEffect(() => {

@@ -402,6 +402,18 @@ html.dark .shell-menu .ant-menu-item-selected {
   font-size: 12px;
   text-align: center;
 }
+.chat-task-panel-state--inline {
+  display: flex;
+  min-height: 0;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px 8px;
+  padding: 4px 0;
+  text-align: start;
+  opacity: 0.95;
+}
 .chat-task-panel-empty {
   margin-block: 8px 0;
 }

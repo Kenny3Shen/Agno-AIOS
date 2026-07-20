@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { useTranslation } from 'react-i18next'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
-import { cancelRun, streamMessage, unarchiveSession } from './api'
+import { attachLiveSessionStream, cancelRun, streamMessage, unarchiveSession } from './api'
 import {
   abortActiveChatStream,
   clearChatStream,
@@ -44,6 +44,8 @@ export function useChat() {
   const [attachments, setAttachments] = useState<File[]>([])
   const abortRef = useRef<AbortController | null>(null)
   const activeRunIdRef = useRef<string | null>(null)
+  /** When true, AbortError means leave/unmount — do not mark cancelled or cancel server. */
+  const detachOnlyRef = useRef(false)
   /** Files from the last submitted user turn (for regenerate while still in session). */
   const lastTurnFilesRef = useRef<File[]>([])
   // Track URL session for abort-on-change (sidebar navigates URL; this hook owns the SSE).
@@ -122,12 +124,13 @@ export function useChat() {
     }
   }, [sessionId])
 
-  // Unmount aborts only the stream registered by this page instance.
+  // Leaving Chat detaches the SSE consumer only. The server run continues so the
+  // user can return and load completed history. Explicit Stop / session switch still cancel.
   useEffect(() => {
     return () => {
       const local = abortRef.current
       if (!local) return
-      const runId = activeRunIdRef.current
+      detachOnlyRef.current = true
       clearChatStream(local)
       try {
         local.abort()
@@ -135,7 +138,7 @@ export function useChat() {
         // ignore
       }
       abortRef.current = null
-      bestEffortCancelRun(runId)
+      // Do not call cancelRun — backend finishes and persists the turn.
     }
   }, [])
 
@@ -145,6 +148,100 @@ export function useChat() {
     if (state.requesting) return
     dispatch({ type: 'history', messages: history.data })
   }, [history.data, sessionId, state.requesting])
+
+  // After leave-page: re-attach to the detached server stream so the user sees
+  // catch-up + live tokens (history alone only updates when Agno persists COMPLETED).
+  useEffect(() => {
+    if (!sessionId) return
+    if (isWorkflowSession || sessionMissing || sessionMetaFailed) return
+    if (!history.isFetched) return
+    // Own submit already holds the SSE; do not double-attach.
+    if (state.requesting && abortRef.current) return
+
+    let cancelled = false
+    const controller = new AbortController()
+    const attachSession = sessionId
+    const historyMessages = history.data ?? []
+    let assistantId: string = crypto.randomUUID()
+    let attachedUi = false
+
+    const ensureAssistant = (runId?: string) => {
+      if (runId) assistantId = runId
+      if (attachedUi) return
+      attachedUi = true
+      const prior = historyMessages.filter(
+        (message) => !(message.role === 'assistant' && message.id === assistantId),
+      )
+      // Drop trailing incomplete assistant bubbles from a failed prior attach.
+      const cleaned = [...prior]
+      while (
+        cleaned.length &&
+        cleaned[cleaned.length - 1]?.role === 'assistant' &&
+        !cleaned[cleaned.length - 1]?.final
+      ) {
+        cleaned.pop()
+      }
+      dispatch({ type: 'attach-live', messages: cleaned, assistantId })
+    }
+
+    const run = async () => {
+      detachOnlyRef.current = false
+      abortRef.current = controller
+      registerChatStream(controller, attachSession)
+      try {
+        await attachLiveSessionStream(
+          attachSession,
+          (event) => {
+            if (cancelled || prevSessionIdRef.current !== attachSession) return
+            const eventRunId = 'runId' in event ? event.runId : undefined
+            if (typeof eventRunId === 'string' && eventRunId) {
+              activeRunIdRef.current = eventRunId
+              updateChatStreamRunId(eventRunId)
+              ensureAssistant(eventRunId)
+            } else {
+              ensureAssistant()
+            }
+            dispatch({ type: 'event', id: assistantId, event })
+          },
+          controller.signal,
+        )
+      } catch (error) {
+        if (cancelled || (error as Error).name === 'AbortError') {
+          if (detachOnlyRef.current) detachOnlyRef.current = false
+          return
+        }
+        console.warn(
+          `[chat] live attach failed for ${attachSession}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
+        void queryClient.invalidateQueries({ queryKey: chatKeys.history(attachSession) })
+      } finally {
+        if (!cancelled) {
+          clearChatStream(controller)
+          if (abortRef.current === controller) abortRef.current = null
+          activeRunIdRef.current = null
+          void queryClient.invalidateQueries({ queryKey: chatKeys.history(attachSession) })
+          void queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
+        }
+      }
+    }
+
+    void run()
+    return () => {
+      cancelled = true
+      detachOnlyRef.current = true
+      clearChatStream(controller)
+      try {
+        controller.abort()
+      } catch {
+        // ignore
+      }
+      if (abortRef.current === controller) abortRef.current = null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- attach once per session visit
+  }, [sessionId, history.isFetched, isWorkflowSession, sessionMissing, sessionMetaFailed])
+
 
   // Drop stale agent ids (e.g. Team beta off but localStorage still has team id).
   useEffect(() => {
@@ -337,6 +434,7 @@ export function useChat() {
     const controller = new AbortController()
     abortRef.current = controller
     activeRunIdRef.current = null
+    detachOnlyRef.current = false
     registerChatStream(controller, activeSession)
     try {
       await streamMessage(
@@ -367,8 +465,11 @@ export function useChat() {
       )
     } catch (error) {
       if ((error as Error).name === 'AbortError') {
-        // Session switch already cleared requesting via session-switch; skip cancelled UI.
-        if (prevSessionIdRef.current === activeSession) {
+        // Leave/unmount: drop the client stream; server keeps running.
+        if (detachOnlyRef.current) {
+          detachOnlyRef.current = false
+        } else if (prevSessionIdRef.current === activeSession) {
+          // Explicit stop or session switch on the same view.
           dispatch({ type: 'clear-error' })
           dispatch({
             type: 'event',
@@ -405,6 +506,14 @@ export function useChat() {
     // Allow attachment-only turns: empty text is OK when last-turn files remain in memory.
     const retryFiles = lastTurnFilesRef.current
     if (!prompt && retryFiles.length === 0) return
+    // Supersede any leave-page detached run for this turn so regenerate is the only writer.
+    const previous = state.messages[index]
+    const previousRunId =
+      (previous?.run_id && String(previous.run_id)) ||
+      (previous?.id && previous.role === 'assistant' ? String(previous.id) : null)
+    if (previousRunId && !previousRunId.includes(':')) {
+      bestEffortCancelRun(previousRunId)
+    }
     const base = state.messages.slice(0, index)
     dispatch({ type: 'history', messages: base })
     void submit(prompt, false, retryFiles)

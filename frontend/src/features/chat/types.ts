@@ -143,6 +143,8 @@ export type ChatAction =
   | { type: 'history'; messages: Message[] }
   | { type: 'input'; value: string }
   | { type: 'start'; user?: Message; assistant: Message; modelId: string | null }
+  /** Resume a leave-page detached run: replace transcript and set requesting. */
+  | { type: 'attach-live'; messages: Message[]; assistantId: string }
   | { type: 'event'; id: string; event: ChatRunEvent }
   | { type: 'network-error'; id: string; message: string }
   | { type: 'soft-error'; message: string }

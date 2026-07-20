@@ -277,7 +277,8 @@ export function ChatTaskPanel({ variant = 'page', onNavigate, onNewChat }: ChatT
             <div className="chat-task-panel-loading" aria-label={t('common:loading')}>
               <Skeleton active title={false} paragraph={{ rows: 4 }} />
             </div>
-          ) : sessions.isError ? (
+          ) : sessions.isError && !sessionItems.length ? (
+            // Initial list failure only. fetchNextPage errors keep prior pages visible.
             <div className="chat-task-panel-state" role="alert">
               <span>{t('shell:conversations.loadFailed')}</span>
               <Button
@@ -357,17 +358,33 @@ export function ChatTaskPanel({ variant = 'page', onNavigate, onNewChat }: ChatT
                   ],
                 })}
               />
-              {sessions.hasNextPage ? (
+              {sessions.hasNextPage || sessions.isFetchNextPageError ? (
                 <div className="chat-task-panel-load-more">
-                  <Button
-                    size="small"
-                    type="link"
-                    loading={Boolean(sessions.isFetchingNextPage)}
-                    disabled={Boolean(sessions.isFetchingNextPage)}
-                    onClick={() => void sessions.fetchNextPage()}
-                  >
-                    {t('shell:conversations.loadMore')}
-                  </Button>
+                  {sessions.isFetchNextPageError ? (
+                    <div className="chat-task-panel-state chat-task-panel-state--inline" role="alert">
+                      <span>{t('shell:conversations.loadMoreFailed')}</span>
+                      <Button
+                        size="small"
+                        type="link"
+                        icon={<ReloadOutlined />}
+                        loading={Boolean(sessions.isFetchingNextPage)}
+                        aria-label={t('shell:conversations.retry')}
+                        onClick={() => void sessions.fetchNextPage()}
+                      >
+                        {t('shell:conversations.retry')}
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      size="small"
+                      type="link"
+                      loading={Boolean(sessions.isFetchingNextPage)}
+                      disabled={Boolean(sessions.isFetchingNextPage)}
+                      onClick={() => void sessions.fetchNextPage()}
+                    >
+                      {t('shell:conversations.loadMore')}
+                    </Button>
+                  )}
                 </div>
               ) : null}
               {!conversations.length && !sessionSearch.trim() ? (

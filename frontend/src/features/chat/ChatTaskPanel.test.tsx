@@ -154,6 +154,36 @@ describe('ChatTaskPanel', () => {
     expect(await screen.findByText('Second page')).toBeTruthy()
   })
 
+  it('keeps first page visible when load-more fails', async () => {
+    const user = setupUser()
+    server.use(
+      http.get('/api/chat/sessions', ({ request }) => {
+        const page = Number(new URL(request.url).searchParams.get('page') || '1')
+        if (page === 1) {
+          return HttpResponse.json({
+            data: [
+              chatSessionFixture({
+                session_id: 'session-1',
+                preview: 'First page stays',
+                created_at: dayjs().unix(),
+                updated_at: dayjs().unix(),
+              }),
+            ],
+            meta: { page: 1, limit: 40, total_pages: 2, total_count: 41, search_time_ms: 0 },
+          })
+        }
+        return HttpResponse.json({ detail: 'page 2 boom' }, { status: 500 })
+      }),
+    )
+    renderWithQuery(<ChatTaskPanel variant="page" />)
+    expect(await screen.findByText('First page stays')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: '加载更多' }))
+    expect(await screen.findByText(i18n.t('shell:conversations.loadMoreFailed'))).toBeTruthy()
+    // Must not replace the whole panel with the initial load-failed state.
+    expect(screen.getByText('First page stays')).toBeTruthy()
+    expect(screen.queryByText(i18n.t('shell:conversations.loadFailed'))).toBeNull()
+  })
+
   it('keeps search input when server results are empty', async () => {
     const user = setupUser()
     mockSessions([

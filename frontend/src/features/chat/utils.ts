@@ -184,6 +184,40 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
         selectedModelId: action.modelId,
         messages: [...state.messages, ...(action.user ? [action.user] : []), action.assistant],
       }
+    case 'attach-live': {
+      // History often has no partial content (Agno persists at terminal). Show a
+      // streaming bubble and accept catch-up + live events under assistantId.
+      const messages = action.messages.map((message) =>
+        message.id === action.assistantId
+          ? {
+              ...message,
+              final: false,
+              status: 'streaming' as const,
+              error: null,
+              retry: null,
+            }
+          : message,
+      )
+      const hasAssistant = messages.some((message) => message.id === action.assistantId)
+      if (!hasAssistant) {
+        messages.push({
+          id: action.assistantId,
+          role: 'assistant',
+          content: '',
+          final: false,
+          status: 'streaming',
+          tool_steps: [],
+          sources: [],
+          followups: [],
+        })
+      }
+      return {
+        ...state,
+        requesting: true,
+        error: null,
+        messages,
+      }
+    }
     case 'event': {
       const event: ChatRunEvent = action.event
       const terminal = event.type === 'run.paused' || event.type === 'run.completed' || event.type === 'run.cancelled' || event.type === 'run.failed'

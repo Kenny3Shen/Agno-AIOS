@@ -32,7 +32,9 @@ from api.services.team_runtime import (
 )
 from api.services.security_run_runtime import (
     SecurityRunRequest,
+    attach_live_security_run,
     cancel_security_run,
+    has_live_security_run,
     stream_security_run,
 )
 from api.services.chat_media import process_chat_uploads
@@ -412,6 +414,46 @@ async def cancel_chat_run(
         resource_id=run_id,
     )
     return {"success": True, "run_id": run_id}
+
+
+@router.get("/chat/sessions/{session_id}/live")
+async def attach_live_chat_stream(
+    session_id: str,
+    user: User = Depends(require_scope("sessions:write")),
+):
+    """Re-attach to an in-flight chat run after leaving the page.
+
+    Returns catch-up buffered events then live deltas until the detached worker
+    completes. 404 when no live worker is registered for this session/owner.
+    """
+    session_id = (session_id or "").strip()
+    if not session_id:
+        raise HTTPException(status_code=422, detail="session_id is required")
+    owner_user_id = await get_session_owner_async(session_id)
+    if owner_user_id is not None:
+        assert_owned_resource(
+            user,
+            owner_user_id=owner_user_id,
+            resource_name="Session",
+        )
+    user_id = actor_id(user)
+    if not has_live_security_run(user_id=user_id, session_id=session_id):
+        raise HTTPException(status_code=404, detail="该会话没有进行中的生成")
+
+    async def _events():
+        async for event in attach_live_security_run(
+            user_id=user_id, session_id=session_id
+        ):
+            yield {
+                "event": event.event,
+                "data": json.dumps(event.data, ensure_ascii=False),
+            }
+
+    return EventSourceResponse(
+        _events(),
+        headers={"Cache-Control": "no-cache"},
+        sep="\n",
+    )
 
 
 @router.get("/chat/sessions")

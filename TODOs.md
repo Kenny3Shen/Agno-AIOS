@@ -1,4 +1,13 @@
 
+## 已完成：离开 Chat 页不取消进行中的对话
+
+- 前端：卸载 Chat 时只 detach SSE（`detachOnlyRef`），不再 `cancelRun`；去掉「停止并离开」路由拦截，应用内导航可后台继续生成。
+- 后端根因（Grok 4.5 复现）：sse-starlette 经 anyio CancelScope 取消请求后，`asyncio.shield` / `Task.uncancel` 仍会通过 `await` 链把取消传到 Agno `arun`，历史落成 `Operation cancelled by user`。
+- 修复：`stream_security_run` 把完整 `runtime.stream`（含 MCP / analysis workspace）放到独立 detached worker；SSE 断开只停消费，worker 继续跑到 COMPLETED。
+- 同 session 新 turn / 重新生成：`supersede_session_stream` 取消先前 leave-page detached worker，避免双 run 竞态导致「重新生成后切走无新回答」；前端 regenerate 对旧 `run_id` best-effort `cancelRun`。
+- 切回 Chat：`GET /chat/sessions/{id}/live` 重连 live hub（catch-up 缓冲 + 后续 delta），前端 `attach-live` 恢复完整流式输出，而不仅等 history 终态。
+- 显式 Stop / 切换会话 / 归档仍会取消服务端 run。
+
 ## 已完成：知识库相似度阈值与 PgVector 设置页
 
 - Settings 增加「知识库检索」页；Chat 设置与知识库检索均用参数 Table（参数 / 说明 / 值），Description 列描述作用。
@@ -215,13 +224,17 @@
 - 模块头/分区注释：`WorkflowPage` / `WorkflowCanvas` / `useWorkflow` / `utils` / `api` / `runStatus`。
 - **未改** 保存 / 运行 / 编译 / 连线 / 校验 / reparent / SSE 等业务逻辑。
 
-## 已完成：对话迁入智能体 + 用户详情上移 + 导航自动收缩 + 对话框拖拽上传
+## 已完成：对话迁入智能体 + 用户详情上移 + 对话框拖拽上传
 
 - 对话列表从全局侧栏迁入「智能体」页左侧轨，基于 Ant Design X `Conversations`（creation / groupable / menu）。
 - 导航侧栏底部：用户详情（邮箱、角色、权限摘要）置于「设置」上方，菜单含设置与退出。
-- 进入 `/chat` 或 `/workflow` 时桌面导航自动 `collapsed`。
+- ~~进入 `/chat` 或 `/workflow` 时桌面导航自动 `collapsed`~~（已取消：折叠仅由用户手动控制）。
 - Chat 工作区支持直接拖入文件（overlay 提示）；multipart 上传冒烟 history 含 attachments。
 - 侧栏不再展示对话列表；shell smoke 同步。
+
+## 已完成：对话列表「加载更多」失败不再清空列表
+
+- `fetchNextPage` 失败时保留已加载会话；仅在底部显示「加载更多失败」+ 重试，不再整页「无法加载对话」。
 
 ## 已完成：侧栏对话与观测文案收口
 
