@@ -13,7 +13,7 @@ from api.persistence.capability_preferences import (
     PreferenceState,
     clear_capability_preference,
     list_capability_preferences,
-    set_capability_preference,
+    set_capability_disabled,
 )
 from api.services.skill_service import find_skill_dir, list_skill_infos
 
@@ -49,7 +49,7 @@ def _preference_for(
     kind: CapabilityType,
     key: str,
 ) -> Preference:
-    """Missing preference rows default to enabled (users opt out)."""
+    """Missing preference rows mean enabled; only explicit disabled is stored."""
     state = preferences.get((kind, key))
     return "disabled" if state == "disabled" else "enabled"
 
@@ -161,11 +161,10 @@ async def set_preference_for_actor(
             user_id=user_id, capability_type=kind, capability_key=capability_key
         )
     else:
-        await set_capability_preference(
+        await set_capability_disabled(
             user_id=user_id,
             capability_type=kind,
             capability_key=capability_key,
-            state="disabled",
         )
     refreshed = await list_capabilities_for_actor(actor)
     return next(
@@ -214,10 +213,6 @@ async def effective_mcp_server_names_for_actor(actor: Any) -> list[str]:
     ]
 
 
-async def mcp_server_is_effective_for_actor(actor: Any, server_id: int | None) -> bool:
-    if server_id is None:
-        return False
-    return int(server_id) in await effective_mcp_server_ids_for_actor(actor)
 
 
 async def required_skill_issues_for_actor(

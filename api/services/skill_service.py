@@ -203,12 +203,9 @@ def write_skill_metadata(skill_dir: Path, updates: dict[str, Any]) -> None:
             project_metadata[key] = value
         else:
             meta[key] = value
-    # Drop obsolete recommended-default flag from older skill packages.
-    project_metadata.pop("default_enabled", None)
     meta.pop("visibility", None)
     meta.pop("owner_user_id", None)
     meta.pop("user_id", None)
-    meta.pop("default_enabled", None)
     if project_metadata:
         meta["metadata"] = project_metadata
     else:

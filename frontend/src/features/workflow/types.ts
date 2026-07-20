@@ -112,9 +112,8 @@ export type ExecutorOption = {
   capabilities?: string
   recommendedFor?: string
   role?: string
-  attachSkills?: boolean
-  supportsHitl?: boolean
-  connectMcp?: boolean
+  attachSkills: boolean
+  supportsHitl: boolean
 }
 
 /** Built-in business preset or user custom step node for the Studio palette. */

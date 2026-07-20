@@ -64,6 +64,7 @@ def test_control_plane_metadata_contains_capability_and_owned_token_schema() -> 
     assert list(custom_nodes.primary_key.columns.keys()) == ["id"]
     assert {"user_id", "name", "definition"}.issubset(custom_nodes.c.keys())
     assert {"token_hash", "owner_user_id", "token_kind"}.issubset(tokens.c.keys())
+    assert "token" not in tokens.c
 
 
 @pytest.mark.asyncio

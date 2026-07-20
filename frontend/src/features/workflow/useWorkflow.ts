@@ -475,7 +475,21 @@ export function useWorkflow() {
    * Returns how many Parallel-nested steps skipped enabling HITL.
    */
   const updateSelectedSteps = (
-    changes: Partial<Pick<WorkflowNode, 'targetId' | 'skills' | 'requiresConfirmation' | 'requiresUserInput' | 'requiresOutputReview' | 'instructions'>>,
+    changes: Partial<
+      Pick<
+        WorkflowNode,
+        | 'targetId'
+        | 'skills'
+        | 'requiresConfirmation'
+        | 'requiresUserInput'
+        | 'requiresOutputReview'
+        | 'instructions'
+        | 'confirmationMessage'
+        | 'userInputMessage'
+        | 'userInputSchema'
+        | 'outputReviewMessage'
+      >
+    >,
   ): number => {
     if (rejectIfRunning()) return 0
     // Precompute against current snapshot so toast count is Strict Mode-safe.

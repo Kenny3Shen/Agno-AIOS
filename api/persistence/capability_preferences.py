@@ -1,9 +1,13 @@
-"""Persistence for sparse, per-user capability preference overrides."""
+"""Persistence for sparse, per-user capability preference overrides.
+
+Only explicit opt-outs are stored: a missing row means enabled for that user.
+Rows always use state='disabled'.
+"""
 
 from __future__ import annotations
 
 import time
-from typing import Literal, cast
+from typing import Literal
 
 from sqlalchemy import BigInteger, CheckConstraint, Column, Index, MetaData, String, Table, delete, select
 from sqlalchemy.dialects.postgresql import insert
@@ -14,7 +18,7 @@ from api.persistence.migrations import ensure_control_plane_schema_current
 from api.utils.async_once import AsyncOnce
 
 CapabilityType = Literal["skill", "mcp_server"]
-PreferenceState = Literal["enabled", "disabled"]
+PreferenceState = Literal["disabled"]
 
 CAPABILITY_PREFERENCES_TABLE = "user_capability_preferences"
 
@@ -38,7 +42,7 @@ def capability_preferences_table(metadata: MetaData | None = None) -> Table:
             name="ck_user_capability_preferences_type",
         ),
         CheckConstraint(
-            "state IN ('enabled', 'disabled')",
+            "state = 'disabled'",
             name="ck_user_capability_preferences_state",
         ),
     )
@@ -64,29 +68,28 @@ async def ensure_capability_preferences_table() -> None:
 async def list_capability_preferences(
     user_id: str,
 ) -> dict[tuple[str, str], PreferenceState]:
-    """Return the user's explicit overrides keyed by (type, stable key)."""
+    """Return the user's explicit opt-outs keyed by (type, stable key)."""
     await ensure_capability_preferences_table()
     table = capability_preferences_table()
     stmt = select(table.c.capability_type, table.c.capability_key, table.c.state).where(
-        table.c.user_id == user_id
+        table.c.user_id == user_id,
+        table.c.state == "disabled",
     )
     async with get_async_control_plane_engine().begin() as conn:
         rows = (await conn.execute(stmt)).all()
     return {
-        (str(row.capability_type), str(row.capability_key)): cast(
-            PreferenceState, str(row.state)
-        )
+        (str(row.capability_type), str(row.capability_key)): "disabled"
         for row in rows
     }
 
 
-async def set_capability_preference(
+async def set_capability_disabled(
     *,
     user_id: str,
     capability_type: CapabilityType,
     capability_key: str,
-    state: PreferenceState,
 ) -> None:
+    """Persist an explicit opt-out for the user."""
     await ensure_capability_preferences_table()
     table = capability_preferences_table()
     now = int(time.time())
@@ -94,13 +97,13 @@ async def set_capability_preference(
         user_id=user_id,
         capability_type=capability_type,
         capability_key=capability_key,
-        state=state,
+        state="disabled",
         created_at=now,
         updated_at=now,
     )
     stmt = stmt.on_conflict_do_update(
         index_elements=[table.c.user_id, table.c.capability_type, table.c.capability_key],
-        set_={"state": state, "updated_at": now},
+        set_={"state": "disabled", "updated_at": now},
     )
     async with get_async_control_plane_engine().begin() as conn:
         await conn.execute(stmt)

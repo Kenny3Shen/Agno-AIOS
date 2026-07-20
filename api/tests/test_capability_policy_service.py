@@ -53,7 +53,7 @@ async def test_personal_disabled_override_is_isolated_between_users() -> None:
 
 
 @pytest.mark.asyncio
-async def test_explicit_enable_cannot_bypass_platform_disable() -> None:
+async def test_platform_disable_wins_without_preference_row() -> None:
     with (
         patch.object(
             policy,
@@ -64,7 +64,7 @@ async def test_explicit_enable_cannot_bypass_platform_disable() -> None:
         patch.object(
             policy,
             "list_capability_preferences",
-            AsyncMock(return_value={("skill", "incident-response"): "enabled"}),
+            AsyncMock(return_value={}),
         ),
     ):
         items = await policy.list_capabilities_for_actor(actor())

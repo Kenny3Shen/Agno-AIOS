@@ -1,11 +1,11 @@
 ## 已完成：用户能力偏好与 Workflow 自定义节点
 
-- 去掉独立「我的能力」页；Skills / MCP 列表用「启用」做按用户开关（稀疏偏好：缺省即启用，仅存 disabled）。
-- 非管理员隐藏「平台可用」；去掉推荐默认 / `default_enabled` 继承模型；用户间偏好互不干扰。
+- 去掉独立「我的能力」页；Skills / MCP 列表用「启用」做按用户开关（稀疏偏好：缺省即启用，**仅存 `disabled` 行**，无 `enabled` 状态）。
+- 非管理员隐藏「平台可用」；无 `default_enabled` / 推荐默认继承；用户间偏好互不干扰。
 - 运行时按「平台可用 ∩ 用户有效」解析 Skill 目录与 MCP server 集合；Chat/Workflow 预检与 MCP 中间件同源。
 - Workflow Studio：业务节点预设 + 用户自定义 step 预设（拖放/双击/保存当前步骤）；执行体按 attach_skills / supports_hitl 对齐属性面板。
 - HITL 预设拖入 Parallel 改挂根级并提示；自定义节点未知 executor / 非法 user_input_schema 写入时 422。
-- Alembic：`20260720_0003` 用户偏好与 MCP token 归属哈希、`0004` 删除 mcp default_enabled、`0005` workflow_custom_nodes。
+- MCP token 仅存 `token_hash`（无明文 `token` 列）。控制面 schema 仅由 baseline `0001` 的 `control_plane_metadata()` 创建；`0002` 仅做 xAI 配置数据规范化。无 pre-Alembic 补列、无双路径 DDL。
 
 ## 已完成：Alembic 控制面与 PostgreSQL Durable Jobs
 

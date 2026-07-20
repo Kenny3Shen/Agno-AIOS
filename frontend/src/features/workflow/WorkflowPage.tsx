@@ -636,22 +636,14 @@ export function WorkflowPage() {
       ),
     [executors, step],
   )
-  const executorAttachSkills = Boolean(
-    selectedExecutor?.attachSkills ?? selectedExecutor?.capabilities?.includes('skills'),
-  )
-  const executorSupportsHitl = Boolean(
-    selectedExecutor?.supportsHitl ?? selectedExecutor?.capabilities?.includes('hitl'),
-  )
+  const executorAttachSkills = Boolean(selectedExecutor?.attachSkills)
+  const executorSupportsHitl = Boolean(selectedExecutor?.supportsHitl)
 
   const applyExecutorChange = (value: string, target: typeof step) => {
     if (!target || target.type !== 'step') return
     const nextExecutor = executors.find((item) => item.ref === value)
-    const attachSkills = Boolean(
-      nextExecutor?.attachSkills ?? nextExecutor?.capabilities?.includes('skills'),
-    )
-    const supportsHitl = Boolean(
-      nextExecutor?.supportsHitl ?? nextExecutor?.capabilities?.includes('hitl'),
-    )
+    const attachSkills = Boolean(nextExecutor?.attachSkills)
+    const supportsHitl = Boolean(nextExecutor?.supportsHitl)
     workflow.update({
       ...target,
       targetId: value,
@@ -659,6 +651,14 @@ export function WorkflowPage() {
       requiresConfirmation: supportsHitl ? target.requiresConfirmation : false,
       requiresUserInput: supportsHitl ? target.requiresUserInput : false,
       requiresOutputReview: supportsHitl ? target.requiresOutputReview : false,
+      ...(supportsHitl
+        ? {}
+        : {
+            confirmationMessage: undefined,
+            userInputMessage: undefined,
+            userInputSchema: undefined,
+            outputReviewMessage: undefined,
+          }),
     })
   }
 
@@ -1553,12 +1553,10 @@ export function WorkflowPage() {
                             if (!value) return
                             const nextExecutor = executors.find((item) => item.ref === value)
                             const attachSkills = Boolean(
-                              nextExecutor?.attachSkills ??
-                                nextExecutor?.capabilities?.includes('skills'),
+                              nextExecutor?.attachSkills,
                             )
                             const supportsHitl = Boolean(
-                              nextExecutor?.supportsHitl ??
-                                nextExecutor?.capabilities?.includes('hitl'),
+                              nextExecutor?.supportsHitl,
                             )
                             workflow.updateSelectedSteps({
                               targetId: value,
@@ -1569,6 +1567,10 @@ export function WorkflowPage() {
                                     requiresConfirmation: false,
                                     requiresUserInput: false,
                                     requiresOutputReview: false,
+                                    confirmationMessage: undefined,
+                                    userInputMessage: undefined,
+                                    userInputSchema: undefined,
+                                    outputReviewMessage: undefined,
                                   }),
                             })
                           }}
@@ -1581,8 +1583,7 @@ export function WorkflowPage() {
                         const multiAttachSkills =
                           !sharedTarget ||
                           Boolean(
-                            sharedExec?.attachSkills ??
-                              sharedExec?.capabilities?.includes('skills'),
+                            sharedExec?.attachSkills,
                           )
                         if (!multiAttachSkills) return null
                         return (
@@ -1657,8 +1658,7 @@ export function WorkflowPage() {
                         const multiSupportsHitl =
                           !sharedTarget ||
                           Boolean(
-                            sharedExec?.supportsHitl ??
-                              sharedExec?.capabilities?.includes('hitl'),
+                            sharedExec?.supportsHitl,
                           )
                         if (!multiSupportsHitl) return null
                         return (

@@ -31,63 +31,6 @@ def _identifier(value: str) -> str:
     return '"' + value.replace('"', '""') + '"'
 
 
-def _alter_if_table_exists(
-    bind: sa.Connection,
-    *,
-    schema: str | None,
-    table: str,
-    clause: str,
-) -> None:
-    qualified = _identifier(table) if schema is None else f"{_identifier(schema)}.{_identifier(table)}"
-    bind.execute(sa.text(f"ALTER TABLE IF EXISTS {qualified} {clause}"))
-
-
-def _ensure_legacy_columns(bind: sa.Connection) -> None:
-    """Make the baseline safe to apply to databases bootstrapped pre-Alembic."""
-    settings = get_settings()
-    app_schema = settings.agno_app_schema
-
-    _alter_if_table_exists(
-        bind,
-        schema=None,
-        table="user",
-        clause="ADD COLUMN IF NOT EXISTS role VARCHAR(32) NOT NULL DEFAULT 'user'",
-    )
-    _alter_if_table_exists(
-        bind,
-        schema=app_schema,
-        table="collect_articles",
-        clause="ADD COLUMN IF NOT EXISTS cve_ids TEXT[] NOT NULL DEFAULT '{}'::text[]",
-    )
-    for clause in (
-        "ADD COLUMN IF NOT EXISTS triggers JSONB NOT NULL DEFAULT '{}'::jsonb",
-        "ADD COLUMN IF NOT EXISTS published_definition JSONB",
-        "ADD COLUMN IF NOT EXISTS published_version BIGINT",
-        "ADD COLUMN IF NOT EXISTS published_at BIGINT",
-    ):
-        _alter_if_table_exists(
-            bind,
-            schema=app_schema,
-            table="workflows",
-            clause=clause,
-        )
-    for clause in (
-        "ADD COLUMN IF NOT EXISTS default_reasoning_effort VARCHAR(16)",
-        "ADD COLUMN IF NOT EXISTS parallel_tool_calls BOOLEAN",
-        "ADD COLUMN IF NOT EXISTS live_search_enabled BOOLEAN NOT NULL DEFAULT false",
-        "ADD COLUMN IF NOT EXISTS retries BIGINT NOT NULL DEFAULT 4",
-        "ADD COLUMN IF NOT EXISTS delay_between_retries BIGINT NOT NULL DEFAULT 1",
-        "ADD COLUMN IF NOT EXISTS exponential_backoff BOOLEAN NOT NULL DEFAULT true",
-        "ADD COLUMN IF NOT EXISTS http_max_retries BIGINT",
-    ):
-        _alter_if_table_exists(
-            bind,
-            schema=app_schema,
-            table="model_configs",
-            clause=clause,
-        )
-
-
 def upgrade() -> None:
     """Create schemas, pgvector extension, tables, constraints and indexes."""
     bind = op.get_bind()
@@ -114,7 +57,6 @@ def upgrade() -> None:
         metadata.create_all(bind=bind, checkfirst=True)
     finally:
         cves.indexes.update(cve_indexes)
-    _ensure_legacy_columns(bind)
     for table in metadata.sorted_tables:
         if table is cves:
             continue

@@ -47,7 +47,6 @@ def mcp_tokens_table(metadata: MetaData | None = None) -> Table:
         metadata or _metadata(),
         Column("id", BigInteger, Identity(), primary_key=True),
         Column("name", Text, nullable=False),
-        Column("token", Text, nullable=False, unique=True),
         Column("token_hash", Text, nullable=False),
         Column("owner_user_id", String(255), nullable=True),
         Column("token_kind", String(16), nullable=False, server_default="service"),
@@ -318,9 +317,6 @@ def _token_insert_values(record: dict[str, Any]) -> dict[str, Any]:
     token_hash = str(record.get("token_hash") or _hash_token(raw_token))
     values = {
         "name": record.get("name"),
-        # ``token`` was the legacy plaintext column.  Keep its uniqueness
-        # constraint while persisting only the digest after this migration.
-        "token": token_hash,
         "token_hash": token_hash,
         "owner_user_id": record.get("owner_user_id"),
         "token_kind": record.get("token_kind") or "service",
@@ -337,7 +333,7 @@ async def upsert_token_row(record: dict[str, Any]) -> None:
     table = mcp_tokens_table()
     stmt = insert(table).values(_token_insert_values(record))
     stmt = stmt.on_conflict_do_update(
-        index_elements=[table.c.token],
+        index_elements=[table.c.token_hash],
         set_={
             "name": stmt.excluded.name,
             "owner_user_id": stmt.excluded.owner_user_id,

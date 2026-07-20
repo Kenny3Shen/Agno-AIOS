@@ -417,9 +417,8 @@ const parseExecutorOption = (value: unknown, context: string): ExecutorOption =>
     capabilities: row.capabilities,
     recommendedFor: row.recommended_for,
     role: row.role,
-    attachSkills: row.attach_skills === undefined ? undefined : Boolean(row.attach_skills),
-    supportsHitl: row.supports_hitl === undefined ? undefined : Boolean(row.supports_hitl),
-    connectMcp: row.connect_mcp === undefined ? undefined : Boolean(row.connect_mcp),
+    attachSkills: Boolean(row.attach_skills),
+    supportsHitl: Boolean(row.supports_hitl),
   }
 }
 
@@ -659,23 +658,6 @@ export const createCustomNode = async (body: {
   parseNodePreset(
     await requestJson<unknown>('/workflows/custom-nodes', jsonInit('POST', body)),
     'createCustomNode',
-  )
-
-export const updateCustomNode = async (
-  id: string,
-  body: {
-    name: string
-    description?: string
-    color?: string
-    definition: WorkflowNodePreset['definition']
-  },
-) =>
-  parseNodePreset(
-    await requestJson<unknown>(
-      `/workflows/custom-nodes/${encodeURIComponent(id)}`,
-      jsonInit('PUT', body),
-    ),
-    'updateCustomNode',
   )
 
 export const deleteCustomNode = async (id: string) =>

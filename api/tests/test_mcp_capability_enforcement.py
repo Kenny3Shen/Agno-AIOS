@@ -44,8 +44,9 @@ def test_token_insert_values_never_persist_the_raw_bearer() -> None:
         }
     )
 
-    assert values["token"] == values["token_hash"]
-    assert values["token"] != "raw-secret"
+    assert "token" not in values
+    assert values["token_hash"] != "raw-secret"
+    assert len(values["token_hash"]) == 64
 
 
 @pytest.mark.asyncio
