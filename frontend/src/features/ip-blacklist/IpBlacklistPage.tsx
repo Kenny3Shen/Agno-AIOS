@@ -1,14 +1,16 @@
 /**
  * IP blacklist threat-intel library: search indicators and admin feed update.
+ * Layout mirrors CVE page (workbench-card + toolbar + table).
  */
-import { useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { App, Button, Card, Input, Progress, Space, Table, Tag, Typography } from 'antd'
+import { App, Button, Card, Flex, Input, Progress, Select, Space, Table, Tag, Typography } from 'antd'
 import { ReloadOutlined, SearchOutlined, StopOutlined } from '@ant-design/icons'
+import type { ColumnsType, TablePaginationConfig } from 'antd/es/table'
 import { currentUserQuery } from '@/features/auth'
 import { roleOf } from '@/shared/auth/permissions'
 import { PageHeader } from '@/shared/ui/PageHeader'
-import { useFormatDate } from '@/shared/lib/format'
+import { compareTimestamp, useFormatDate } from '@/shared/lib/format'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 import { useTranslation } from 'react-i18next'
 import {
@@ -31,6 +33,40 @@ function progressPercent(event: IpBlacklistUpdateProgress | null): number {
   return 15
 }
 
+function formatUpdateMessage(
+  event: IpBlacklistUpdateProgress | null,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  if (!event) return t('updateStarting')
+  if (event.status === 'cancelled') return event.message || t('updateCancelled')
+  if (event.status === 'failed') return event.error || event.message || t('updateFailed')
+  const stage = event.stage || ''
+  if (stage === 'start') return t('updateStarting')
+  if (stage === 'source') {
+    if (event.source) {
+      if (event.status === 'completed') {
+        return t('updateStageSourceDone', {
+          source: event.source,
+          add: event.add_count ?? 0,
+          del: event.del_count ?? 0,
+          index: event.source_index ?? 0,
+          total: event.source_total ?? 0,
+        })
+      }
+      return t('updateStageSource', {
+        source: event.source,
+        index: event.source_index ?? 0,
+        total: event.source_total ?? 0,
+      })
+    }
+    return t('updateStarting')
+  }
+  if (stage === 'done' && event.status === 'completed') {
+    return t('updatedDetail', { add: event.add_count ?? 0, del: event.del_count ?? 0 })
+  }
+  return event.message || t('updateStarting')
+}
+
 export function IpBlacklistPage() {
   const { t } = useTranslation('ipBlacklist')
   const formatDate = useFormatDate()
@@ -38,165 +74,246 @@ export function IpBlacklistPage() {
   const currentUser = useQuery(currentUserQuery())
   const canUpdate = roleOf(currentUser.data) === 'admin'
   const [query, setQuery] = useState('')
+  const [source, setSource] = useState<string>()
   const debouncedQuery = useDebouncedValue(query, 300)
   const [pagination, setPagination] = useState({ page: 1, size: 20 })
   const [updateProgress, setUpdateProgress] = useState<IpBlacklistUpdateProgress | null>(null)
   const updateAbortRef = useRef<AbortController | null>(null)
 
   const listQuery = useQuery({
-    queryKey: ['ip-blacklist', 'search', debouncedQuery, pagination.page, pagination.size],
+    queryKey: ['ip-blacklist', 'search', debouncedQuery, source, pagination.page, pagination.size],
     queryFn: () =>
       searchIpBlacklist({
         query: debouncedQuery.trim(),
+        source,
         page: pagination.page,
         size: pagination.size,
       }),
   })
 
+  useEffect(() => {
+    if (listQuery.isError) {
+      const err = listQuery.error
+      message.error(err instanceof Error ? err.message : t('searchFailed'))
+    }
+  }, [listQuery.isError, listQuery.error, message, t])
+
+  useEffect(() => {
+    return () => {
+      updateAbortRef.current?.abort()
+    }
+  }, [])
+
   const updateMutation = useMutation({
     mutationFn: async () => {
+      updateAbortRef.current?.abort()
       const controller = new AbortController()
       updateAbortRef.current = controller
-      setUpdateProgress({ stage: 'start', status: 'running' })
-      await updateIpBlacklistStream((event) => {
-        setUpdateProgress(event)
-      }, controller.signal)
+      setUpdateProgress({ stage: 'start', status: 'running', message: t('updateStarting') })
+      try {
+        await updateIpBlacklistStream((event) => {
+          setUpdateProgress(event)
+        }, controller.signal)
+      } finally {
+        if (updateAbortRef.current === controller) {
+          updateAbortRef.current = null
+        }
+      }
     },
     onSuccess: () => {
       message.success(t('updated'))
+      setUpdateProgress((prev) =>
+        prev ? { ...prev, stage: 'done', status: 'completed' } : prev,
+      )
       void listQuery.refetch()
     },
     onError: (error: Error) => {
       if (error.name === 'AbortError') {
         message.info(t('updateCancelled'))
+        setUpdateProgress((prev) =>
+          prev
+            ? { ...prev, stage: 'done', status: 'cancelled', message: t('updateCancelled') }
+            : { stage: 'done', status: 'cancelled', message: t('updateCancelled') },
+        )
+        void listQuery.refetch()
         return
       }
       message.error(error.message || t('updateFailed'))
-    },
-    onSettled: () => {
-      updateAbortRef.current = null
+      setUpdateProgress((prev) =>
+        prev
+          ? { ...prev, stage: 'done', status: 'failed', error: error.message }
+          : { stage: 'done', status: 'failed', error: error.message },
+      )
     },
   })
 
-  const columns = [
-    {
-      title: t('columns.indicator'),
-      dataIndex: 'indicator',
-      key: 'indicator',
-      render: (value: string, row: IpBlacklistEntry) => (
-        <Space direction="vertical" size={0}>
-          <Typography.Text code>{value}</Typography.Text>
-          <Tag>{row.indicator_type}</Tag>
-        </Space>
-      ),
-    },
-    {
-      title: t('columns.source'),
-      dataIndex: 'source',
-      key: 'source',
-      width: 160,
-    },
-    {
-      title: t('columns.listName'),
-      dataIndex: 'list_name',
-      key: 'list_name',
-      ellipsis: true,
-    },
-    {
-      title: t('columns.description'),
-      dataIndex: 'description',
-      key: 'description',
-      ellipsis: true,
-    },
-    {
-      title: t('columns.updatedAt'),
-      dataIndex: 'updated_at',
-      key: 'updated_at',
-      width: 180,
-      render: (value: string | null | undefined) =>
-        value ? formatDate(value) : t('common:empty'),
-    },
-  ]
+  const updating = updateMutation.isPending
+  const percent = progressPercent(updateProgress)
+
+  const columns: ColumnsType<IpBlacklistEntry> = useMemo(
+    () => [
+      {
+        title: t('columns.indicator'),
+        dataIndex: 'indicator',
+        key: 'indicator',
+        width: 200,
+        render: (value: string, row) => (
+          <Flex vertical gap={4}>
+            <Typography.Text code copyable={{ text: value }}>
+              {value}
+            </Typography.Text>
+            <Tag style={{ width: 'fit-content', marginInlineEnd: 0 }}>{row.indicator_type}</Tag>
+          </Flex>
+        ),
+      },
+      {
+        title: t('columns.source'),
+        dataIndex: 'source',
+        key: 'source',
+        width: 140,
+        render: (value: string) => <Tag color="blue">{value}</Tag>,
+      },
+      {
+        title: t('columns.listName'),
+        dataIndex: 'list_name',
+        key: 'list_name',
+        width: 140,
+        ellipsis: true,
+        render: (value: string) => value || '—',
+      },
+      {
+        title: t('columns.description'),
+        dataIndex: 'description',
+        key: 'description',
+        ellipsis: true,
+        render: (value: string) => value || '—',
+      },
+      {
+        title: t('columns.updatedAt'),
+        dataIndex: 'updated_at',
+        key: 'updated_at',
+        width: 190,
+        defaultSortOrder: 'descend',
+        sorter: (a, b) => compareTimestamp(a.updated_at, b.updated_at),
+        render: (value: string | null | undefined) => (value ? formatDate(value) : '—'),
+      },
+    ],
+    [formatDate, t],
+  )
+
+  const onTableChange = (next: TablePaginationConfig) => {
+    setPagination({
+      page: next.current ?? 1,
+      size: next.pageSize ?? pagination.size,
+    })
+  }
 
   return (
-    <div className="page-stack">
-      <PageHeader
-        title={t('title')}
-        description={t('description')}
-        actions={
-          canUpdate ? (
-            <Space>
-              {updateMutation.isPending ? (
-                <Button
-                  icon={<StopOutlined />}
-                  onClick={() => updateAbortRef.current?.abort()}
-                >
-                  {t('stopUpdate')}
-                </Button>
-              ) : null}
-              <Button
-                type="primary"
-                icon={<ReloadOutlined />}
-                loading={updateMutation.isPending}
-                onClick={() => updateMutation.mutate()}
-              >
-                {t('updateDatabase')}
-              </Button>
-            </Space>
-          ) : null
-        }
-      />
-
-      {updateMutation.isPending || updateProgress ? (
-        <Card size="small" className="page-card">
-          <Typography.Text type="secondary">
-            {updateProgress?.message ||
-              (updateProgress?.status === 'failed'
-                ? updateProgress.error || t('updateFailed')
-                : t('updateStarting'))}
-          </Typography.Text>
-          <Progress
-            percent={progressPercent(updateProgress)}
-            status={
-              updateProgress?.status === 'failed'
-                ? 'exception'
-                : updateProgress?.stage === 'done'
-                  ? 'success'
-                  : 'active'
-            }
-            style={{ marginTop: 8 }}
-          />
-        </Card>
-      ) : null}
-
-      <Card size="small" className="page-card">
-        <Space wrap style={{ marginBottom: 16 }}>
-          <Input
+    <main className="page">
+      <PageHeader title={t('title')} description={t('description')} />
+      <Card className="workbench-card">
+        <Space className="cve-toolbar" wrap>
+          <Space.Compact className="cve-search-control">
+            <Input
+              allowClear
+              value={query}
+              placeholder={t('searchPlaceholder')}
+              onChange={(event) => {
+                setQuery(event.target.value)
+                setPagination((prev) => ({ ...prev, page: 1 }))
+              }}
+              onPressEnter={() => {
+                setPagination((prev) => ({ ...prev, page: 1 }))
+                void listQuery.refetch()
+              }}
+            />
+            <Button
+              type="primary"
+              icon={<SearchOutlined />}
+              loading={listQuery.isFetching}
+              onClick={() => {
+                setPagination((prev) => ({ ...prev, page: 1 }))
+                void listQuery.refetch()
+              }}
+            >
+              {t('common:search')}
+            </Button>
+          </Space.Compact>
+          <Select
             allowClear
-            prefix={<SearchOutlined />}
-            placeholder={t('searchPlaceholder')}
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value)
-              setPagination((current) => ({ ...current, page: 1 }))
+            value={source}
+            onChange={(value) => {
+              setSource(value)
+              setPagination((prev) => ({ ...prev, page: 1 }))
             }}
-            style={{ width: 320 }}
+            placeholder={t('allSources')}
+            options={[{ value: 'firehol-level1', label: 'FireHOL level1' }]}
+            style={{ minWidth: 160 }}
           />
+          {updating && canUpdate ? (
+            <Button
+              danger
+              icon={<StopOutlined />}
+              title={t('stopUpdateHint')}
+              onClick={() => updateAbortRef.current?.abort()}
+            >
+              {t('stopUpdate')}
+            </Button>
+          ) : (
+            <Button
+              icon={<ReloadOutlined />}
+              loading={updating}
+              disabled={!canUpdate || updating}
+              onClick={() => updateMutation.mutate()}
+            >
+              {t('updateDatabase')}
+            </Button>
+          )}
         </Space>
+
+        {updateProgress ? (
+          <div style={{ marginTop: 12, maxWidth: 640 }}>
+            <Progress
+              percent={percent}
+              size="small"
+              status={
+                updateProgress.status === 'failed'
+                  ? 'exception'
+                  : updateProgress.status === 'cancelled'
+                    ? 'normal'
+                    : updateProgress.status === 'completed' && updateProgress.stage === 'done'
+                      ? 'success'
+                      : updating
+                        ? 'active'
+                        : 'normal'
+              }
+            />
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {formatUpdateMessage(updateProgress, t)}
+            </Typography.Text>
+          </div>
+        ) : null}
+
         <Table<IpBlacklistEntry>
           rowKey="id"
+          style={{ marginTop: 12 }}
           loading={listQuery.isFetching}
           dataSource={listQuery.data?.data ?? []}
           columns={columns}
+          locale={{
+            emptyText: listQuery.isFetching ? t('loading') : t('noResults'),
+          }}
           pagination={{
             current: pagination.page,
             pageSize: pagination.size,
             total: listQuery.data?.meta.total_count ?? 0,
             showSizeChanger: true,
-            onChange: (page, size) => setPagination({ page, size }),
+            showTotal: (total) => t('total', { total }),
           }}
+          onChange={onTableChange}
+          scroll={{ x: 900 }}
         />
       </Card>
-    </div>
+    </main>
   )
 }
