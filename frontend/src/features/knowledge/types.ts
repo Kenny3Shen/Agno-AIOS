@@ -23,11 +23,26 @@ export interface KnowledgeIngestDefaultsPayload {
   code_chunk_size?: number
   semantic_threshold?: number
 }
+
+export interface KnowledgeRetrievalSettingsPayload {
+  search_type?: KnowledgeSearchType
+  top_k?: number
+  vector_score_weight?: number
+  similarity_threshold?: number | null
+  content_language?: string
+  prefix_match?: boolean
+  rerank_enabled?: boolean
+  rerank_model?: string
+  rerank_candidate_multiplier?: number
+  rerank_min_candidates?: number
+}
+
 type KnowledgeListMeta = ListPaginationMeta & {
   query?: string
   sort_by?: string
   sort_order?: string
   ingest_defaults?: KnowledgeIngestDefaultsPayload
+  retrieval_settings?: KnowledgeRetrievalSettingsPayload
 }
 
 export interface KnowledgeResponse {

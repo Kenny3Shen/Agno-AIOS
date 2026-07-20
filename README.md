@@ -86,6 +86,8 @@ Collect 按 `api/utils/url2md_utils.domain_rules` 源站爬取文章入库（`co
 - `/api/health` 是不依赖下游服务的 liveness probe；`/api/ready` 在启动完成且控制面 PostgreSQL `SELECT 1` 成功后才返回 200，失败时返回 503。
 - `TAIS_BOOTSTRAP_ADMIN_EMAIL`、`TAIS_BOOTSTRAP_ADMIN_PASSWORD`：可选的初始管理员。
 - `TAIS_KNOWLEDGE_*`：Knowledge chunk、search、rerank 与 PgVector 配置。
+- 知识库检索：`TAIS_KNOWLEDGE_SIMILARITY_THRESHOLD` 等 PgVector 参数可在 **Settings → 知识库检索** 表内调整（参数/说明/值）；低于阈值的片段丢弃并允许 0 结果。Chat 设置同样用带说明列的参数表。检索试验台与 Trace 展示每条 score；Agent 经 `knowledge_retriever` 共用过滤逻辑。
+- 运行时知识检索配置落在 `app.knowledge_rag_settings`（`alembic upgrade head` 含 `20260720_0003`），API 为 `GET/PATCH /api/settings/knowledge`（admin）。
 - Durable Jobs：Knowledge 入库、Workflow 审批恢复、安全 HITL 恢复与 cron dispatch 均写入 PostgreSQL 队列，发布后另起 Worker：`uv run job-worker --concurrency 4`。Worker 与 API 一样会先校验 Alembic revision；cron 的 claim 与入队在同一事务内完成。当前 Knowledge 上传文件落在配置的本地目录，独立部署 API/Worker 时必须共享该持久卷（或在部署层替换为对象存储）。
 - 真实负载基准：`uv run benchmark-runtime --url https://staging.example --token "$TAIS_BENCHMARK_TOKEN" --model-id configured-model --requests 12 --concurrency 3 --scenario both --output .logs/benchmarks/runtime.json` 会以短期 Bearer token 对预发发送真实 Chat SSE / Dashboard Overview 请求，记录 TTFT、总时延、p50/p95、事件量和失败率；报告不写 token、prompt 或模型输出。附件路径通过 `--file` 可测端到端 Docling + Chat 路径；文档转换后的原始文件只用于 data-analysis / Team 的运行隔离工作区，不会作为模型的 `file` content part 发送。
 - PgVector 索引核验：`uv run verify-pgvector-indexes` 只读检查实际 schema/table、embedding 维度、`pg_indexes` 定义、向量/全文 GIN/JSONB metadata GIN 索引，并输出 JSON 报告；不会调用 Agno `optimize()` 或创建索引。只有明确传入 `--explain-sql "SELECT ..."` 时才捕获非 `ANALYZE` 的 JSON plan。先用真实语料验证 corpus 规模、召回与延迟，再把批准的 HNSW/IVFFlat/GIN 变更写入 Alembic migration。

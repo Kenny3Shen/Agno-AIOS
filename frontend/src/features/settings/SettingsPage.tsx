@@ -1,21 +1,24 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Card, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
+import { App, Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
 import { ApiOutlined, CheckCircleOutlined, DeleteOutlined, EditOutlined, PlusOutlined, QuestionCircleOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { currentUserQuery } from '@/features/auth'
 import { roleOf } from '@/shared/auth/permissions'
 import {
   getChatSettings,
+  getKnowledgeRagSettings,
   getModels,
   listAdminUsers,
   listRolePresets,
   saveChatSettings,
+  saveKnowledgeRagSettings,
   saveModels,
   SERVER_DEFAULTED_MODEL_FIELDS,
   setUserRole,
   testModel,
   type ChatSettings,
+  type KnowledgeRagSettings,
   type ModelConfigInput,
   type ModelConfigUpdatePayload,
 } from './api'
@@ -58,6 +61,18 @@ export function SettingsPage() {
   const [testingId, setTestingId] = useState<string | null>(null)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('models')
+  const knowledgeRagSettings = useQuery({
+    queryKey: ['settings', 'knowledge'],
+    queryFn: getKnowledgeRagSettings,
+    enabled: isAdmin && activeTab === 'knowledge',
+  })
+  const [knowledgeForm] = Form.useForm<KnowledgeRagSettings>()
+  const [knowledgeSaving, setKnowledgeSaving] = useState(false)
+  useEffect(() => {
+    if (knowledgeRagSettings.data) {
+      knowledgeForm.setFieldsValue(knowledgeRagSettings.data)
+    }
+  }, [knowledgeForm, knowledgeRagSettings.data])
   const usersQuery = useQuery({
     queryKey: ['settings', 'admin-users'],
     queryFn: () => listAdminUsers(1, 100),
@@ -105,6 +120,27 @@ export function SettingsPage() {
       message.success(t('chatUpdated'))
     } catch (error) {
       message.error(error instanceof Error ? error.message : t('chatUpdateFailed'))
+    }
+  }
+
+  const saveKnowledgeRag = async (values: KnowledgeRagSettings) => {
+    setKnowledgeSaving(true)
+    try {
+      const payload: Partial<KnowledgeRagSettings> = {
+        ...values,
+        similarity_threshold:
+          values.similarity_threshold == null || Number(values.similarity_threshold) <= 0
+            ? null
+            : Number(values.similarity_threshold),
+      }
+      const next = await saveKnowledgeRagSettings(payload)
+      knowledgeForm.setFieldsValue(next)
+      await client.invalidateQueries({ queryKey: ['settings', 'knowledge'] })
+      message.success(t('knowledgeRagSaved'))
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('knowledgeRagSaveFailed'))
+    } finally {
+      setKnowledgeSaving(false)
     }
   }
 
@@ -365,33 +401,76 @@ export function SettingsPage() {
     />
   )
 
+  type SettingRow = {
+    key: string
+    parameter: string
+    description: string
+  }
+
+  const chatSettingRows: Array<SettingRow & { field: keyof ChatSettings }> = [
+    {
+      key: 'show_thought_chain',
+      field: 'show_thought_chain',
+      parameter: t('securityTimeline'),
+      description: t('securityTimelineDesc'),
+    },
+    {
+      key: 'show_raw_reasoning',
+      field: 'show_raw_reasoning',
+      parameter: t('rawReasoning'),
+      description: t('rawReasoningDesc'),
+    },
+    {
+      key: 'show_raw_tool_io',
+      field: 'show_raw_tool_io',
+      parameter: t('rawToolIo'),
+      description: t('rawToolIoDesc'),
+    },
+    {
+      key: 'memory_enabled',
+      field: 'memory_enabled',
+      parameter: t('longTermMemory'),
+      description: t('longTermMemoryDesc'),
+    },
+  ]
+
   const chatControls = (
-    <div>
-      <Table<ChatSettings>
-        rowKey={(row) => Object.keys(row).join(':')}
+    <div className="settings-param-panel">
+      <Table<(typeof chatSettingRows)[number]>
+        rowKey="key"
+        size="middle"
         loading={chatSettings.isLoading}
         pagination={false}
-        dataSource={chatSettings.data ? [chatSettings.data] : []}
+        dataSource={chatSettingRows}
         columns={[
           {
-            title: t('securityTimeline'),
-            dataIndex: 'show_thought_chain',
-            render: (value) => <Switch checked={value} onChange={(next) => void setChatSetting('show_thought_chain', next)} />,
+            title: t('colParameter'),
+            dataIndex: 'parameter',
+            width: 200,
+            render: (value: string) => <Typography.Text strong>{value}</Typography.Text>,
           },
           {
-            title: t('rawReasoning'),
-            dataIndex: 'show_raw_reasoning',
-            render: (value) => <Switch checked={value} onChange={(next) => void setChatSetting('show_raw_reasoning', next)} />,
+            title: t('colDescription'),
+            dataIndex: 'description',
+            render: (value: string) => (
+              <Typography.Text type="secondary" className="settings-param-description">
+                {value}
+              </Typography.Text>
+            ),
           },
           {
-            title: t('rawToolIo'),
-            dataIndex: 'show_raw_tool_io',
-            render: (value) => <Switch checked={value} onChange={(next) => void setChatSetting('show_raw_tool_io', next)} />,
-          },
-          {
-            title: t('longTermMemory'),
-            dataIndex: 'memory_enabled',
-            render: (value) => <Switch checked={value} onChange={(next) => void setChatSetting('memory_enabled', next)} />,
+            title: t('colValue'),
+            dataIndex: 'field',
+            width: 120,
+            align: 'center',
+            render: (field: keyof ChatSettings) => (
+              <Switch
+                checked={Boolean(chatSettings.data?.[field])}
+                loading={chatSettings.isFetching}
+                onChange={(next) => void setChatSetting(field, next)}
+                aria-label={String(field)}
+              />
+            ),
           },
         ]}
       />
@@ -446,6 +525,199 @@ export function SettingsPage() {
     </div>
   )
 
+
+  const knowledgeSearchTypeOptions = [
+    { value: 'hybrid', label: 'hybrid' },
+    { value: 'vector', label: 'vector' },
+    { value: 'keyword', label: 'keyword' },
+  ]
+
+  type KnowledgeField =
+    | 'search_type'
+    | 'top_k'
+    | 'vector_score_weight'
+    | 'similarity_threshold'
+    | 'content_language'
+    | 'prefix_match'
+    | 'rerank_enabled'
+    | 'rerank_candidate_multiplier'
+    | 'rerank_min_candidates'
+    | 'rerank_model'
+
+  const knowledgeSettingRows: Array<SettingRow & { field: KnowledgeField; control: 'select' | 'number' | 'switch' | 'text' | 'readonly' }> = [
+    {
+      key: 'search_type',
+      field: 'search_type',
+      parameter: t('searchTypeLabel'),
+      description: t('searchTypeDesc'),
+      control: 'select',
+    },
+    {
+      key: 'top_k',
+      field: 'top_k',
+      parameter: t('topKLabel'),
+      description: t('topKDesc'),
+      control: 'number',
+    },
+    {
+      key: 'vector_score_weight',
+      field: 'vector_score_weight',
+      parameter: t('vectorScoreWeightLabel'),
+      description: t('vectorScoreWeightDesc'),
+      control: 'number',
+    },
+    {
+      key: 'similarity_threshold',
+      field: 'similarity_threshold',
+      parameter: t('similarityThresholdLabel'),
+      description: t('similarityThresholdDesc'),
+      control: 'number',
+    },
+    {
+      key: 'content_language',
+      field: 'content_language',
+      parameter: t('contentLanguageLabel'),
+      description: t('contentLanguageDesc'),
+      control: 'text',
+    },
+    {
+      key: 'prefix_match',
+      field: 'prefix_match',
+      parameter: t('prefixMatchLabel'),
+      description: t('prefixMatchDesc'),
+      control: 'switch',
+    },
+    {
+      key: 'rerank_enabled',
+      field: 'rerank_enabled',
+      parameter: t('rerankEnabledLabel'),
+      description: t('rerankEnabledDesc'),
+      control: 'switch',
+    },
+    {
+      key: 'rerank_candidate_multiplier',
+      field: 'rerank_candidate_multiplier',
+      parameter: t('rerankMultiplierLabel'),
+      description: t('rerankMultiplierDesc'),
+      control: 'number',
+    },
+    {
+      key: 'rerank_min_candidates',
+      field: 'rerank_min_candidates',
+      parameter: t('rerankMinCandidatesLabel'),
+      description: t('rerankMinCandidatesDesc'),
+      control: 'number',
+    },
+    {
+      key: 'rerank_model',
+      field: 'rerank_model',
+      parameter: t('rerankModelLabel'),
+      description: t('rerankModelDesc'),
+      control: 'readonly',
+    },
+  ]
+
+  const knowledgeControls = (
+    <div className="settings-param-panel settings-knowledge-panel">
+      <Typography.Paragraph type="secondary">{t('knowledgeRagHint')}</Typography.Paragraph>
+      <Form
+        form={knowledgeForm}
+        layout="vertical"
+        initialValues={{
+          search_type: 'hybrid',
+          top_k: 5,
+          vector_score_weight: 0.55,
+          similarity_threshold: 0.35,
+          content_language: 'english',
+          prefix_match: false,
+          rerank_enabled: true,
+          rerank_candidate_multiplier: 3,
+          rerank_min_candidates: 10,
+        }}
+        onFinish={(values) => void saveKnowledgeRag(values)}
+        disabled={knowledgeRagSettings.isLoading || knowledgeSaving}
+      >
+        <Table<(typeof knowledgeSettingRows)[number]>
+          rowKey="key"
+          size="middle"
+          loading={knowledgeRagSettings.isLoading}
+          pagination={false}
+          dataSource={knowledgeSettingRows}
+          columns={[
+            {
+              title: t('colParameter'),
+              dataIndex: 'parameter',
+              width: 240,
+              render: (value: string) => <Typography.Text strong>{value}</Typography.Text>,
+            },
+            {
+              title: t('colDescription'),
+              dataIndex: 'description',
+              render: (value: string) => (
+                <Typography.Text type="secondary" className="settings-param-description">
+                  {value}
+                </Typography.Text>
+              ),
+            },
+            {
+              title: t('colValue'),
+              dataIndex: 'field',
+              width: 220,
+              render: (_field, row) => {
+                if (row.control === 'select') {
+                  return (
+                    <Form.Item name="search_type" noStyle rules={[{ required: true }]}>
+                      <Select options={knowledgeSearchTypeOptions} style={{ width: '100%' }} />
+                    </Form.Item>
+                  )
+                }
+                if (row.control === 'switch') {
+                  return (
+                    <Form.Item name={row.field} noStyle valuePropName="checked">
+                      <Switch />
+                    </Form.Item>
+                  )
+                }
+                if (row.control === 'text') {
+                  return (
+                    <Form.Item name="content_language" noStyle>
+                      <Input placeholder="english / simple" />
+                    </Form.Item>
+                  )
+                }
+                if (row.control === 'readonly') {
+                  return (
+                    <Typography.Text type="secondary">
+                      {knowledgeRagSettings.data?.rerank_model || '—'}
+                    </Typography.Text>
+                  )
+                }
+                const numberProps =
+                  row.field === 'top_k'
+                    ? { min: 1, max: 50, step: 1 }
+                    : row.field === 'vector_score_weight' || row.field === 'similarity_threshold'
+                      ? { min: 0, max: 1, step: 0.05 }
+                      : row.field === 'rerank_candidate_multiplier'
+                        ? { min: 1, max: 20, step: 1 }
+                        : { min: 1, max: 100, step: 1 }
+                return (
+                  <Form.Item name={row.field} noStyle>
+                    <InputNumber {...numberProps} style={{ width: '100%' }} />
+                  </Form.Item>
+                )
+              },
+            },
+          ]}
+        />
+        <div className="settings-param-actions">
+          <Button type="primary" htmlType="submit" loading={knowledgeSaving}>
+            {t('knowledgeRagSave')}
+          </Button>
+        </div>
+      </Form>
+    </div>
+  )
+
   return (
     <main className="page">
       <PageHeader title={t('title')} description={t('description')} />
@@ -466,6 +738,7 @@ export function SettingsPage() {
             ...(isAdmin
               ? [
                   { key: 'chat', label: t('chatSettings'), children: chatControls },
+                  { key: 'knowledge', label: t('knowledgeRagTab'), children: knowledgeControls },
                   { key: 'users', label: t('usersTab'), children: usersPanel },
                 ]
               : []),

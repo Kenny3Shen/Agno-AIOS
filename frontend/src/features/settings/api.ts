@@ -10,6 +10,21 @@ export interface ChatSettings {
   memory_enabled: boolean
 }
 
+export type KnowledgeSearchTypeSetting = 'hybrid' | 'vector' | 'keyword'
+
+export interface KnowledgeRagSettings {
+  search_type: KnowledgeSearchTypeSetting
+  top_k: number
+  vector_score_weight: number
+  similarity_threshold: number | null
+  content_language: string
+  prefix_match: boolean
+  rerank_enabled: boolean
+  rerank_model?: string
+  rerank_candidate_multiplier: number
+  rerank_min_candidates: number
+}
+
 type RolePreset = { role: UserRole | string; scopes: string[] }
 
 type AdminUserListResult = {
@@ -56,6 +71,11 @@ export const testModel = (model: ModelConfig) =>
 export const getChatSettings = () => requestJson<ChatSettings>('/settings/chat')
 export const saveChatSettings = (payload: Partial<ChatSettings>) =>
   requestJson<ChatSettings>('/settings/chat', jsonInit('PATCH', payload))
+
+export const getKnowledgeRagSettings = () =>
+  requestJson<KnowledgeRagSettings>('/settings/knowledge')
+export const saveKnowledgeRagSettings = (payload: Partial<KnowledgeRagSettings>) =>
+  requestJson<KnowledgeRagSettings>('/settings/knowledge', jsonInit('PATCH', payload))
 
 export const listRolePresets = async () => (await requestJson<{ data: RolePreset[] }>('/auth/roles')).data
 

@@ -127,5 +127,11 @@
   "strategyCsv": "CSV 行",
   "strategyJson": "JSON",
   "strategyDocument": "文档",
-  "ingestQueued": "已提交后台入库"
+  "ingestQueued": "已提交后台入库",
+  "resultScore": "分数",
+  "resultScoreRerank": "Rerank",
+  "resultScoreSimilarity": "相似度",
+  "noRetrievalHits": "无高于阈值的检索结果（允许 0 条）",
+  "retrievalThresholdHint": "当前阈值 {{threshold}}；低于阈值的片段不会注入对话。",
+  "retrievalThresholdOff": "当前未启用相似度阈值过滤。"
 }

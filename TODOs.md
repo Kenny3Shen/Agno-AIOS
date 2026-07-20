@@ -1,3 +1,12 @@
+
+## 已完成：知识库相似度阈值与 PgVector 设置页
+
+- Settings 增加「知识库检索」页；Chat 设置与知识库检索均用参数 Table（参数 / 说明 / 值），Description 列描述作用。
+- 暴露 Agno PgVector 常用参数：search_type、top_k、vector_score_weight、similarity_threshold、content_language、prefix_match、rerank*。
+- 检索低分丢弃：`similarity_threshold` 传入 PgVector，并在 rerank/keyword 后二次过滤；允许 0 结果，不把噪声塞进对话。
+- Agent/Team 经自定义 `knowledge_retriever` 应用同一阈值；Knowledge 检索试验台与 Trace span 展示每条 score。
+- 持久化表 `app.knowledge_rag_settings`（Alembic `20260720_0003`），`GET/PATCH /api/settings/knowledge`；env 默认 `TAIS_KNOWLEDGE_SIMILARITY_THRESHOLD=0.35`。
+
 ## 已完成：用户能力偏好与 Workflow 自定义节点
 
 - 去掉独立「我的能力」页；Skills / MCP 列表用「启用」做按用户开关（稀疏偏好：缺省即启用，**仅存 `disabled` 行**，无 `enabled` 状态）。

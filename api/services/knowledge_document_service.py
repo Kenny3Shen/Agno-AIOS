@@ -53,6 +53,7 @@ class SearchDocumentLike(Protocol):
     content_id: object
     name: object
     meta_data: Mapping[str, object] | None
+    reranking_score: object
 
 
 class KnowledgeDocumentPayload(TypedDict):
@@ -224,8 +225,17 @@ def content_to_document(content: object) -> KnowledgeDocumentPayload:
 
 def result_from_document(document: SearchDocumentLike) -> KnowledgeSearchResultPayload:
     metadata = safe_metadata(document.meta_data)
-    score = metadata.get("rerank_score") or metadata.get("similarity_score")
+    # Agno SentenceTransformerReranker writes Document.reranking_score; PgVector
+    # stores vector/hybrid quality on meta_data["similarity_score"].
+    reranking_score = getattr(document, "reranking_score", None)
+    score = (
+        reranking_score
+        if reranking_score is not None
+        else metadata.get("rerank_score") or metadata.get("similarity_score")
+    )
     score_value = float_value(score)
+    if reranking_score is not None and "rerank_score" not in metadata:
+        metadata = {**metadata, "rerank_score": score_value}
     return {
         "content": str(document.content or ""),
         "score": round(score_value, 4),

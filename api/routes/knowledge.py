@@ -16,7 +16,11 @@ from api.services.knowledge_durable_jobs import (
     enqueue_knowledge_ingest_job,
     knowledge_ingest_idempotency_key,
 )
-from api.services.knowledge_rag_settings_service import current_ingest_defaults
+from api.services.knowledge_rag_settings_service import (
+    current_ingest_defaults,
+    current_retrieval_settings,
+    get_knowledge_rag_settings,
+)
 from api.services.knowledge_service import get_knowledge_base_lifecycle
 from api.utils.pagination import pagination_meta
 from api.services.knowledge_upload_service import (
@@ -659,12 +663,14 @@ async def search_knowledge(
             search_type=request.search_type,
             owner_user_id=effective_knowledge_user_filter(user),
         )
+        await get_knowledge_rag_settings()
         return {
             "data": results,
             "meta": pagination_meta(
                 page=1,
                 limit=max(int(request.limit or 1), 1),
                 total_count=len(results),
+                retrieval_settings=current_retrieval_settings(),
             ),
         }
     except ValueError as exc:

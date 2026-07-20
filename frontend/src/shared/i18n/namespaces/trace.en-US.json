@@ -35,5 +35,9 @@
   "statusError": "ERROR",
   "statusUnset": "UNSET",
   "openWorkflow": "Open workflow",
-  "workflowTag": "Workflow"
+  "workflowTag": "Workflow",
+  "knowledgeScores": "Knowledge scores",
+  "score": "Score",
+  "chunk": "Chunk",
+  "noScores": "No knowledge retrieval scores on this span"
 }

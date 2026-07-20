@@ -19,6 +19,10 @@ from api.services.model_config_service import (
 )
 from api.services.model_factory import build_agno_model
 from api.services.chat_settings_service import get_chat_settings, update_chat_settings
+from api.services.knowledge_rag_settings_service import (
+    get_knowledge_rag_settings,
+    update_knowledge_rag_settings,
+)
 
 router = APIRouter(prefix="/api", tags=["Settings"])
 
@@ -27,6 +31,19 @@ class ChatSettingsUpdate(BaseModel):
     show_raw_tool_io: bool | None = None
     show_thought_chain: bool | None = None
     memory_enabled: bool | None = None
+
+
+
+class KnowledgeRagSettingsUpdate(BaseModel):
+    search_type: str | None = None
+    top_k: int | None = None
+    vector_score_weight: float | None = None
+    similarity_threshold: float | None = None
+    content_language: str | None = None
+    prefix_match: bool | None = None
+    rerank_enabled: bool | None = None
+    rerank_candidate_multiplier: int | None = None
+    rerank_min_candidates: int | None = None
 
 
 class ModelConnectivityTestResponse(BaseModel):
@@ -125,6 +142,35 @@ async def patch_chat_settings(
         user,
         action="settings.chat.update",
         resource_type="chat_settings",
+        metadata={"keys": sorted(values)},
+        **audit_request_context(request),
+    )
+    return result
+
+
+@router.get("/settings/knowledge")
+async def read_knowledge_rag_settings(
+    _user: User = Depends(require_scope(ADMIN_SCOPE)),
+) -> dict[str, Any]:
+    """Read globally enforced PgVector / knowledge retrieval settings."""
+    return await get_knowledge_rag_settings()
+
+
+@router.patch("/settings/knowledge")
+async def patch_knowledge_rag_settings(
+    request: Request,
+    body: KnowledgeRagSettingsUpdate,
+    user: User = Depends(require_scope(ADMIN_SCOPE)),
+) -> dict[str, Any]:
+    values = body.model_dump(exclude_unset=True)
+    try:
+        result = await update_knowledge_rag_settings(values)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    await record_audit_event_async(
+        user,
+        action="settings.knowledge.update",
+        resource_type="knowledge_rag_settings",
         metadata={"keys": sorted(values)},
         **audit_request_context(request),
     )

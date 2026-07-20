@@ -16,10 +16,20 @@ import { effectiveKnowledgeIngestDefaults, resolveRetrievalContent, SEARCH_TYPE_
 import { useTranslation } from 'react-i18next'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
 
+function scoreKind(result: SearchResult): 'rerank' | 'similarity' | 'score' {
+  const meta = result.metadata ?? {}
+  if (meta.rerank_score != null || meta.reranking_score != null) return 'rerank'
+  if (meta.similarity_score != null) return 'similarity'
+  return 'score'
+}
+
 function RetrievalResultCard({ result }: { result: SearchResult }) {
   const { t } = useTranslation('knowledge')
   const [renderMode, setRenderMode] = useState<RetrievalRenderMode>('auto')
   const content = resolveRetrievalContent(result, renderMode)
+  const kind = scoreKind(result)
+  const scoreLabel =
+    kind === 'rerank' ? t('resultScoreRerank') : kind === 'similarity' ? t('resultScoreSimilarity') : t('resultScore')
   const renderModeOptions: Array<{ value: RetrievalRenderMode; label: string }> = [
     { value: 'auto', label: t('renderModeAuto') },
     { value: 'markdown', label: t('renderModeMarkdown') },
@@ -42,7 +52,9 @@ function RetrievalResultCard({ result }: { result: SearchResult }) {
             style={{ width: 118 }}
           />
           <Tag>{content.kind}</Tag>
-          <Tag>{result.score.toFixed(3)}</Tag>
+          <Tag color={kind === 'rerank' ? 'purple' : kind === 'similarity' ? 'blue' : 'default'}>
+            {scoreLabel} {Number(result.score || 0).toFixed(4)}
+          </Tag>
         </Space>
       }
     >
@@ -52,6 +64,7 @@ function RetrievalResultCard({ result }: { result: SearchResult }) {
         size="small"
         column={1}
         items={[
+          { key: 'score', label: t('resultScore'), children: Number(result.score || 0).toFixed(4) },
           { key: 'source', label: t('resultSource'), children: result.source || '-' },
           { key: 'chunk', label: t('resultChunk'), children: result.chunk_index },
           {
@@ -246,10 +259,24 @@ export function KnowledgePage() {
                     </Button>
                   </Form>
                 </Space>
+                {(() => {
+                  const threshold = query.data?.meta.retrieval_settings?.similarity_threshold
+                  return (
+                    <Typography.Paragraph type="secondary" style={{ marginTop: 8 }}>
+                      {threshold == null || threshold <= 0
+                        ? t('retrievalThresholdOff')
+                        : t('retrievalThresholdHint', { threshold: Number(threshold).toFixed(2) })}
+                    </Typography.Paragraph>
+                  )
+                })()}
                 <div className="retrieval-results">
-                  {results.map((item) => (
-                    <RetrievalResultCard key={`${item.doc_id}-${item.chunk_index}`} result={item} />
-                  ))}
+                  {results.length === 0 ? (
+                    <Typography.Text type="secondary">{t('noRetrievalHits')}</Typography.Text>
+                  ) : (
+                    results.map((item) => (
+                      <RetrievalResultCard key={`${item.doc_id}-${item.chunk_index}`} result={item} />
+                    ))
+                  )}
                 </div>
               </Card>
             ),

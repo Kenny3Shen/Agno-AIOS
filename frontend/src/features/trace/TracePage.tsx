@@ -580,9 +580,65 @@ export function TracePage() {
   )
 }
 
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+}
+
+function extractKnowledgeScores(span: Span): Array<{ title: string; score: number; chunk?: string }> {
+  const buckets: unknown[] = []
+  const parsed = asRecord(span.parsed)
+  const attributes = asRecord(span.attributes)
+  for (const root of [parsed?.output, parsed?.input, attributes, span.events]) {
+    if (root == null) continue
+    buckets.push(root)
+  }
+  const scores: Array<{ title: string; score: number; chunk?: string }> = []
+  const visit = (value: unknown, depth = 0) => {
+    if (depth > 5 || value == null) return
+    if (Array.isArray(value)) {
+      value.forEach((item) => visit(item, depth + 1))
+      return
+    }
+    const record = asRecord(value)
+    if (!record) return
+    const meta = asRecord(record.meta_data) || asRecord(record.metadata) || {}
+    const rawScore =
+      record.score ??
+      record.reranking_score ??
+      meta.score ??
+      meta.rerank_score ??
+      meta.similarity_score
+    if (rawScore != null && rawScore !== '' && (record.content != null || record.name != null || meta.chunk != null)) {
+      const score = Number(rawScore)
+      if (!Number.isNaN(score)) {
+        scores.push({
+          title: String(record.name || record.title || meta.title || 'chunk'),
+          score,
+          chunk: meta.chunk != null ? String(meta.chunk) : meta.chunk_index != null ? String(meta.chunk_index) : undefined,
+        })
+      }
+    }
+    // also walk common containers
+    for (const key of ['references', 'documents', 'results', 'data', 'items', 'tool_result', 'result']) {
+      if (key in record) visit(record[key], depth + 1)
+    }
+  }
+  buckets.forEach((item) => visit(item))
+  // de-dupe
+  const seen = new Set<string>()
+  return scores.filter((item) => {
+    const key = `${item.title}|${item.score}|${item.chunk || ''}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 function SpanDetailTabs({ span }: { span: Span }) {
   const { t } = useTranslation('trace')
   const formatDate = useFormatDate()
+  const knowledgeScores = extractKnowledgeScores(span)
   const metadata = Object.fromEntries(
     Object.entries({ metadata: span.parsed?.metadata, attributes: span.attributes, events: span.events }).filter(
       ([, value]) => value != null && (!Array.isArray(value) || value.length > 0)
@@ -607,6 +663,32 @@ function SpanDetailTabs({ span }: { span: Span }) {
               </Splitter.Panel>
             </Splitter>
           ),
+        },
+        {
+          key: 'knowledge-scores',
+          label: t('knowledgeScores'),
+          children:
+            knowledgeScores.length === 0 ? (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('noScores')} />
+            ) : (
+              <div className="trace-knowledge-scores">
+                {knowledgeScores.map((item, index) => (
+                  <Card key={`${item.title}-${item.score}-${index}`} size="small" style={{ marginBottom: 8 }}>
+                    <Space wrap>
+                      <Typography.Text strong>{item.title}</Typography.Text>
+                      <Tag color="blue">
+                        {t('score')} {item.score.toFixed(4)}
+                      </Tag>
+                      {item.chunk != null ? (
+                        <Tag>
+                          {t('chunk')} {item.chunk}
+                        </Tag>
+                      ) : null}
+                    </Space>
+                  </Card>
+                ))}
+              </div>
+            ),
         },
         {
           key: 'metadata',

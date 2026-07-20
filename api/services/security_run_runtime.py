@@ -26,7 +26,10 @@ from loguru import logger
 from api.config import get_settings
 from api.persistence.durable_jobs import JobKind, JobState, retry_job
 from api.services.durable_job_service import enqueue_durable_job
-from api.services.knowledge_service import get_async_knowledge_base_async
+from api.services.knowledge_service import (
+    build_knowledge_retriever,
+    get_async_knowledge_base_async,
+)
 
 from api.services.model_config_service import get_model_for_run
 from api.services.model_factory import build_agno_model
@@ -2091,36 +2094,37 @@ class SecurityRunRuntime:
                     )
                     registered_run_ids.discard(run_id)
         finally:
-            # User cancel was requested via stream_cancel Event before finally.
+            # User cancel was requested via stream_cancel Event (Stop / cancel API).
+            # Client disconnect (leave page) closes this generator without setting
+            # stream_cancel — let Agno finish and persist COMPLETED so the user can
+            # return to the session and load history.
             user_stop = stream_cancel.is_set()
-            # Only force-cancel Agno when the client disconnects / user stops.
-            # Natural completion must let the producer finish so status stays COMPLETED
-            # (Team multi-turn history skips CANCELLED runs).
-            if not run_finished_naturally:
-                stream_cancel.set()
             if owner_user_id:
                 current = self._user_stream_cancels.get(owner_user_id)
                 if current is stream_cancel:
                     self._user_stream_cancels.pop(owner_user_id, None)
             restore_retry()
             if not producer.done():
-                if run_finished_naturally and not user_stop:
+                if user_stop:
+                    producer.cancel()
                     try:
-                        await asyncio.wait_for(producer, timeout=60)
+                        await producer
+                    except asyncio.CancelledError:
+                        pass
+                    _request_runner_cancel()
+                else:
+                    # Natural completion: short drain. SSE disconnect: longer drain.
+                    try:
+                        await asyncio.wait_for(
+                            producer,
+                            timeout=60 if run_finished_naturally else 600,
+                        )
                     except (asyncio.TimeoutError, asyncio.CancelledError):
                         producer.cancel()
                         try:
                             await producer
                         except asyncio.CancelledError:
                             pass
-                        _request_runner_cancel()
-                else:
-                    producer.cancel()
-                    try:
-                        await producer
-                    except asyncio.CancelledError:
-                        pass
-                    if user_stop or not run_finished_naturally:
                         _request_runner_cancel()
             waiters = tuple(
                 waiter
@@ -2248,6 +2252,7 @@ class SecurityRunRuntime:
             model=model,
             tools=tools,
             knowledge=knowledge,
+            knowledge_retriever=build_knowledge_retriever(knowledge) if knowledge is not None else None,
             knowledge_filters={"user_id": request.knowledge_owner_user_id}
             if request.knowledge_owner_user_id and search_knowledge
             else None,

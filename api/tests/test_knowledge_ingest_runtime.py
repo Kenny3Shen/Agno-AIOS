@@ -221,6 +221,7 @@ def test_runtime_builds_agno_pgvector_knowledge_with_small_interface() -> None:
         rerank_enabled=True,
         rerank_candidate_multiplier=3,
         rerank_min_candidates=10,
+        similarity_threshold=0.35,
     )
     contents_db = object()
     readers = {"text": object()}
@@ -241,6 +242,7 @@ def test_runtime_builds_agno_pgvector_knowledge_with_small_interface() -> None:
     assert captured["vector"]["schema"] == "knowledge"
     assert captured["vector"]["search_type"] == SearchType.hybrid
     assert captured["vector"]["prefix_match"] is True
+    assert captured["vector"]["similarity_threshold"] == 0.35
     assert captured["knowledge"]["name"] == "security"
     assert captured["knowledge"]["contents_db"] == contents_db
     assert captured["knowledge"]["max_results"] == 15

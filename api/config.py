@@ -137,6 +137,15 @@ class Settings(BaseSettings):
         default=0.55,
         validation_alias="TAIS_KNOWLEDGE_VECTOR_SCORE_WEIGHT",
     )
+    agno_knowledge_similarity_threshold: float | None = Field(
+        default=0.35,
+        validation_alias="TAIS_KNOWLEDGE_SIMILARITY_THRESHOLD",
+        description=(
+            "Minimum similarity / hybrid score (0.0-1.0) for retrieval. "
+            "None or 0 disables score filtering; low-score chunks are dropped "
+            "and empty results are allowed."
+        ),
+    )
     agno_knowledge_content_language: str = Field(
         default="english",
         validation_alias="TAIS_KNOWLEDGE_CONTENT_LANGUAGE",

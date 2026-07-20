@@ -29,6 +29,7 @@ from api.services.agent_tools import (
 from api.services.model_config_service import get_model_for_run
 from api.services.model_factory import build_agno_model
 from api.services.postgres_store import get_async_agno_postgres_db
+from api.services.knowledge_service import build_knowledge_retriever
 
 PROMPT_DIR = Path(__file__).resolve().parents[1] / "agent" / "prompts"
 
@@ -211,6 +212,9 @@ async def _member_from_profile(
         model=model,
         tools=tools,
         knowledge=knowledge if search_knowledge else None,
+        knowledge_retriever=(
+            build_knowledge_retriever(knowledge) if search_knowledge and knowledge is not None else None
+        ),
         knowledge_filters=knowledge_filters if search_knowledge else None,
         search_knowledge=bool(search_knowledge and knowledge is not None),
         add_search_knowledge_instructions=bool(search_knowledge and knowledge is not None),
@@ -372,6 +376,11 @@ async def build_team(
         session_summary_manager=SessionSummaryManager(model=model),
         add_session_summary_to_context=True,
         knowledge=knowledge if search_knowledge and enable_tools else None,
+        knowledge_retriever=(
+            build_knowledge_retriever(knowledge)
+            if search_knowledge and enable_tools and knowledge is not None
+            else None
+        ),
         knowledge_filters=knowledge_filters if search_knowledge and enable_tools else None,
         search_knowledge=bool(search_knowledge and enable_tools and knowledge is not None),
         add_search_knowledge_instructions=bool(

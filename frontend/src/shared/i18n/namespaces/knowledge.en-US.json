@@ -127,5 +127,11 @@
   "strategyCsv": "CSV rows",
   "strategyJson": "JSON",
   "strategyDocument": "Document",
-  "ingestQueued": "Ingest queued in the background"
+  "ingestQueued": "Ingest queued in the background",
+  "resultScore": "Score",
+  "resultScoreRerank": "Rerank",
+  "resultScoreSimilarity": "Similarity",
+  "noRetrievalHits": "No hits above the similarity threshold (empty results allowed)",
+  "retrievalThresholdHint": "Threshold {{threshold}}; chunks below it are not injected into chat.",
+  "retrievalThresholdOff": "Similarity threshold filtering is disabled."
 }

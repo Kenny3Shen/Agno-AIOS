@@ -25,6 +25,7 @@ from api.persistence.collect_articles import collect_articles_table
 from api.persistence.cves import cves_table
 from api.persistence.durable_jobs import durable_jobs_table
 from api.persistence.knowledge_sources import knowledge_sources_table
+from api.persistence.knowledge_rag_settings import knowledge_rag_settings_table
 from api.persistence.mcp import (
     mcp_component_overrides_table,
     mcp_servers_table,
@@ -70,6 +71,7 @@ def control_plane_metadata() -> MetaData:
         cves_table(),
         durable_jobs_table(),
         knowledge_sources_table(),
+        knowledge_rag_settings_table(),
         model_configs_table(),
         notifications_table(),
         upload_approvals_table(),

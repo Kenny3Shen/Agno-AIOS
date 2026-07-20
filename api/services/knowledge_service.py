@@ -55,7 +55,9 @@ from api.services.knowledge_ingest_service import (
     reader_for_profile as _reader_for_profile,
 )
 from api.services.knowledge_rag_settings_service import (
+    get_knowledge_rag_settings,
     knowledge_settings,
+    normalize_similarity_threshold,
     search_type_from_env,
     search_type_from_name,
 )
@@ -63,7 +65,9 @@ from api.services.knowledge_runtime_service import (
     KnowledgeRuntimeDependencies,
     KnowledgeRuntimeSettings,
     build_knowledge_base,
+    filter_documents_by_score,
     retrieval_candidate_limit,
+    retrieve_knowledge_documents,
 )
 from api.services.knowledge_source_service import (
     SOURCE_METADATA_KEY,
@@ -240,6 +244,7 @@ def get_async_knowledge_base(search_type: SearchType | None = None) -> Knowledge
             rerank_enabled=settings.rerank_enabled,
             rerank_candidate_multiplier=settings.rerank_candidate_multiplier,
             rerank_min_candidates=settings.rerank_min_candidates,
+            similarity_threshold=normalize_similarity_threshold(settings.similarity_threshold),
         ),
         KnowledgeRuntimeDependencies(
             embedder=embedder,
@@ -257,6 +262,8 @@ def get_async_knowledge_base(search_type: SearchType | None = None) -> Knowledge
 
 
 async def get_async_knowledge_base_async(search_type: SearchType | None = None) -> Knowledge:
+    # Load DB-backed PgVector knobs into the process cache before building.
+    await get_knowledge_rag_settings()
     async with _knowledge_runtime_async_lock:
         return await asyncio.to_thread(get_async_knowledge_base, search_type)
 
@@ -1517,6 +1524,7 @@ class KnowledgeBaseLifecycle:
         clean_query = query.strip()
         if not clean_query:
             return []
+        await get_knowledge_rag_settings()
         effective_search_type = (
             search_type_from_name(search_type) if search_type else search_type_from_env()
         )
@@ -1552,10 +1560,18 @@ class KnowledgeBaseLifecycle:
                 search_type=effective_search_type.value,
             )
         await self._hydrate_content_ids_async(documents)
+        min_score = normalize_similarity_threshold(settings.similarity_threshold)
+        # PgVector already applies similarity_threshold for vector/hybrid SQL.
+        # Post-filter still drops low rerank scores and keyword hits without scores.
+        filtered_documents = filter_documents_by_score(
+            list(documents),
+            min_score=min_score,
+            limit=None,
+        )
         results: list[KnowledgeSearchResultPayload] = []
         seen: set[tuple[str, str, str, int]] = set()
-        for document in documents:
-            result = _result_from_document(document)
+        for document in filtered_documents:
+            result = _result_from_document(cast(Any, document))
             key = (
                 result["doc_id"],
                 result["title"],
@@ -1567,7 +1583,58 @@ class KnowledgeBaseLifecycle:
             seen.add(key)
             results.append(result)
         results.sort(key=lambda item: float(item.get("score") or 0.0), reverse=True)
+        # Empty results are intentional when nothing clears the threshold.
         return results[:limit]
+
+
+
+def build_knowledge_retriever(knowledge: Any | None = None):
+    """Agno knowledge_retriever that applies similarity threshold and allows 0 hits."""
+
+    async def knowledge_retriever(
+        agent: Any,
+        query: str,
+        num_documents: int | None = None,
+        filters: Any | None = None,
+        **kwargs: Any,
+    ) -> list[dict[str, Any]] | None:
+        del agent, kwargs
+        resolved = knowledge
+        if resolved is None:
+            resolved = await get_async_knowledge_base_async()
+        await get_knowledge_rag_settings()
+        settings = knowledge_settings()
+        min_score = normalize_similarity_threshold(settings.similarity_threshold)
+        # Agent may pass Knowledge.max_results (rerank candidate pool). Always
+        # fetch a wide candidate set when rerank is on, then keep top_k survivors.
+        candidate_limit = retrieval_candidate_limit(
+            settings.top_k,
+            rerank_enabled=settings.rerank_enabled,
+            rerank_candidate_multiplier=settings.rerank_candidate_multiplier,
+            rerank_min_candidates=settings.rerank_min_candidates,
+        )
+        if isinstance(num_documents, int) and num_documents > 0:
+            candidate_limit = max(candidate_limit, num_documents)
+        docs = await retrieve_knowledge_documents(
+            resolved,
+            query=query,
+            num_documents=candidate_limit,
+            filters=filters,
+            min_score=min_score,
+        )
+        final_limit = (
+            num_documents
+            if isinstance(num_documents, int) and num_documents > 0
+            else settings.top_k
+        )
+        # Prefer configured top_k when agent asked for the full candidate pool.
+        if final_limit > settings.top_k and final_limit == candidate_limit:
+            final_limit = settings.top_k
+        docs = docs[:final_limit]
+        # Agno treats None / empty as "no documents found".
+        return docs or None
+
+    return knowledge_retriever
 
 DEFAULT_KNOWLEDGE_BASE_LIFECYCLE = KnowledgeBaseLifecycle()
 

@@ -35,5 +35,9 @@
   "statusError": "ERROR",
   "statusUnset": "UNSET",
   "openWorkflow": "打开工作流",
-  "workflowTag": "工作流"
+  "workflowTag": "工作流",
+  "knowledgeScores": "知识库分数",
+  "score": "分数",
+  "chunk": "分块",
+  "noScores": "此 span 无知识库检索分数"
 }
