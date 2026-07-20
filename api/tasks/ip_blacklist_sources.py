@@ -206,12 +206,6 @@ class FireholLevel1Source(IpBlacklistSource):
         return self.local_path
 
 
-DATA_SOURCES: dict[str, type[IpBlacklistSource]] = {
-    "firehol-level1": FireholLevel1Source,
-    "firehol_level1": FireholLevel1Source,
-}
-
-
 def build_sources(config: dict[str, Any] | None = None) -> list[IpBlacklistSource]:
     cfg = config or {}
     # Default / configured FireHOL level1 (high-confidence aggregate).
@@ -223,7 +217,6 @@ def build_sources(config: dict[str, Any] | None = None) -> list[IpBlacklistSourc
 
 
 __all__ = [
-    "DATA_SOURCES",
     "FireholLevel1Source",
     "IpBlacklistSource",
     "build_sources",

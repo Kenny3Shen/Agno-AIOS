@@ -137,37 +137,6 @@ async def search_ip_blacklist_rows(
     return rows, total
 
 
-async def lookup_ip_blacklist(
-    *,
-    indicator: str,
-    limit: int = 20,
-) -> list[dict[str, Any]]:
-    """Exact indicator match (IP or CIDR string as stored)."""
-    await ensure_ip_blacklist_table()
-    needle = (indicator or "").strip()
-    if not needle:
-        return []
-    table = ip_blacklist_table()
-    stmt = (
-        select(
-            table.c.id,
-            table.c.indicator,
-            table.c.indicator_type,
-            table.c.source,
-            table.c.list_name,
-            table.c.description,
-            table.c.first_seen,
-            table.c.last_seen,
-            table.c.updated_at,
-        )
-        .where(table.c.indicator == needle)
-        .order_by(desc(table.c.updated_at))
-        .limit(min(100, max(1, int(limit or 20))))
-    )
-    async with get_async_control_plane_engine().begin() as conn:
-        return [dict(row) for row in (await conn.execute(stmt)).mappings().all()]
-
-
 async def upsert_ip_blacklist_rows(rows: Sequence[dict[str, Any]]) -> int:
     if not rows:
         return 0

@@ -1,3 +1,9 @@
+## 已完成：代码质量清理（无新功能）
+
+- 飞书 Webhook HTTPS 校验统一到 `user_notification_settings_service.is_secure_feishu_webhook_url`（MCP basic 委托）。
+- 删除未使用的 `lookup_ip_blacklist` 与 IP 源模块中无引用的 `DATA_SOURCES` 导出。
+- 去掉 basic MCP 中已无用的 `urlparse` 导入。
+
 ## 已完成：按用户配置飞书 Webhook
 
 - 表 `user_notification_settings`（Alembic `20260721_0005`）按 `user_id` 存个人 Webhook。

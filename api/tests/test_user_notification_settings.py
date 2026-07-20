@@ -15,6 +15,16 @@ def test_is_secure_feishu_webhook_url():
     assert not service.is_secure_feishu_webhook_url("")
 
 
+def test_mcp_basic_delegates_secure_webhook_check_to_service():
+    """Quality: single source of truth for HTTPS webhook validation."""
+    from api.mcp.tools import basic
+
+    assert basic._is_secure_webhook_url(
+        "https://open.feishu.cn/open-apis/bot/v2/hook/abc"
+    ) is True
+    assert basic._is_secure_webhook_url("http://insecure.example/hook") is False
+
+
 @pytest.mark.asyncio
 async def test_resolve_prefers_user_webhook_over_global(monkeypatch):
     async def fake_user(user_id: str) -> str:

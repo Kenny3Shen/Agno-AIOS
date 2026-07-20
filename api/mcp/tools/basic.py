@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal
-from urllib.parse import urlparse
 
 import httpx
 from fastmcp import FastMCP
@@ -177,8 +176,9 @@ async def _resolve_webhook_url() -> str:
 
 
 def _is_secure_webhook_url(value: str) -> bool:
-    parsed = urlparse(value)
-    return parsed.scheme == "https" and bool(parsed.netloc)
+    from api.services.user_notification_settings_service import is_secure_feishu_webhook_url
+
+    return is_secure_feishu_webhook_url(value)
 
 
 def _coerce_feishu_code(response: Mapping[str, Any]) -> int | None:
