@@ -1,4 +1,9 @@
 
+## 已完成：Chat 业务测试收敛
+
+- 删除臃肿 Chat 单测（原 `test_security_run_runtime` ~2.7k 行及多数前端 chat unit）。
+- 仅保留关键业务：leave-page 不 cancel、anyio disconnect、live hub reattach、同 session supersede、cancel 归属、load-more 失败保留列表、reducer attach-live/cancel/complete、activeChatStream detach。
+
 ## 已完成：离开 Chat 页不取消进行中的对话
 
 - 前端：卸载 Chat 时只 detach SSE（`detachOnlyRef`），不再 `cancelRun`；去掉「停止并离开」路由拦截，应用内导航可后台继续生成。
