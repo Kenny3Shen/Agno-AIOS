@@ -11,7 +11,9 @@ import { chatSessionFixture } from './testFixtures'
 
 vi.mock('@tanstack/react-router', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@tanstack/react-router')>()),
-  useRouter: () => ({ history: { push: vi.fn(), replace: vi.fn() } }),
+  useRouter: () => ({
+    history: { push: vi.fn<(path: string) => void>(), replace: vi.fn<(path: string) => void>() },
+  }),
   useRouterState: ({ select }: { select: (state: { location: { searchStr: string } }) => unknown }) =>
     select({ location: { searchStr: '' } }),
 }))

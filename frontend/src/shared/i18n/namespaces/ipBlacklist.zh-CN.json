@@ -1,0 +1,18 @@
+{
+  "title": "IP 黑名单",
+  "description": "威胁情报 IP/CIDR 黑名单（FireHOL 等聚合源）。支持检索与管理员一键更新。",
+  "searchPlaceholder": "IP、CIDR 或关键词",
+  "updateDatabase": "更新情报库",
+  "stopUpdate": "停止更新",
+  "updateStarting": "正在启动更新…",
+  "updated": "IP 黑名单已更新",
+  "updateFailed": "更新失败",
+  "updateCancelled": "已取消更新",
+  "columns": {
+    "indicator": "指标",
+    "source": "来源",
+    "listName": "列表",
+    "description": "说明",
+    "updatedAt": "更新时间"
+  }
+}

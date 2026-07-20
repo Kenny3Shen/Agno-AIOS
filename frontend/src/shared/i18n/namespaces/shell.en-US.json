@@ -11,6 +11,7 @@
   "evaluations": "Evaluations",
   "approvals": "Approvals",
   "cve": "CVE",
+  "ipBlacklist": "IP blacklist",
   "collect": "Collect",
   "audit": "Audit",
   "settings": "Settings",

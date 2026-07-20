@@ -1,0 +1,18 @@
+{
+  "title": "IP blacklist",
+  "description": "Threat-intel IP/CIDR blocklists (FireHOL aggregates and similar). Search indicators and refresh feeds as admin.",
+  "searchPlaceholder": "IP, CIDR, or keyword",
+  "updateDatabase": "Update feeds",
+  "stopUpdate": "Stop update",
+  "updateStarting": "Starting update…",
+  "updated": "IP blacklist updated",
+  "updateFailed": "Update failed",
+  "updateCancelled": "Update cancelled",
+  "columns": {
+    "indicator": "Indicator",
+    "source": "Source",
+    "listName": "List",
+    "description": "Description",
+    "updatedAt": "Updated"
+  }
+}

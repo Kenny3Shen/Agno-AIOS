@@ -17,6 +17,9 @@ const EvaluationsPage = lazy(() => import('@/features/evaluations').then((module
 const ApprovalsPage = lazy(() => import('@/features/approvals').then((module) => ({ default: module.ApprovalsPage })))
 const AuditPage = lazy(() => import('@/features/audit').then((module) => ({ default: module.AuditPage })))
 const CvePage = lazy(() => import('@/features/cve').then((module) => ({ default: module.CvePage })))
+const IpBlacklistPage = lazy(() =>
+  import('@/features/ip-blacklist').then((module) => ({ default: module.IpBlacklistPage })),
+)
 const CollectPage = lazy(() => import('@/features/collect').then((module) => ({ default: module.CollectPage })))
 const SettingsPage = lazy(() => import('@/features/settings').then((module) => ({ default: module.SettingsPage })))
 
@@ -58,6 +61,7 @@ const pages = [
   ['/evaluations', EvaluationsPage],
   ['/approvals', ApprovalsPage],
   ['/cve', CvePage],
+  ['/ip-blacklist', IpBlacklistPage],
   ['/collect', CollectPage],
   ['/audit', AuditPage],
   ['/settings', SettingsPage],

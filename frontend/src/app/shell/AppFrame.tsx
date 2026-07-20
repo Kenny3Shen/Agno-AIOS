@@ -44,6 +44,7 @@ import {
   NodeIndexOutlined,
   SafetyCertificateOutlined,
   SettingOutlined,
+  StopOutlined,
   SunOutlined,
   TranslationOutlined,
 } from '@ant-design/icons'
@@ -117,6 +118,12 @@ const navigationGroups: NavigationGroup<NavigationItem>[] = [
     labelKey: 'intelligence',
     items: [
       { key: '/cve', icon: <BugOutlined />, labelKey: 'cve', scope: 'cve:read' },
+      {
+        key: '/ip-blacklist',
+        icon: <StopOutlined />,
+        labelKey: 'ipBlacklist',
+        scope: 'ip_blacklist:read',
+      },
       { key: '/collect', icon: <CloudDownloadOutlined />, labelKey: 'collect', scope: 'collect:read' },
     ],
   },

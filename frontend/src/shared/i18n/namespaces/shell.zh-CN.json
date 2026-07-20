@@ -11,6 +11,7 @@
   "evaluations": "评估",
   "approvals": "审批",
   "cve": "CVE",
+  "ipBlacklist": "IP 黑名单",
   "collect": "采集",
   "audit": "审计",
   "settings": "设置",

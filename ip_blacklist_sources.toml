@@ -1,0 +1,9 @@
+# IP blacklist threat-intel feeds (FireHOL level1: Spamhaus DROP/EDROP, DShield, Feodo, etc.)
+# Override path with TAIS_IP_BLACKLIST_SOURCE_CONFIG_PATH.
+
+[firehol_level1]
+source = "firehol-level1"
+remote_url = "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level1.netset"
+local_cache = "./.config/ip_blacklist/firehol_level1.netset"
+etag_cache = "./.config/ip_blacklist/firehol_level1.etag"
+description = "FireHOL level1 aggregate (high-confidence scanners, bots, and attacks)"

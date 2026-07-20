@@ -333,10 +333,16 @@ _INTRANET_SKILL_RE = re.compile(
     r"内网|\bndr\b|intranet|doc_id|ndr告警",
     re.IGNORECASE,
 )
+_IP_BLACKLIST_SKILL_RE = re.compile(
+    r"\b(?:\d{1,3}\.){3}\d{1,3}\b|"
+    r"黑名单|blocklist|blacklist|ip.?reputation|威胁情报.?ip|"
+    r"恶意.?ip|恶意外联|c2\b|botnet|firehol|spamhaus|dshield",
+    re.IGNORECASE,
+)
 _SECURITY_SIGNAL_RE = re.compile(
     r"cve|漏洞|poc|exploit|告警|威胁|研判|隔离|封禁|工作流|workflow|"
     r"内网|ndr|hitl|mcp|skill|知识库|情报|资产|攻击|malware|ransomware|"
-    r"phishing|siem|soc|incident|ir\b|contain",
+    r"phishing|siem|soc|incident|ir\b|contain|黑名单|blocklist|blacklist",
     re.IGNORECASE,
 )
 
@@ -372,6 +378,8 @@ def infer_chat_skill_names(message: str) -> list[str] | None:
         matched.append("hitl-containment-skill")
     if _INTRANET_SKILL_RE.search(text):
         matched.append("intranet-ip-skill")
+    if _IP_BLACKLIST_SKILL_RE.search(text):
+        matched.append("ip-blacklist-skill")
     if matched:
         # preserve stable order, unique
         seen: set[str] = set()

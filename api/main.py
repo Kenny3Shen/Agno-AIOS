@@ -34,6 +34,7 @@ from api.routes import (
     chat,
     collect,
     cve,
+    ip_blacklist,
     knowledge,
     memory,
     mcp as mcp_routes,
@@ -228,6 +229,7 @@ app.include_router(auth_router)
 app.include_router(audit.router)
 app.include_router(capabilities.router)
 app.include_router(cve.router)
+app.include_router(ip_blacklist.router)
 app.include_router(chat.router)
 app.include_router(collect.router)
 app.include_router(settings.router)

@@ -192,6 +192,18 @@ class Settings(BaseSettings):
         default=Path("tmp/run_update_cve.lock"),
         validation_alias="TAIS_CVE_UPDATE_LOCK_PATH",
     )
+    ip_blacklist_source_config_path: str = Field(
+        default="ip_blacklist_sources.toml",
+        validation_alias="TAIS_IP_BLACKLIST_SOURCE_CONFIG_PATH",
+    )
+    ip_blacklist_data_dir: Path = Field(
+        default=Path(".config/ip_blacklist"),
+        validation_alias="TAIS_IP_BLACKLIST_DATA_DIR",
+    )
+    ip_blacklist_update_lock_path: Path = Field(
+        default=Path("tmp/run_update_ip_blacklist.lock"),
+        validation_alias="TAIS_IP_BLACKLIST_UPDATE_LOCK_PATH",
+    )
     github_token: SecretStr = Field(default=SecretStr(""), validation_alias="GITHUB_TOKEN")
 
     mcp_server_url: str = "http://127.0.0.1:8000/mcp/"

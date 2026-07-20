@@ -23,6 +23,8 @@ import auditZh from './namespaces/audit.zh-CN.json'
 import auditEn from './namespaces/audit.en-US.json'
 import cveZh from './namespaces/cve.zh-CN.json'
 import cveEn from './namespaces/cve.en-US.json'
+import ipBlacklistZh from './namespaces/ipBlacklist.zh-CN.json'
+import ipBlacklistEn from './namespaces/ipBlacklist.en-US.json'
 import collectZh from './namespaces/collect.zh-CN.json'
 import collectEn from './namespaces/collect.en-US.json'
 import memoryZh from './namespaces/memory.zh-CN.json'
@@ -53,6 +55,7 @@ const resources = {
     approvals: approvalsZh,
     audit: auditZh,
     cve: cveZh,
+    ipBlacklist: ipBlacklistZh,
     collect: collectZh,
     memory: memoryZh,
     skills: skillsZh,
@@ -72,6 +75,7 @@ const resources = {
     approvals: approvalsEn,
     audit: auditEn,
     cve: cveEn,
+    ipBlacklist: ipBlacklistEn,
     collect: collectEn,
     memory: memoryEn,
     skills: skillsEn,
