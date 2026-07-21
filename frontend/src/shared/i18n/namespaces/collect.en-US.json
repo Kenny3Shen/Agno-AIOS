@@ -1,6 +1,6 @@
 {
   "title": "Collect",
-  "description": "Security news library from configured sources; search, sync, and jump to CVEs",
+  "description": "Crawl and store source articles.",
   "action": "Collect URL",
   "searchPlaceholder": "Search title, summary, or URL",
   "allSources": "All sources",

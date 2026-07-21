@@ -1,6 +1,6 @@
 {
   "title": "Memory",
-  "description": "Review, edit, and delete agent user memories",
+  "description": "Review and manage user memories.",
   "searchPlaceholder": "Search memory, user, or topic",
   "viewMemory": "View memory {{id}}",
   "editNamed": "Edit {{id}}",
@@ -46,6 +46,6 @@
   "clearOk": "Cleared {{count}} memories",
   "clearAllOk": "Cleared all memories",
   "clearFailed": "Failed to clear memories. Please try again.",
-  "clearHint": "Requires memories:delete",
+  "clearHint": "Requires memories:delete.",
   "filterUser": "User"
 }

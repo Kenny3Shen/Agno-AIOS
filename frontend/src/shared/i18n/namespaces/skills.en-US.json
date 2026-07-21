@@ -1,6 +1,6 @@
 {
   "title": "Skills",
-  "description": "Manage agent skills; each user can independently enable Skills",
+  "description": "Local Skills and per-user enablement.",
   "visibilityUpdated": "Visibility updated",
   "visibilityFailed": "Failed to update skill visibility",
   "deleted": "Skill deleted",
@@ -27,7 +27,7 @@
   "version": "Version",
   "openWorkflow": "Open",
   "referencesEmpty": "No saved workflows bind this skill yet",
-  "referencesTruncated": "Showing a partial list — more workflows may bind this skill",
+  "referencesTruncated": "Showing a partial list of references.",
   "colSkill": "Skill",
   "colDescription": "Description",
   "colVisibility": "Visibility",

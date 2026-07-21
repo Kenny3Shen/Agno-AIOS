@@ -1,6 +1,6 @@
 {
   "title": "CVE",
-  "description": "搜索本地漏洞情报并维护数据索引",
+  "description": "CVE 情报检索与库更新。",
   "updated": "CVE 数据库已更新",
   "searchPlaceholder": "CVE ID、产品或关键词；留空查看最近入库",
   "allSources": "全部来源",

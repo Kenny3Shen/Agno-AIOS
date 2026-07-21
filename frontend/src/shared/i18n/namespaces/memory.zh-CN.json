@@ -1,6 +1,6 @@
 {
   "title": "记忆",
-  "description": "审阅、修订和删除 Agent 用户记忆",
+  "description": "审阅与管理 user memory。",
   "searchPlaceholder": "搜索记忆、用户或主题",
   "viewMemory": "查看记忆 {{id}}",
   "editNamed": "编辑 {{id}}",
@@ -46,6 +46,6 @@
   "clearOk": "已清空 {{count}} 条记忆",
   "clearAllOk": "已清空全部记忆",
   "clearFailed": "清空记忆失败，请稍后重试。",
-  "clearHint": "需要 memories:delete 权限",
+  "clearHint": "需要 memories:delete。",
   "filterUser": "用户"
 }

@@ -27,7 +27,7 @@ describe('knowledge ingest option fields', () => {
     expect(screen.getByText('Markdown 标题切分')).toBeTruthy()
     expect(screen.getByText('章节上限')).toBeTruthy()
     await user.hover(screen.getByLabelText('章节上限 help'))
-    expect(await screen.findByText('单个 chunk 的目标/最大长度；越小检索越精确，越大上下文越完整。')).toBeTruthy()
+    expect(await screen.findByText('单 chunk 长度。')).toBeTruthy()
   })
 
   it('switches options when replacement filename changes', async () => {

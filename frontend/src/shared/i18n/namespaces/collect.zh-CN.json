@@ -1,6 +1,6 @@
 {
   "title": "采集",
-  "description": "从安全资讯源入库的文章库；支持按源站检索、同步与 CVE 跳转",
+  "description": "源站文章采集与入库。",
   "action": "采集 URL",
   "searchPlaceholder": "搜索标题、摘要或 URL",
   "allSources": "全部来源",

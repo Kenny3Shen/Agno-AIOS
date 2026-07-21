@@ -1,6 +1,6 @@
 {
   "title": "Skills",
-  "description": "管理 Agent 可调用技能；每位用户可独立选择启用哪些 Skill",
+  "description": "Local Skills 与个人启用。",
   "visibilityUpdated": "可见性已更新",
   "visibilityFailed": "更新技能可见性失败",
   "deleted": "技能已删除",
@@ -27,7 +27,7 @@
   "version": "版本",
   "openWorkflow": "打开",
   "referencesEmpty": "暂无工作流绑定该 Skill",
-  "referencesTruncated": "仅显示部分结果，可能还有更多工作流绑定了该 Skill",
+  "referencesTruncated": "仅显示部分引用。",
   "colSkill": "Skill",
   "colDescription": "描述",
   "colVisibility": "可见性",

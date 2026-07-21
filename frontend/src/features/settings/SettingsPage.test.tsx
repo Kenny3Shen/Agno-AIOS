@@ -134,7 +134,7 @@ describe('model settings editor', () => {
     expect(screen.queryByText('并行工具调用')).toBeNull()
     expect(screen.queryByText('请求重试次数')).toBeNull()
     expect(screen.queryByText('API protocol')).toBeNull()
-    expect(await screen.findByText(/按供应商最优默认自动配置/)).toBeTruthy()
+    expect(await screen.findByText(/协议与重试等按供应商默认/)).toBeTruthy()
 
     fireEvent.change(screen.getByLabelText('显示名称'), { target: { value: 'Gateway model' } })
     fireEvent.change(screen.getByLabelText('Model ID'), { target: { value: 'gateway-model' } })

@@ -1,6 +1,6 @@
 {
   "title": "Audit",
-  "description": "Track backend operations by user, resource, and time",
+  "description": "Control-plane audit log.",
   "colTime": "Time",
   "colActor": "Actor",
   "colAction": "Action",

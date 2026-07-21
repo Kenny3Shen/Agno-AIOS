@@ -1,6 +1,6 @@
 {
   "title": "审计",
-  "description": "按用户、资源和时间追踪后台操作记录",
+  "description": "控制面操作审计。",
   "colTime": "时间",
   "colActor": "操作者",
   "colAction": "动作",

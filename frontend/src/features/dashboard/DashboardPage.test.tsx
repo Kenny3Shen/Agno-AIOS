@@ -116,7 +116,7 @@ describe('runtime overview page', () => {
 
     await waitFor(() => expect(container.querySelector('.dashboard-observability-empty')).not.toBeNull())
     expect(await screen.findByText('运行可视化')).toBeTruthy()
-    expect(screen.getByText(/当前观察窗口尚无可用于趋势或分布展示的运行数据/)).toBeTruthy()
+    expect(screen.getByText(/当前窗口无可视化数据/)).toBeTruthy()
     expect(screen.queryByTestId('dashboard-charts')).toBeNull()
   })
 
