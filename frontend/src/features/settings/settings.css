@@ -22,6 +22,10 @@
 
 .settings-param-actions {
   margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 
 .settings-knowledge-panel {

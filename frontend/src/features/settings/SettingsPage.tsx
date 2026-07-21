@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { App, Button, Card, Flex, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
-import { ApiOutlined, CheckCircleOutlined, DeleteOutlined, EditOutlined, PlusOutlined, QuestionCircleOutlined } from '@ant-design/icons'
+import { ApiOutlined, CheckCircleOutlined, DeleteOutlined, EditOutlined, PlusOutlined, QuestionCircleOutlined, UndoOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { currentUserQuery } from '@/features/auth'
 import { roleOf } from '@/shared/auth/permissions'
@@ -50,6 +50,42 @@ const omitProviderManagedFields = (model: ModelConfigInput): ModelConfigInput =>
   const result = { ...model }
   SERVER_DEFAULTED_MODEL_FIELDS.forEach((field) => delete result[field])
   return result
+}
+
+/** Product defaults for Settings forms (align with server DEFAULT_* seeds). */
+const CHAT_SETTINGS_DEFAULTS: ChatSettings = {
+  show_thought_chain: true,
+  show_raw_reasoning: false,
+  show_raw_tool_io: false,
+  memory_enabled: true,
+  enable_agentic_memory: false,
+  session_summaries_enabled: true,
+  add_datetime_to_context: true,
+  markdown: true,
+  num_history_runs: 5,
+  max_tool_calls_from_history: null,
+  default_tool_call_limit: null,
+}
+
+const GUARDRAIL_SETTINGS_DEFAULTS: GuardrailSettings = {
+  enabled: true,
+  pii_enabled: true,
+  pii_mask: false,
+  pii_check_email: false,
+  pii_check_phone: true,
+  prompt_injection_enabled: true,
+}
+
+const KNOWLEDGE_RAG_SETTINGS_DEFAULTS: KnowledgeRagSettings = {
+  search_type: 'hybrid',
+  top_k: 5,
+  vector_score_weight: 0.55,
+  similarity_threshold: 0.35,
+  content_language: 'english',
+  prefix_match: false,
+  rerank_enabled: true,
+  rerank_candidate_multiplier: 3,
+  rerank_min_candidates: 10,
 }
 
 export function SettingsPage() {
@@ -186,6 +222,11 @@ export function SettingsPage() {
     }
   }
 
+  const resetKnowledgeToDefaults = async () => {
+    knowledgeForm.setFieldsValue(KNOWLEDGE_RAG_SETTINGS_DEFAULTS)
+    await saveKnowledgeRag(KNOWLEDGE_RAG_SETTINGS_DEFAULTS)
+  }
+
   const saveGuardrails = async (values: GuardrailSettings) => {
     setGuardrailSaving(true)
     try {
@@ -198,6 +239,11 @@ export function SettingsPage() {
     } finally {
       setGuardrailSaving(false)
     }
+  }
+
+  const resetGuardrailsToDefaults = async () => {
+    guardrailForm.setFieldsValue(GUARDRAIL_SETTINGS_DEFAULTS)
+    await saveGuardrails(GUARDRAIL_SETTINGS_DEFAULTS)
   }
 
   const openEditor = (model: ModelConfigInput) => {
@@ -587,25 +633,18 @@ export function SettingsPage() {
     }
   }
 
+  const resetChatToDefaults = async () => {
+    chatForm.setFieldsValue(CHAT_SETTINGS_DEFAULTS)
+    await saveChatRuntime(CHAT_SETTINGS_DEFAULTS)
+  }
+
   const chatControls = (
     <div className="settings-param-panel">
       <Typography.Paragraph type="secondary">{t('chatRuntimeHint')}</Typography.Paragraph>
       <Form
         form={chatForm}
         layout="vertical"
-        initialValues={{
-          show_thought_chain: true,
-          show_raw_reasoning: false,
-          show_raw_tool_io: false,
-          memory_enabled: true,
-          enable_agentic_memory: false,
-          session_summaries_enabled: true,
-          add_datetime_to_context: true,
-          markdown: true,
-          num_history_runs: 5,
-          max_tool_calls_from_history: null,
-          default_tool_call_limit: null,
-        }}
+        initialValues={CHAT_SETTINGS_DEFAULTS}
         onFinish={(values) => void saveChatRuntime(values)}
         disabled={chatSettings.isLoading || chatSaving}
       >
@@ -659,9 +698,23 @@ export function SettingsPage() {
           ]}
         />
         <div className="settings-param-actions">
-          <Button type="primary" htmlType="submit" loading={chatSaving}>
-            {t('chatSettingsSave')}
-          </Button>
+          <Space wrap>
+            <Button type="primary" htmlType="submit" loading={chatSaving}>
+              {t('chatSettingsSave')}
+            </Button>
+            <Popconfirm
+              title={t('resetDefaultsConfirm')}
+              description={t('resetDefaultsConfirmDesc')}
+              okText={t('resetDefaults')}
+              cancelText={t('common:cancel')}
+              onConfirm={() => void resetChatToDefaults()}
+              disabled={chatSettings.isLoading || chatSaving}
+            >
+              <Button icon={<UndoOutlined />} loading={chatSaving} disabled={chatSettings.isLoading}>
+                {t('resetDefaults')}
+              </Button>
+            </Popconfirm>
+          </Space>
         </div>
       </Form>
       <div className="settings-chat-privacy">
@@ -858,14 +911,7 @@ export function SettingsPage() {
       <Form
         form={guardrailForm}
         layout="vertical"
-        initialValues={{
-          enabled: true,
-          pii_enabled: true,
-          pii_mask: false,
-          pii_check_email: false,
-          pii_check_phone: true,
-          prompt_injection_enabled: true,
-        }}
+        initialValues={GUARDRAIL_SETTINGS_DEFAULTS}
         onFinish={(values) => void saveGuardrails(values)}
         disabled={guardrailSettings.isLoading || guardrailSaving}
       >
@@ -904,9 +950,27 @@ export function SettingsPage() {
           ]}
         />
         <div className="settings-param-actions">
-          <Button type="primary" htmlType="submit" loading={guardrailSaving}>
-            {t('guardrailsSave')}
-          </Button>
+          <Space wrap>
+            <Button type="primary" htmlType="submit" loading={guardrailSaving}>
+              {t('guardrailsSave')}
+            </Button>
+            <Popconfirm
+              title={t('resetDefaultsConfirm')}
+              description={t('resetDefaultsConfirmDesc')}
+              okText={t('resetDefaults')}
+              cancelText={t('common:cancel')}
+              onConfirm={() => void resetGuardrailsToDefaults()}
+              disabled={guardrailSettings.isLoading || guardrailSaving}
+            >
+              <Button
+                icon={<UndoOutlined />}
+                loading={guardrailSaving}
+                disabled={guardrailSettings.isLoading}
+              >
+                {t('resetDefaults')}
+              </Button>
+            </Popconfirm>
+          </Space>
         </div>
       </Form>
     </div>
@@ -918,17 +982,7 @@ export function SettingsPage() {
       <Form
         form={knowledgeForm}
         layout="vertical"
-        initialValues={{
-          search_type: 'hybrid',
-          top_k: 5,
-          vector_score_weight: 0.55,
-          similarity_threshold: 0.35,
-          content_language: 'english',
-          prefix_match: false,
-          rerank_enabled: true,
-          rerank_candidate_multiplier: 3,
-          rerank_min_candidates: 10,
-        }}
+        initialValues={KNOWLEDGE_RAG_SETTINGS_DEFAULTS}
         onFinish={(values) => void saveKnowledgeRag(values)}
         disabled={knowledgeRagSettings.isLoading || knowledgeSaving}
       >
@@ -1005,9 +1059,27 @@ export function SettingsPage() {
           ]}
         />
         <div className="settings-param-actions">
-          <Button type="primary" htmlType="submit" loading={knowledgeSaving}>
-            {t('knowledgeRagSave')}
-          </Button>
+          <Space wrap>
+            <Button type="primary" htmlType="submit" loading={knowledgeSaving}>
+              {t('knowledgeRagSave')}
+            </Button>
+            <Popconfirm
+              title={t('resetDefaultsConfirm')}
+              description={t('resetDefaultsConfirmDesc')}
+              okText={t('resetDefaults')}
+              cancelText={t('common:cancel')}
+              onConfirm={() => void resetKnowledgeToDefaults()}
+              disabled={knowledgeRagSettings.isLoading || knowledgeSaving}
+            >
+              <Button
+                icon={<UndoOutlined />}
+                loading={knowledgeSaving}
+                disabled={knowledgeRagSettings.isLoading}
+              >
+                {t('resetDefaults')}
+              </Button>
+            </Popconfirm>
+          </Space>
         </div>
       </Form>
     </div>

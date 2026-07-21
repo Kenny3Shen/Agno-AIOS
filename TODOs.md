@@ -1,3 +1,7 @@
+## 已完成：Settings 参数表「恢复默认值」
+
+- Chat / 模型护栏 / 知识库检索：保存旁增加「恢复默认值」（Popconfirm → 写回产品默认并 PATCH 服务端）。
+
 ## 已完成：Chat 设置扩展 Agno 常用运行参数
 
 - `chat_settings` 增加 history / session summary / datetime / tool history cap / tool_call_limit / agentic memory / markdown（`20260721_0007`）。
