@@ -33,6 +33,8 @@ Collect 按 `api/utils/url2md_utils.domain_rules` 源站爬取文章入库（`co
 
 设置页只编辑连接信息（名称、供应商、Model ID、密钥、Base URL、启用）。新建模型或切换供应商时，前端只提交这些字段；后端 `model_capabilities` 统一补齐协议、structured output、reasoning、重试、并行工具调用和 Live Search 的最优/兜底值。同一供应商的既有运行参数保持不变，避免无关编辑改写已验证的运行配置。
 
+模型连接可指定 **MemoryManager** 模型（`memory_model_id` / 行级 `memory_manager` 标记，Alembic `20260721_0012`）：用于记忆抽取的廉价模型；未指定时自动挑选 flash/mini 等。Chat 默认模型仍为 `active_model_id`。
+
 模型工厂仍支持已持久化的 `parallel_tool_calls`、`retries` / `delay_between_retries` / `exponential_backoff` 与可选 `http_max_retries`；默认使用 4 次指数退避。Responses 与 Chat Completions 共享同一模型工厂，因此策略在聊天 Run 与会话摘要路径一致生效。
 
 模型供应商支持 DeepSeek / OpenAI / **xAI（Agno 官方 `xAI` 类，Chat Completions）** / OpenAI-compatible。 xAI 可配置 structured output 与 Live Search；Chat 输入区可开关联网搜索与知识库检索。 附件区使用 `@ant-design/x` `Attachments`：纸夹首次仅展开附件区，点击占位添加框才打开系统选择器（支持多选），并提供拖放、数量提示与体积限制。 **Chat 文档附件经 Agno DoclingReader 转为 Markdown 注入消息**；原始文档只 stage 到 data-analysis / Team 的每运行隔离目录，绝不同时作为 Agno `files` 传给 Chat Completions 模型（图片/音视频仍走 Agno media）； **Knowledge 结构化文档（PDF/DOCX/PPTX/HTML 等）默认 `DoclingReader`**。 设置页模型表单仅配置连接信息（名称/供应商/Model ID/密钥/Base URL）；其余模型参数由能力画像解析（optimal → 配置 → 请求覆盖 → fallback）；xAI 不使用 `reasoning_effort`，靠推理/非推理 model id。历史 Grok 配置（`api.x.ai` 或 `model_id` 以 `grok` 开头）由 `uv run alembic upgrade head` 中的数据迁移规范写回为 `provider=xai`、Chat Completions；运行时加载不再执行逐行兼容写回。残留 `config/model_config.json` 一律归档为 `*.imported` 且**永不导入**（无 `TAIS_MODEL_CONFIG_FILE` 覆盖）；空表只 seed 内置默认模型，连接与密钥以 Settings/Postgres 为准。

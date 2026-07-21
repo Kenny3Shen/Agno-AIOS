@@ -299,12 +299,19 @@ async def update_models(
 ) -> dict:
     """保存模型配置和默认选择"""
     logger.info("模型配置已更新")
-    result = await save_model_config(body.models, body.active_model_id)
+    result = await save_model_config(
+        body.models,
+        body.active_model_id,
+        memory_model_id=body.memory_model_id,
+    )
     await record_audit_event_async(
         user,
         action="settings.update",
         resource_type="models",
-        metadata={"active_model_id": body.active_model_id},
+        metadata={
+            "active_model_id": body.active_model_id,
+            "memory_model_id": body.memory_model_id,
+        },
         **audit_request_context(request),
     )
     return result

@@ -148,8 +148,42 @@ async def test_save_model_config_writes_postgres_rows_and_preserves_masked_secre
     custom_row = next(row for row in rows if row["id"] == "custom")
     assert custom_row["api_key"] == "saved-secret"
     assert custom_row["active"] is True
+    assert custom_row.get("memory_manager") is False
     public_custom = next(model for model in public["models"] if model["id"] == "custom")
     assert public_custom["api_key"] == "save****cret"
+    assert public.get("memory_model_id") in (None, "")
+
+
+@pytest.mark.asyncio
+async def test_save_model_config_sets_memory_manager_flag():
+    existing_store = model_config_service.ModelConfigStore(
+        active_model_id="deepseek-v4-flash",
+        memory_model_id="",
+        models=list(model_config_service.DEFAULT_MODELS),
+    )
+    existing_rows = model_config_service._store_to_rows(existing_store)
+    replace = AsyncMock()
+
+    with (
+        patch.object(
+            model_config_service,
+            "list_model_config_rows",
+            AsyncMock(side_effect=[existing_rows, existing_rows]),
+        ),
+        patch.object(model_config_service, "replace_model_config_rows", replace),
+    ):
+        public = await model_config_service.save_model_config(
+            list(model_config_service.DEFAULT_MODELS),
+            "deepseek-v4-flash",
+            memory_model_id="deepseek-v4-flash",
+        )
+
+    replace.assert_awaited_once()
+    rows = replace.await_args.args[0]
+    mm_rows = [row for row in rows if row.get("memory_manager")]
+    assert len(mm_rows) == 1
+    assert mm_rows[0]["id"] == "deepseek-v4-flash"
+    assert public["memory_model_id"] == "deepseek-v4-flash"
 
 
 def test_model_config_normalizes_new_compatible_models_to_chat_completions_json():

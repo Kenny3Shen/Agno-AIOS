@@ -15,11 +15,16 @@ from agno.memory import MemoryManager
 from loguru import logger
 
 from api.services.memory_capture import memory_capture_instructions
-from api.services.model_config_service import get_model_for_run, load_model_config_store
+from api.services.model_config_service import (
+    get_memory_model_id,
+    get_model_for_run,
+    load_model_config_store,
+)
 from api.services.model_factory import build_agno_model
 from api.services.postgres_store import get_async_agno_postgres_db
 
-# Prefer these model config ids (or substrings of model_id) for MemoryManager.
+# Prefer these model config ids (or substrings of model_id) for MemoryManager
+# when Settings has not pinned a dedicated memory model.
 _CHEAP_MODEL_PREFERENCE: tuple[str, ...] = (
     "deepseek-v4-flash",
     "flash",
@@ -32,7 +37,8 @@ _CHEAP_MODEL_PREFERENCE: tuple[str, ...] = (
 async def resolve_memory_manager_model_config(
     preferred_model_id: str | None = None,
 ) -> dict[str, Any]:
-    """Pick a cheap model for MemoryManager; fall back to the active chat model."""
+    """Resolve MemoryManager model: explicit pin → Settings pin → cheap auto-pick."""
+    # 1) Caller override (tests / special paths).
     if preferred_model_id:
         try:
             return await get_model_for_run(preferred_model_id)
@@ -43,6 +49,19 @@ async def resolve_memory_manager_model_config(
                 exc_info=True,
             )
 
+    # 2) Settings → 模型连接「设为 MemoryManager」.
+    pinned = await get_memory_model_id()
+    if pinned:
+        try:
+            return await get_model_for_run(pinned)
+        except Exception:
+            logger.warning(
+                "configured memory_model_id={} unavailable; falling back to auto-pick",
+                pinned,
+                exc_info=True,
+            )
+
+    # 3) Auto-pick a lower-cost enabled model.
     store = await load_model_config_store()
     models = list(store.models or [])
     enabled = [m for m in models if getattr(m, "enabled", True)]

@@ -16,6 +16,7 @@ const chatSettings = {
 }
 const models = {
   active_model_id: 'first',
+  memory_model_id: null,
   models: [
     {
       id: 'first',

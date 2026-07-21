@@ -241,6 +241,8 @@ class ModelConfig(BaseModel):
 
 class ModelConfigUpdate(BaseModel):
     active_model_id: str | None = None
+    # Optional dedicated model for Agno MemoryManager (empty = auto-pick cheap).
+    memory_model_id: str | None = None
     models: list[ModelConfig]
 
 
@@ -288,12 +290,15 @@ class ModelConfigStore(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     active_model_id: str = ""
+    # Config id used by MemoryManager; empty = auto-select a cheap model.
+    memory_model_id: str = ""
     models: list[ModelConfig] = Field(default_factory=list)
 
     @classmethod
     def default(cls) -> Self:
         return cls(
             active_model_id=DEFAULT_MODELS[0].id,
+            memory_model_id="",
             models=_default_models(),
         )
 
@@ -301,11 +306,18 @@ class ModelConfigStore(BaseModel):
     def from_rows(cls, rows: Iterable[Mapping[str, Any]]) -> Self:
         models: list[ModelConfig] = []
         active_model_id = ""
+        memory_model_id = ""
         for row in rows:
             if row.get("active") and not active_model_id:
                 active_model_id = str(row.get("id") or "").strip()
+            if row.get("memory_manager") and not memory_model_id:
+                memory_model_id = str(row.get("id") or "").strip()
             models.append(ModelConfig.from_row(row))
-        return cls(active_model_id=active_model_id, models=models)
+        return cls(
+            active_model_id=active_model_id,
+            memory_model_id=memory_model_id,
+            models=models,
+        )
 
     @classmethod
     def from_submitted(
@@ -313,6 +325,7 @@ class ModelConfigStore(BaseModel):
         models: Iterable[ModelConfig],
         *,
         active_model_id: str | None,
+        memory_model_id: str | None = None,
         existing: "ModelConfigStore",
     ) -> Self:
         existing_by_id = {model.id: model for model in existing.models}
@@ -325,11 +338,17 @@ class ModelConfigStore(BaseModel):
             normalized.append(model)
         if not normalized:
             normalized = _default_models()
+        # Preserve existing memory model when the client omits the field.
+        if memory_model_id is None:
+            resolved_memory = existing.memory_model_id
+        else:
+            resolved_memory = str(memory_model_id or "").strip()
         store = cls(
             active_model_id=(active_model_id or "").strip(),
+            memory_model_id=resolved_memory,
             models=normalized,
         )
-        return store.with_defaults().with_valid_active_model()
+        return store.with_defaults().with_valid_active_model().with_valid_memory_model()
 
     def with_defaults(self) -> Self:
         models = [model.model_copy(deep=True) for model in self.models]
@@ -350,15 +369,26 @@ class ModelConfigStore(BaseModel):
             return self
         return self.model_copy(update={"active_model_id": self.models[0].id})
 
+    def with_valid_memory_model(self) -> Self:
+        """Drop stale memory_model_id when the row no longer exists."""
+        if not self.memory_model_id:
+            return self
+        model_ids = {model.id for model in self.models}
+        if self.memory_model_id in model_ids:
+            return self
+        return self.model_copy(update={"memory_model_id": ""})
+
     def to_storage_dict(self) -> dict[str, Any]:
         return {
             "active_model_id": self.active_model_id,
+            "memory_model_id": self.memory_model_id,
             "models": [model.model_dump() for model in self.models],
         }
 
     def to_public_dict(self) -> dict[str, Any]:
         return {
             "active_model_id": self.active_model_id,
+            "memory_model_id": self.memory_model_id or None,
             "models": [model.to_public_dict() for model in self.models],
         }
 
@@ -435,13 +465,17 @@ async def _retire_legacy_model_config_file() -> None:
 
 def _rows_need_persist(rows: Iterable[Mapping[str, Any]]) -> bool:
     active_count = 0
+    memory_count = 0
     invalid_output_mode = False
     for row in rows:
         if row.get("active"):
             active_count += 1
+        if row.get("memory_manager"):
+            memory_count += 1
         if str(row.get("structured_output_mode") or "").strip() not in {"native", "json"}:
             invalid_output_mode = True
-    return active_count != 1 or invalid_output_mode
+    # Exactly one active chat model; memory manager is optional (0 or 1).
+    return active_count != 1 or memory_count > 1 or invalid_output_mode
 
 
 def _store_to_rows(
@@ -453,6 +487,7 @@ def _store_to_rows(
         str(row.get("id")): int(row.get("created_at") or now)
         for row in existing_rows
     }
+    memory_id = str(store.memory_model_id or "").strip()
     rows: list[dict[str, Any]] = []
     for index, model in enumerate(store.models):
         rows.append(
@@ -476,6 +511,7 @@ def _store_to_rows(
                 "enabled": model.enabled,
                 "builtin": model.builtin,
                 "active": model.id == store.active_model_id,
+                "memory_manager": bool(memory_id) and model.id == memory_id,
                 "sort_order": index,
                 "created_at": created_at_by_id.get(model.id, now),
                 "updated_at": now,
@@ -502,7 +538,11 @@ async def load_model_config_store() -> ModelConfigStore:
         return _cache_model_config_store(store)
 
     base_store = ModelConfigStore.from_rows(rows)
-    store = base_store.with_defaults().with_valid_active_model()
+    store = (
+        base_store.with_defaults()
+        .with_valid_active_model()
+        .with_valid_memory_model()
+    )
     needs_rewrite = (
         store.to_storage_dict() != base_store.to_storage_dict()
         or _rows_need_persist(rows)
@@ -525,12 +565,15 @@ async def public_model_config() -> dict[str, Any]:
 
 
 async def save_model_config(
-    models: Iterable[ModelConfig], active_model_id: str | None
+    models: Iterable[ModelConfig],
+    active_model_id: str | None,
+    memory_model_id: str | None = None,
 ) -> dict[str, Any]:
     existing = await load_model_config_store()
     store = ModelConfigStore.from_submitted(
         models,
         active_model_id=active_model_id,
+        memory_model_id=memory_model_id,
         existing=existing,
     )
     existing_rows = await list_model_config_rows()
@@ -541,3 +584,10 @@ async def save_model_config(
 
 async def get_model_for_run(model_id: str | None = None) -> dict[str, Any]:
     return (await load_model_config_store()).model_for_run(model_id).model_dump()
+
+
+async def get_memory_model_id() -> str | None:
+    """Return configured MemoryManager model config id, or None for auto-pick."""
+    store = await load_model_config_store()
+    mid = str(store.memory_model_id or "").strip()
+    return mid or None

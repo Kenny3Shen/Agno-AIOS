@@ -93,6 +93,8 @@ export type ModelConfigInput = Omit<
 
 export type ModelConfigUpdatePayload = {
   active_model_id: string
+  /** Dedicated MemoryManager model id; null clears pin (auto-pick). */
+  memory_model_id?: string | null
   models: ModelConfigInput[]
 }
 

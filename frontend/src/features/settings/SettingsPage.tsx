@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { App, Button, Card, Collapse, Flex, Form, Input, InputNumber, Modal, Popconfirm, Radio, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
-import { ApiOutlined, CheckCircleOutlined, DeleteOutlined, EditOutlined, PlusOutlined, QuestionCircleOutlined, UndoOutlined } from '@ant-design/icons'
+import {
+  ApiOutlined,
+  CheckCircleOutlined,
+  DatabaseOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  PlusOutlined,
+  QuestionCircleOutlined,
+  UndoOutlined,
+} from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { currentUserQuery } from '@/features/auth'
 import { roleOf } from '@/shared/auth/permissions'
@@ -318,7 +327,11 @@ export function SettingsPage() {
   }
 
   const saveModel = async (model: ModelConfigInput) => {
-    const current: ModelConfigResponse = models.data ?? { active_model_id: model.id, models: [] }
+    const current: ModelConfigResponse = models.data ?? {
+      active_model_id: model.id,
+      memory_model_id: null,
+      models: [],
+    }
     const previous = current.models.find((item) => item.id === model.id)
     const normalized: ModelConfigInput = {
       ...previous,
@@ -337,7 +350,11 @@ export function SettingsPage() {
       : [...current.models, submitted]
     setSaving(true)
     try {
-      await persist({ active_model_id: current.active_model_id, models: next })
+      await persist({
+        active_model_id: current.active_model_id,
+        memory_model_id: current.memory_model_id ?? null,
+        models: next,
+      })
       message.success(t('modelSaved'))
       closeEditor()
     } catch (error) {
@@ -365,10 +382,36 @@ export function SettingsPage() {
     if (!current || current.active_model_id === model.id) return
     setUpdatingId(model.id)
     try {
-      await persist({ ...current, active_model_id: model.id })
+      await persist({
+        ...current,
+        active_model_id: model.id,
+        memory_model_id: current.memory_model_id ?? null,
+      })
       message.success(t('modelActivated', { name: model.name }))
     } catch (error) {
       message.error(error instanceof Error ? error.message : t('modelActivateFailed'))
+    } finally {
+      setUpdatingId(null)
+    }
+  }
+
+  const setMemoryModel = async (model: ModelConfig) => {
+    const current = models.data
+    if (!current) return
+    const already = current.memory_model_id === model.id
+    setUpdatingId(model.id)
+    try {
+      await persist({
+        ...current,
+        memory_model_id: already ? null : model.id,
+      })
+      message.success(
+        already
+          ? t('memoryModelCleared', { name: model.name })
+          : t('memoryModelActivated', { name: model.name }),
+      )
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('memoryModelActivateFailed'))
     } finally {
       setUpdatingId(null)
     }
@@ -379,7 +422,11 @@ export function SettingsPage() {
     if (!current) return
     setUpdatingId(model.id)
     try {
-      await persist({ ...current, models: current.models.map((item) => (item.id === model.id ? { ...item, enabled } : item)) })
+      await persist({
+        ...current,
+        memory_model_id: current.memory_model_id ?? null,
+        models: current.models.map((item) => (item.id === model.id ? { ...item, enabled } : item)),
+      })
       message.success(enabled ? t('modelEnabled', { name: model.name }) : t('modelDisabled', { name: model.name }))
     } catch (error) {
       message.error(error instanceof Error ? error.message : t('modelStatusFailed'))
@@ -412,9 +459,13 @@ export function SettingsPage() {
         remaining[0]
       active_model_id = next.id
     }
+    let memory_model_id = current.memory_model_id ?? null
+    if (memory_model_id === model.id) {
+      memory_model_id = null
+    }
     setUpdatingId(model.id)
     try {
-      await persist({ active_model_id, models: remaining })
+      await persist({ active_model_id, memory_model_id, models: remaining })
       message.success(t('modelDeleted', { name: model.name }))
       if (editing?.id === model.id) closeEditor()
     } catch (error) {
@@ -453,9 +504,12 @@ export function SettingsPage() {
           width: 220,
           ellipsis: true,
           render: (value, row) => (
-            <Space>
+            <Space wrap size={[4, 4]}>
               <strong>{value}</strong>
               {models.data?.active_model_id === row.id && <Tag color="blue">{t('tagActive')}</Tag>}
+              {models.data?.memory_model_id === row.id && (
+                <Tag color="purple">{t('tagMemoryManager')}</Tag>
+              )}
             </Space>
           ),
         },
@@ -494,7 +548,7 @@ export function SettingsPage() {
         },
         {
           title: t('colActions'),
-          width: 170,
+          width: 220,
           render: (_, row) => (
             <Space>
               <Tooltip title={t('testConnection')}>
@@ -515,6 +569,23 @@ export function SettingsPage() {
                   loading={updatingId === row.id}
                   aria-label={t('setCurrentModelNamed', { name: row.name })}
                   onClick={() => void setActiveModel(row)}
+                />
+              </Tooltip>
+              <Tooltip
+                title={
+                  models.data?.memory_model_id === row.id
+                    ? t('memoryModelCurrent')
+                    : t('setMemoryModel')
+                }
+              >
+                <Button
+                  icon={<DatabaseOutlined />}
+                  type={models.data?.memory_model_id === row.id ? 'primary' : 'default'}
+                  ghost={models.data?.memory_model_id === row.id}
+                  loading={updatingId === row.id}
+                  disabled={!row.enabled || row.configured === false}
+                  aria-label={t('setMemoryModelNamed', { name: row.name })}
+                  onClick={() => void setMemoryModel(row)}
                 />
               </Tooltip>
               <Tooltip

@@ -45,6 +45,8 @@ export interface ModelConfig {
 
 export interface ModelConfigResponse {
   active_model_id: string
+  /** Dedicated MemoryManager model; null/undefined = auto-pick cheap model. */
+  memory_model_id?: string | null
   models: ModelConfig[]
 }
 

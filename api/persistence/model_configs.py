@@ -56,11 +56,14 @@ def model_configs_table(metadata: MetaData | None = None) -> Table:
         Column("enabled", Boolean, nullable=False, server_default="true"),
         Column("builtin", Boolean, nullable=False, server_default="false"),
         Column("active", Boolean, nullable=False, server_default="false"),
+        # Exclusive flag: at most one row should be true (enforced in app layer).
+        Column("memory_manager", Boolean, nullable=False, server_default="false"),
         Column("sort_order", BigInteger, nullable=False),
         Column("created_at", BigInteger, nullable=False),
         Column("updated_at", BigInteger, nullable=False),
     )
     Index("idx_model_configs_active", table.c.active)
+    Index("idx_model_configs_memory_manager", table.c.memory_manager)
     Index("idx_model_configs_sort_order", table.c.sort_order)
     return table
 
