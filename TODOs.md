@@ -1,3 +1,8 @@
+## 已完成：T.A.I.S 项目介绍 PPT
+
+- `docs/T.A.I.S-项目介绍.pptx`（10 页）：定位、架构、Agents、Workflow/HITL、情报、治理、技术栈。
+- 可再生成源：`docs/tais-project-overview.js`（`cd docs && node tais-project-overview.js`）。
+
 ## 已完成：Settings 参数表「恢复默认值」
 
 - Chat / 模型护栏 / 知识库检索：保存旁增加「全部恢复默认」；每行增加单项恢复按钮（立即 PATCH）。
