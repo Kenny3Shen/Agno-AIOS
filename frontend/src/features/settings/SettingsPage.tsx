@@ -227,6 +227,17 @@ export function SettingsPage() {
     await saveKnowledgeRag(KNOWLEDGE_RAG_SETTINGS_DEFAULTS)
   }
 
+  const resetKnowledgeFieldToDefault = async (
+    field: Exclude<keyof KnowledgeRagSettings, 'rerank_model'>,
+  ) => {
+    const value = KNOWLEDGE_RAG_SETTINGS_DEFAULTS[field]
+    knowledgeForm.setFieldValue(field, value)
+    await saveKnowledgeRag({
+      ...knowledgeForm.getFieldsValue(true),
+      [field]: value,
+    } as KnowledgeRagSettings)
+  }
+
   const saveGuardrails = async (values: GuardrailSettings) => {
     setGuardrailSaving(true)
     try {
@@ -244,6 +255,15 @@ export function SettingsPage() {
   const resetGuardrailsToDefaults = async () => {
     guardrailForm.setFieldsValue(GUARDRAIL_SETTINGS_DEFAULTS)
     await saveGuardrails(GUARDRAIL_SETTINGS_DEFAULTS)
+  }
+
+  const resetGuardrailFieldToDefault = async (field: keyof GuardrailSettings) => {
+    const value = GUARDRAIL_SETTINGS_DEFAULTS[field]
+    guardrailForm.setFieldValue(field, value)
+    await saveGuardrails({
+      ...guardrailForm.getFieldsValue(true),
+      [field]: value,
+    } as GuardrailSettings)
   }
 
   const openEditor = (model: ModelConfigInput) => {
@@ -638,6 +658,15 @@ export function SettingsPage() {
     await saveChatRuntime(CHAT_SETTINGS_DEFAULTS)
   }
 
+  const resetChatFieldToDefault = async (field: ChatField) => {
+    const value = CHAT_SETTINGS_DEFAULTS[field]
+    chatForm.setFieldValue(field, value)
+    await saveChatRuntime({
+      ...chatForm.getFieldsValue(true),
+      [field]: value,
+    } as ChatSettings)
+  }
+
   const chatControls = (
     <div className="settings-param-panel">
       <Typography.Paragraph type="secondary">{t('chatRuntimeHint')}</Typography.Paragraph>
@@ -653,12 +682,14 @@ export function SettingsPage() {
           size="middle"
           loading={chatSettings.isLoading}
           pagination={false}
+          tableLayout="auto"
+          style={{ width: '100%' }}
           dataSource={chatSettingRows}
           columns={[
             {
               title: t('colParameter'),
               dataIndex: 'parameter',
-              width: 260,
+              width: '22%',
               render: (value: string) => <Typography.Text strong>{value}</Typography.Text>,
             },
             {
@@ -673,7 +704,7 @@ export function SettingsPage() {
             {
               title: t('colValue'),
               dataIndex: 'field',
-              width: 160,
+              width: 180,
               render: (_field, row) => {
                 if (row.control === 'switch') {
                   return (
@@ -694,6 +725,26 @@ export function SettingsPage() {
                   </Form.Item>
                 )
               },
+            },
+            {
+              title: t('colReset'),
+              key: 'reset',
+              width: 88,
+              align: 'center',
+              render: (_value, row) => (
+                <div className="settings-param-row-reset">
+                  <Tooltip title={t('resetFieldDefault')}>
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<UndoOutlined />}
+                      aria-label={t('resetFieldDefaultNamed', { name: row.parameter })}
+                      disabled={chatSettings.isLoading || chatSaving}
+                      onClick={() => void resetChatFieldToDefault(row.field)}
+                    />
+                  </Tooltip>
+                </div>
+              ),
             },
           ]}
         />
@@ -920,12 +971,14 @@ export function SettingsPage() {
           size="middle"
           loading={guardrailSettings.isLoading}
           pagination={false}
+          tableLayout="auto"
+          style={{ width: '100%' }}
           dataSource={guardrailSettingRows}
           columns={[
             {
               title: t('colParameter'),
               dataIndex: 'parameter',
-              width: 240,
+              width: '22%',
               render: (value: string) => <Typography.Text strong>{value}</Typography.Text>,
             },
             {
@@ -940,11 +993,31 @@ export function SettingsPage() {
             {
               title: t('colValue'),
               dataIndex: 'field',
-              width: 120,
+              width: 140,
               render: (_field, row) => (
                 <Form.Item name={row.field} noStyle valuePropName="checked">
                   <Switch />
                 </Form.Item>
+              ),
+            },
+            {
+              title: t('colReset'),
+              key: 'reset',
+              width: 88,
+              align: 'center',
+              render: (_value, row) => (
+                <div className="settings-param-row-reset">
+                  <Tooltip title={t('resetFieldDefault')}>
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<UndoOutlined />}
+                      aria-label={t('resetFieldDefaultNamed', { name: row.parameter })}
+                      disabled={guardrailSettings.isLoading || guardrailSaving}
+                      onClick={() => void resetGuardrailFieldToDefault(row.field)}
+                    />
+                  </Tooltip>
+                </div>
               ),
             },
           ]}
@@ -991,12 +1064,14 @@ export function SettingsPage() {
           size="middle"
           loading={knowledgeRagSettings.isLoading}
           pagination={false}
+          tableLayout="auto"
+          style={{ width: '100%' }}
           dataSource={knowledgeSettingRows}
           columns={[
             {
               title: t('colParameter'),
               dataIndex: 'parameter',
-              width: 240,
+              width: '22%',
               render: (value: string) => <Typography.Text strong>{value}</Typography.Text>,
             },
             {
@@ -1011,7 +1086,7 @@ export function SettingsPage() {
             {
               title: t('colValue'),
               dataIndex: 'field',
-              width: 220,
+              width: 240,
               render: (_field, row) => {
                 if (row.control === 'select') {
                   return (
@@ -1053,6 +1128,35 @@ export function SettingsPage() {
                   <Form.Item name={row.field} noStyle>
                     <InputNumber {...numberProps} style={{ width: '100%' }} />
                   </Form.Item>
+                )
+              },
+            },
+            {
+              title: t('colReset'),
+              key: 'reset',
+              width: 88,
+              align: 'center',
+              render: (_value, row) => {
+                if (row.control === 'readonly') {
+                  return null
+                }
+                return (
+                  <div className="settings-param-row-reset">
+                    <Tooltip title={t('resetFieldDefault')}>
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<UndoOutlined />}
+                        aria-label={t('resetFieldDefaultNamed', { name: row.parameter })}
+                        disabled={knowledgeRagSettings.isLoading || knowledgeSaving}
+                        onClick={() =>
+                          void resetKnowledgeFieldToDefault(
+                            row.field as Exclude<keyof KnowledgeRagSettings, 'rerank_model'>,
+                          )
+                        }
+                      />
+                    </Tooltip>
+                  </div>
                 )
               },
             },
