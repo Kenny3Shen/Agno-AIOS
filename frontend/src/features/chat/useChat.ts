@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
 import { attachLiveSessionStream, cancelRun, streamMessage, unarchiveSession } from './api'
 import {
@@ -53,11 +53,8 @@ export function useChat() {
   // Track URL session for abort-on-change (sidebar navigates URL; this hook owns the SSE).
   const prevSessionIdRef = useRef<string | null>(sessionId)
   // Active (non-archived) list only — shares RQ cache with ChatTaskPanel recents.
-  const sessionsQueryResult = useInfiniteQuery(sessionsQuery({}))
-  const sessionItems = useMemo(
-    () => sessionsQueryResult.data?.pages.flatMap((page) => page.data) ?? [],
-    [sessionsQueryResult.data]
-  )
+  const sessionsQueryResult = useQuery(sessionsQuery({}))
+  const sessionItems = sessionsQueryResult.data?.data ?? []
   const sessions = {
     ...sessionsQueryResult,
     data: sessionItems,

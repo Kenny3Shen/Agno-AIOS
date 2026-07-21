@@ -50,8 +50,6 @@
     "titleTooLong": "The title cannot exceed 120 characters",
     "renamed": "Conversation renamed",
     "renameFailed": "Unable to rename conversation",
-    "loadMore": "Load more",
-    "loadMoreFailed": "Could not load more conversations",
     "searchPlaceholder": "Search title, preview, or session id",
     "emptySearch": "No matching conversations",
     "archivedTitle": "Archived conversations",

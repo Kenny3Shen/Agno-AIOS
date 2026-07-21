@@ -7,49 +7,32 @@ import type { ChatSession } from './types'
 export function markSessionActiveInCaches(queryClient: QueryClient, session: ChatSession) {
   const active: ChatSession = { ...session, archived: false }
   queryClient.setQueryData(chatKeys.sessionMeta(session.session_id), active)
-  queryClient.setQueryData<{ pages: SessionListResult[]; pageParams: number[] }>(
-    chatKeys.sessions({}),
-    (current) => {
-      const pages = current?.pages ?? []
-      if (!pages.length) {
-        return {
-          pages: [
-            {
-              data: [active],
-              meta: {
-                page: 1,
-                limit: SESSION_PAGE_SIZE,
-                total_pages: 1,
-                total_count: 1,
-                search_time_ms: 0,
-              },
-            },
-          ],
-          pageParams: [1],
-        }
-      }
-      const [first, ...rest] = pages
-      const without = first.data.filter((item) => item.session_id !== active.session_id)
+  queryClient.setQueryData<SessionListResult>(chatKeys.sessions({}), (current) => {
+    if (!current) {
       return {
-        pages: [
-          {
-            ...first,
-            data: [active, ...without],
-            meta: {
-              ...first.meta,
-              total_count:
-                Math.max(first.meta.total_count, first.data.length) +
-                (first.data.some((item) => item.session_id === active.session_id) ? 0 : 1),
-            },
-          },
-          ...rest,
-        ],
-        pageParams: current?.pageParams ?? [1],
+        data: [active],
+        meta: {
+          page: 1,
+          limit: SESSION_PAGE_SIZE,
+          total_pages: 1,
+          total_count: 1,
+          search_time_ms: 0,
+        },
       }
-    },
-  )
+    }
+    const without = current.data.filter((item) => item.session_id !== active.session_id)
+    const existed = current.data.some((item) => item.session_id === active.session_id)
+    return {
+      ...current,
+      data: [active, ...without],
+      meta: {
+        ...current.meta,
+        total_count: Math.max(current.meta.total_count, current.data.length) + (existed ? 0 : 1),
+      },
+    }
+  })
 
-  queryClient.setQueriesData<{ pages: SessionListResult[]; pageParams: number[] }>(
+  queryClient.setQueriesData<SessionListResult>(
     {
       predicate: (query) => {
         const key = query.queryKey
@@ -59,26 +42,17 @@ export function markSessionActiveInCaches(queryClient: QueryClient, session: Cha
       },
     },
     (current) => {
-      if (!current?.pages?.length) return current
-      let removed = 0
-      const pages = current.pages.map((page) => {
-        const nextData = page.data.filter((item) => {
-          if (item.session_id !== active.session_id) return true
-          removed += 1
-          return false
-        })
-        return { ...page, data: nextData }
-      })
-      if (!removed) return current
-      const first = pages[0]!
-      pages[0] = {
-        ...first,
+      if (!current?.data?.length) return current
+      const nextData = current.data.filter((item) => item.session_id !== active.session_id)
+      if (nextData.length === current.data.length) return current
+      return {
+        ...current,
+        data: nextData,
         meta: {
-          ...first.meta,
-          total_count: Math.max(0, (first.meta.total_count || 0) - removed),
+          ...current.meta,
+          total_count: Math.max(0, (current.meta.total_count || 0) - 1),
         },
       }
-      return { ...current, pages }
     },
   )
   return active

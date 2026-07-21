@@ -1,3 +1,9 @@
+## 已完成：对话管理去掉「加载更多」
+
+- 会话列表改为单页 `useQuery`（默认 40 条），移除 ChatTaskPanel 底部「加载更多」与相关 i18n/CSS。
+- `sessionCache` / 重命名乐观更新改为单页 `SessionListResult` 形状；Trace 标题合并改为有界 `listSessions` 一次拉取（不再依赖 infinite pages）。
+- 单测改为校验无 load-more 按钮与首屏失败态。
+
 ## 已完成：Chat/Workflow cancel 与 live hub 对齐 AgentOS
 
 - Cancel：请求路径改用 `acancel_run` / `acancel_workflow_run`（优先 `acancel_run`，回退 `cancel_run` + `agno.run.cancel`）；Chat 仍按 owner 注册表 404，Workflow 支持 cancel-before-start（预分配 `run_id`）。

@@ -50,8 +50,6 @@
     "titleTooLong": "标题不能超过 120 个字符",
     "renamed": "会话已重命名",
     "renameFailed": "重命名失败",
-    "loadMore": "加载更多",
-    "loadMoreFailed": "加载更多失败",
     "searchPlaceholder": "搜索标题、预览或会话 ID",
     "emptySearch": "没有匹配的对话",
     "archivedTitle": "已归档对话",

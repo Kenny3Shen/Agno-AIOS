@@ -1044,13 +1044,6 @@ html.dark {
 }
 
 
-.chat-task-panel-load-more {
-  display: flex;
-  justify-content: center;
-  padding: 4px 0 8px;
-}
-
-
 .context-mode-tag {
   margin-inline-start: 6px !important;
   font-size: 11px;

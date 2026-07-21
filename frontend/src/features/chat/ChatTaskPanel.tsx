@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Conversations } from '@ant-design/x'
 import { App, Button, Empty, Flex, Form, Input, Modal, Skeleton } from 'antd'
 import {
@@ -97,19 +97,13 @@ export function ChatTaskPanel({ variant = 'page', onNavigate, onNewChat }: ChatT
   const [expandedGroups, setExpandedGroups] = useState<string[]>([])
   const expandedGroupsInitialized = useRef(false)
 
-  const sessionsQueryResult = useInfiniteQuery(
+  const sessionsQueryResult = useQuery(
     sessionsQuery({
       q: debouncedSessionSearch.trim(),
     }),
   )
-  const sessionItems = useMemo(
-    () => sessionsQueryResult.data?.pages.flatMap((page) => page.data) ?? [],
-    [sessionsQueryResult.data],
-  )
-  const sessions = {
-    ...sessionsQueryResult,
-    data: sessionItems,
-  }
+  const sessionItems = sessionsQueryResult.data?.data ?? []
+  const sessions = sessionsQueryResult
 
   const conversations = useMemo(
     () =>
@@ -202,20 +196,17 @@ export function ChatTaskPanel({ variant = 'page', onNavigate, onNewChat }: ChatT
     setRenaming(true)
     try {
       const updated = await renameSession(renameTarget.session_id, title.trim())
-      queryClient.setQueriesData<{ pages: SessionListResult[]; pageParams: number[] }>(
+      queryClient.setQueriesData<SessionListResult>(
         { queryKey: chatKeys.sessionLists },
         (current) => {
-          if (!current?.pages?.length) return current
+          if (!current?.data?.length) return current
           return {
             ...current,
-            pages: current.pages.map((page) => ({
-              ...page,
-              data: page.data.map((item) =>
-                item.session_id === renameTarget.session_id
-                  ? { ...item, ...updated, title: updated.title ?? title.trim() }
-                  : item,
-              ),
-            })),
+            data: current.data.map((item) =>
+              item.session_id === renameTarget.session_id
+                ? { ...item, ...updated, title: updated.title ?? title.trim() }
+                : item,
+            ),
           }
         },
       )
@@ -278,7 +269,6 @@ export function ChatTaskPanel({ variant = 'page', onNavigate, onNewChat }: ChatT
               <Skeleton active title={false} paragraph={{ rows: 4 }} />
             </div>
           ) : sessions.isError && !sessionItems.length ? (
-            // Initial list failure only. fetchNextPage errors keep prior pages visible.
             <div className="chat-task-panel-state" role="alert">
               <span>{t('shell:conversations.loadFailed')}</span>
               <Button
@@ -300,7 +290,7 @@ export function ChatTaskPanel({ variant = 'page', onNavigate, onNewChat }: ChatT
                   placeholder={t('shell:conversations.searchPlaceholder')}
                   value={sessionSearch}
                   onChange={(event) => setSessionSearch(event.target.value)}
-                  loading={Boolean(sessions.isFetching && !sessions.isFetchingNextPage)}
+                  loading={Boolean(sessions.isFetching)}
                   aria-label={t('shell:conversations.searchPlaceholder')}
                 />
               ) : null}
@@ -358,35 +348,6 @@ export function ChatTaskPanel({ variant = 'page', onNavigate, onNewChat }: ChatT
                   ],
                 })}
               />
-              {sessions.hasNextPage || sessions.isFetchNextPageError ? (
-                <div className="chat-task-panel-load-more">
-                  {sessions.isFetchNextPageError ? (
-                    <div className="chat-task-panel-state chat-task-panel-state--inline" role="alert">
-                      <span>{t('shell:conversations.loadMoreFailed')}</span>
-                      <Button
-                        size="small"
-                        type="link"
-                        icon={<ReloadOutlined />}
-                        loading={Boolean(sessions.isFetchingNextPage)}
-                        aria-label={t('shell:conversations.retry')}
-                        onClick={() => void sessions.fetchNextPage()}
-                      >
-                        {t('shell:conversations.retry')}
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button
-                      size="small"
-                      type="link"
-                      loading={Boolean(sessions.isFetchingNextPage)}
-                      disabled={Boolean(sessions.isFetchingNextPage)}
-                      onClick={() => void sessions.fetchNextPage()}
-                    >
-                      {t('shell:conversations.loadMore')}
-                    </Button>
-                  )}
-                </div>
-              ) : null}
               {!conversations.length && !sessionSearch.trim() ? (
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}

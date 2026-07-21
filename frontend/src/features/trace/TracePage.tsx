@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useInfiniteQuery, useQueries, useQuery } from '@tanstack/react-query'
+import { useQueries, useQuery } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
 import dayjs, { type Dayjs } from 'dayjs'
 import {
@@ -23,7 +23,7 @@ import {
 } from 'antd'
 import { DeploymentUnitOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import { currentUserQuery } from '@/features/auth'
-import { listSessions, sessionsQuery } from '@/features/chat'
+import { listSessions } from '@/features/chat'
 import { roleOf } from '@/shared/auth/permissions'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { CopyableValue, MetadataDescriptions } from '@/shared/ui/MetadataDescriptions'
@@ -54,8 +54,8 @@ interface RunSpanTreeNode extends TreeDataNode {
 const SESSION_PAGE_SIZE = 8
 /** When archive filter is on, fetch a bounded window then filter client-side. */
 const ARCHIVE_SESSION_FETCH_LIMIT = 200
-/** Cap background chat-session walk (chat sessionsQuery pages) for archive/preview merge. */
-const MAX_CHAT_SESSION_PAGES = 3
+/** Bounded chat session window for Trace title/preview merge (no multi-page walk). */
+const CHAT_SESSION_MERGE_LIMIT = 120
 const RUN_PAGE_SIZE = 6
 const { RangePicker } = DatePicker
 
@@ -167,12 +167,25 @@ export function TracePage() {
   const [runPage, setRunPage] = useState(1)
   const effectiveUserId = isAdmin ? filters.user_id : (currentUser.data?.id ?? '')
   const archiveScoped = archiveFilter !== 'all'
-  // "all": infinite chat walk for titles (existing). Archive tabs: one SQL page of
+  // "all": one chat window for titles (bounded). Archive tabs: one SQL page of
   // active-or-archived chat rows (archived_only / default exclude) so filter flags
   // are accurate without multi-page client walks.
-  const chatSessions = useInfiniteQuery({
-    ...sessionsQuery({ includeArchived: true, userId: effectiveUserId || undefined }),
+  const chatSessions = useQuery({
+    queryKey: [
+      'chat',
+      'sessions',
+      'trace-merge',
+      effectiveUserId,
+      CHAT_SESSION_MERGE_LIMIT,
+    ],
     enabled: !archiveScoped,
+    queryFn: () =>
+      listSessions({
+        includeArchived: true,
+        userId: effectiveUserId || undefined,
+        page: 1,
+        limit: CHAT_SESSION_MERGE_LIMIT,
+      }),
   })
   const chatArchiveWindow = useQuery({
     queryKey: [
@@ -193,28 +206,6 @@ export function TracePage() {
         limit: ARCHIVE_SESSION_FETCH_LIMIT,
       }),
   })
-  const chatSessionPageCount = chatSessions.data?.pages.length ?? 0
-  const {
-    hasNextPage: chatSessionsHasNextPage,
-    isFetchingNextPage: chatSessionsFetchingNext,
-    fetchNextPage: fetchNextChatSessionPage,
-  } = chatSessions
-  useEffect(() => {
-    if (archiveScoped) return
-    if (
-      chatSessionPageCount < MAX_CHAT_SESSION_PAGES &&
-      chatSessionsHasNextPage &&
-      !chatSessionsFetchingNext
-    ) {
-      void fetchNextChatSessionPage()
-    }
-  }, [
-    archiveScoped,
-    chatSessionPageCount,
-    chatSessionsHasNextPage,
-    chatSessionsFetchingNext,
-    fetchNextChatSessionPage,
-  ])
   // Default: true server page/limit. Archive tabs: bounded summaries + chat archive window.
   const summaries = useQuery(
     traceSessionsQuery({
@@ -238,7 +229,7 @@ export function TracePage() {
   })
   const chatSessionItems = useMemo(() => {
     if (archiveScoped) return chatArchiveWindow.data?.data ?? []
-    return chatSessions.data?.pages.flatMap((page) => page.data) ?? []
+    return chatSessions.data?.data ?? []
   }, [archiveScoped, chatArchiveWindow.data, chatSessions.data])
   const sessions = useMemo(
     () => filterSessionsByArchive(mergeTraceSessions(chatSessionItems, summaries.data?.data ?? []), archiveFilter),

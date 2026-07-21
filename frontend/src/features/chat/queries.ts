@@ -1,7 +1,8 @@
-import { infiniteQueryOptions, keepPreviousData, queryOptions } from '@tanstack/react-query'
+import { keepPreviousData, queryOptions } from '@tanstack/react-query'
 import { ApiError } from '@/shared/api/client'
 import { getChatAgents, getHistory, getModels, getSessionMeta, listSessions } from './api'
 
+/** Single-page recents size for conversation management (no load-more). */
 export const SESSION_PAGE_SIZE = 40
 
 export type SessionsQueryOptions = {
@@ -33,32 +34,29 @@ export const chatKeys = {
   agents: ['chat', 'agents'] as const,
 }
 
-/** Infinite session list (object options only). */
+/** Recent sessions list (first page only; conversation panel has no load-more). */
 export const sessionsQuery = (options: SessionsQueryOptions = {}) => {
   const archivedOnly = Boolean(options.archivedOnly)
   const includeArchived = Boolean(options.includeArchived)
   const scopedUserId = options.userId
   const query = options.q ?? ''
-  return infiniteQueryOptions({
+  return queryOptions({
     queryKey: chatKeys.sessions({
       archivedOnly,
       includeArchived,
       userId: scopedUserId,
       q: query,
     }),
-    queryFn: ({ pageParam }) =>
+    queryFn: () =>
       listSessions({
         archivedOnly,
         includeArchived: archivedOnly ? false : includeArchived,
         userId: scopedUserId,
-        page: pageParam,
+        page: 1,
         limit: SESSION_PAGE_SIZE,
         q: query || undefined,
       }),
-    initialPageParam: 1,
     placeholderData: keepPreviousData,
-    getNextPageParam: (lastPage) =>
-      lastPage.meta.page < lastPage.meta.total_pages ? lastPage.meta.page + 1 : undefined,
   })
 }
 
