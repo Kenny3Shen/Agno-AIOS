@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Card, Flex, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
+import { App, Button, Card, Collapse, Flex, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
 import { ApiOutlined, CheckCircleOutlined, DeleteOutlined, EditOutlined, PlusOutlined, QuestionCircleOutlined, UndoOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { currentUserQuery } from '@/features/auth'
@@ -535,123 +535,163 @@ export function SettingsPage() {
 
   type ChatField = keyof ChatSettings
   type ChatControl = 'switch' | 'number' | 'optional_number'
-  const chatSettingRows: Array<
-    SettingRow & { field: ChatField; control: ChatControl; min?: number; max?: number }
-  > = [
+  type ChatSettingRow = SettingRow & {
+    field: ChatField
+    control: ChatControl
+    min?: number
+    max?: number
+  }
+  type ChatSettingGroup = {
+    key: string
+    label: string
+    description: string
+    rows: ChatSettingRow[]
+  }
+
+  /** Grouped Chat knobs so the Settings table is scannable by concern. */
+  const chatSettingGroups: ChatSettingGroup[] = [
     {
-      key: 'show_thought_chain',
-      field: 'show_thought_chain',
-      parameter: t('securityTimeline'),
-      description: t('securityTimelineDesc'),
-      control: 'switch',
+      key: 'privacy',
+      label: t('chatGroupPrivacy'),
+      description: t('chatGroupPrivacyDesc'),
+      rows: [
+        {
+          key: 'show_thought_chain',
+          field: 'show_thought_chain',
+          parameter: t('securityTimeline'),
+          description: t('securityTimelineDesc'),
+          control: 'switch',
+        },
+        {
+          key: 'show_raw_reasoning',
+          field: 'show_raw_reasoning',
+          parameter: t('rawReasoning'),
+          description: t('rawReasoningDesc'),
+          control: 'switch',
+        },
+        {
+          key: 'show_raw_tool_io',
+          field: 'show_raw_tool_io',
+          parameter: t('rawToolIo'),
+          description: t('rawToolIoDesc'),
+          control: 'switch',
+        },
+      ],
     },
     {
-      key: 'show_raw_reasoning',
-      field: 'show_raw_reasoning',
-      parameter: t('rawReasoning'),
-      description: t('rawReasoningDesc'),
-      control: 'switch',
+      key: 'memory',
+      label: t('chatGroupMemory'),
+      description: t('chatGroupMemoryDesc'),
+      rows: [
+        {
+          key: 'memory_enabled',
+          field: 'memory_enabled',
+          parameter: t('longTermMemory'),
+          description: t('longTermMemoryDesc'),
+          control: 'switch',
+        },
+        {
+          key: 'enable_agentic_memory',
+          field: 'enable_agentic_memory',
+          parameter: t('agenticMemoryLabel'),
+          description: t('agenticMemoryDesc'),
+          control: 'switch',
+        },
+        {
+          key: 'memory_tool_content_enabled',
+          field: 'memory_tool_content_enabled',
+          parameter: t('memoryToolContentLabel'),
+          description: t('memoryToolContentDesc'),
+          control: 'switch',
+        },
+        {
+          key: 'memory_prune_enabled',
+          field: 'memory_prune_enabled',
+          parameter: t('memoryPruneEnabledLabel'),
+          description: t('memoryPruneEnabledDesc'),
+          control: 'switch',
+        },
+        {
+          key: 'memory_prune_retention_days',
+          field: 'memory_prune_retention_days',
+          parameter: t('memoryPruneRetentionLabel'),
+          description: t('memoryPruneRetentionDesc'),
+          control: 'number',
+          min: 1,
+          max: 3650,
+        },
+        {
+          key: 'memory_prune_top_k',
+          field: 'memory_prune_top_k',
+          parameter: t('memoryPruneTopKLabel'),
+          description: t('memoryPruneTopKDesc'),
+          control: 'number',
+          min: 1,
+          max: 500,
+        },
+      ],
     },
     {
-      key: 'show_raw_tool_io',
-      field: 'show_raw_tool_io',
-      parameter: t('rawToolIo'),
-      description: t('rawToolIoDesc'),
-      control: 'switch',
+      key: 'context',
+      label: t('chatGroupContext'),
+      description: t('chatGroupContextDesc'),
+      rows: [
+        {
+          key: 'session_summaries_enabled',
+          field: 'session_summaries_enabled',
+          parameter: t('sessionSummariesLabel'),
+          description: t('sessionSummariesDesc'),
+          control: 'switch',
+        },
+        {
+          key: 'add_datetime_to_context',
+          field: 'add_datetime_to_context',
+          parameter: t('addDatetimeLabel'),
+          description: t('addDatetimeDesc'),
+          control: 'switch',
+        },
+        {
+          key: 'markdown',
+          field: 'markdown',
+          parameter: t('markdownLabel'),
+          description: t('markdownDesc'),
+          control: 'switch',
+        },
+        {
+          key: 'num_history_runs',
+          field: 'num_history_runs',
+          parameter: t('numHistoryRunsLabel'),
+          description: t('numHistoryRunsDesc'),
+          control: 'number',
+          min: 0,
+          max: 50,
+        },
+      ],
     },
     {
-      key: 'memory_enabled',
-      field: 'memory_enabled',
-      parameter: t('longTermMemory'),
-      description: t('longTermMemoryDesc'),
-      control: 'switch',
-    },
-    {
-      key: 'enable_agentic_memory',
-      field: 'enable_agentic_memory',
-      parameter: t('agenticMemoryLabel'),
-      description: t('agenticMemoryDesc'),
-      control: 'switch',
-    },
-    {
-      key: 'memory_tool_content_enabled',
-      field: 'memory_tool_content_enabled',
-      parameter: t('memoryToolContentLabel'),
-      description: t('memoryToolContentDesc'),
-      control: 'switch',
-    },
-    {
-      key: 'memory_prune_enabled',
-      field: 'memory_prune_enabled',
-      parameter: t('memoryPruneEnabledLabel'),
-      description: t('memoryPruneEnabledDesc'),
-      control: 'switch',
-    },
-    {
-      key: 'memory_prune_retention_days',
-      field: 'memory_prune_retention_days',
-      parameter: t('memoryPruneRetentionLabel'),
-      description: t('memoryPruneRetentionDesc'),
-      control: 'number',
-      min: 1,
-      max: 3650,
-    },
-    {
-      key: 'memory_prune_top_k',
-      field: 'memory_prune_top_k',
-      parameter: t('memoryPruneTopKLabel'),
-      description: t('memoryPruneTopKDesc'),
-      control: 'number',
-      min: 1,
-      max: 500,
-    },
-    {
-      key: 'session_summaries_enabled',
-      field: 'session_summaries_enabled',
-      parameter: t('sessionSummariesLabel'),
-      description: t('sessionSummariesDesc'),
-      control: 'switch',
-    },
-    {
-      key: 'add_datetime_to_context',
-      field: 'add_datetime_to_context',
-      parameter: t('addDatetimeLabel'),
-      description: t('addDatetimeDesc'),
-      control: 'switch',
-    },
-    {
-      key: 'markdown',
-      field: 'markdown',
-      parameter: t('markdownLabel'),
-      description: t('markdownDesc'),
-      control: 'switch',
-    },
-    {
-      key: 'num_history_runs',
-      field: 'num_history_runs',
-      parameter: t('numHistoryRunsLabel'),
-      description: t('numHistoryRunsDesc'),
-      control: 'number',
-      min: 0,
-      max: 50,
-    },
-    {
-      key: 'max_tool_calls_from_history',
-      field: 'max_tool_calls_from_history',
-      parameter: t('maxToolCallsHistoryLabel'),
-      description: t('maxToolCallsHistoryDesc'),
-      control: 'optional_number',
-      min: 1,
-      max: 200,
-    },
-    {
-      key: 'default_tool_call_limit',
-      field: 'default_tool_call_limit',
-      parameter: t('defaultToolCallLimitLabel'),
-      description: t('defaultToolCallLimitDesc'),
-      control: 'optional_number',
-      min: 1,
-      max: 200,
+      key: 'tools',
+      label: t('chatGroupTools'),
+      description: t('chatGroupToolsDesc'),
+      rows: [
+        {
+          key: 'max_tool_calls_from_history',
+          field: 'max_tool_calls_from_history',
+          parameter: t('maxToolCallsHistoryLabel'),
+          description: t('maxToolCallsHistoryDesc'),
+          control: 'optional_number',
+          min: 1,
+          max: 200,
+        },
+        {
+          key: 'default_tool_call_limit',
+          field: 'default_tool_call_limit',
+          parameter: t('defaultToolCallLimitLabel'),
+          description: t('defaultToolCallLimitDesc'),
+          control: 'optional_number',
+          min: 1,
+          max: 200,
+        },
+      ],
     },
   ]
 
@@ -705,8 +745,82 @@ export function SettingsPage() {
     } as ChatSettings)
   }
 
+  const renderChatSettingTable = (rows: ChatSettingRow[]) => (
+    <Table<ChatSettingRow>
+      rowKey="key"
+      size="middle"
+      loading={chatSettings.isLoading}
+      pagination={false}
+      tableLayout="auto"
+      style={{ width: '100%' }}
+      dataSource={rows}
+      columns={[
+        {
+          title: t('colParameter'),
+          dataIndex: 'parameter',
+          width: '22%',
+          render: (value: string) => <Typography.Text strong>{value}</Typography.Text>,
+        },
+        {
+          title: t('colDescription'),
+          dataIndex: 'description',
+          render: (value: string) => (
+            <Typography.Text type="secondary" className="settings-param-description">
+              {value}
+            </Typography.Text>
+          ),
+        },
+        {
+          title: t('colValue'),
+          dataIndex: 'field',
+          width: 180,
+          render: (_field, row) => {
+            if (row.control === 'switch') {
+              return (
+                <Form.Item name={row.field} noStyle valuePropName="checked">
+                  <Switch aria-label={String(row.field)} />
+                </Form.Item>
+              )
+            }
+            return (
+              <Form.Item name={row.field} noStyle>
+                <InputNumber
+                  min={row.min}
+                  max={row.max}
+                  step={1}
+                  style={{ width: '100%' }}
+                  placeholder={row.control === 'optional_number' ? '—' : undefined}
+                />
+              </Form.Item>
+            )
+          },
+        },
+        {
+          title: t('colReset'),
+          key: 'reset',
+          width: 88,
+          align: 'center',
+          render: (_value, row) => (
+            <div className="settings-param-row-reset">
+              <Tooltip title={t('resetFieldDefault')}>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<UndoOutlined />}
+                  aria-label={t('resetFieldDefaultNamed', { name: row.parameter })}
+                  disabled={chatSettings.isLoading || chatSaving}
+                  onClick={() => void resetChatFieldToDefault(row.field)}
+                />
+              </Tooltip>
+            </div>
+          ),
+        },
+      ]}
+    />
+  )
+
   const chatControls = (
-    <div className="settings-param-panel">
+    <div className="settings-param-panel settings-chat-panel">
       <Typography.Paragraph type="secondary">{t('chatRuntimeHint')}</Typography.Paragraph>
       <Form
         form={chatForm}
@@ -715,76 +829,28 @@ export function SettingsPage() {
         onFinish={(values) => void saveChatRuntime(values)}
         disabled={chatSettings.isLoading || chatSaving}
       >
-        <Table<(typeof chatSettingRows)[number]>
-          rowKey="key"
-          size="middle"
-          loading={chatSettings.isLoading}
-          pagination={false}
-          tableLayout="auto"
-          style={{ width: '100%' }}
-          dataSource={chatSettingRows}
-          columns={[
-            {
-              title: t('colParameter'),
-              dataIndex: 'parameter',
-              width: '22%',
-              render: (value: string) => <Typography.Text strong>{value}</Typography.Text>,
-            },
-            {
-              title: t('colDescription'),
-              dataIndex: 'description',
-              render: (value: string) => (
-                <Typography.Text type="secondary" className="settings-param-description">
-                  {value}
+        <Collapse
+          className="settings-chat-groups"
+          defaultActiveKey={['privacy', 'memory']}
+          items={chatSettingGroups.map((group) => ({
+            key: group.key,
+            label: (
+              <div className="settings-chat-group-label">
+                <Typography.Text strong>{group.label}</Typography.Text>
+                <Typography.Text type="secondary" className="settings-chat-group-count">
+                  {t('chatGroupCount', { count: group.rows.length })}
                 </Typography.Text>
-              ),
-            },
-            {
-              title: t('colValue'),
-              dataIndex: 'field',
-              width: 180,
-              render: (_field, row) => {
-                if (row.control === 'switch') {
-                  return (
-                    <Form.Item name={row.field} noStyle valuePropName="checked">
-                      <Switch aria-label={String(row.field)} />
-                    </Form.Item>
-                  )
-                }
-                return (
-                  <Form.Item name={row.field} noStyle>
-                    <InputNumber
-                      min={row.min}
-                      max={row.max}
-                      step={1}
-                      style={{ width: '100%' }}
-                      placeholder={row.control === 'optional_number' ? '—' : undefined}
-                    />
-                  </Form.Item>
-                )
-              },
-            },
-            {
-              title: t('colReset'),
-              key: 'reset',
-              width: 88,
-              align: 'center',
-              render: (_value, row) => (
-                <div className="settings-param-row-reset">
-                  <Tooltip title={t('resetFieldDefault')}>
-                    <Button
-                      type="text"
-                      size="small"
-                      icon={<UndoOutlined />}
-                      aria-label={t('resetFieldDefaultNamed', { name: row.parameter })}
-                      disabled={chatSettings.isLoading || chatSaving}
-                      onClick={() => void resetChatFieldToDefault(row.field)}
-                    />
-                  </Tooltip>
-                </div>
-              ),
-            },
-          ]}
+              </div>
+            ),
+            children: (
+              <div className="settings-chat-group-body">
+                <Typography.Paragraph type="secondary" className="settings-chat-group-desc">
+                  {group.description}
+                </Typography.Paragraph>
+                {renderChatSettingTable(group.rows)}
+              </div>
+            ),
+          }))}
         />
         <div className="settings-param-actions">
           <Space wrap>

@@ -14,6 +14,30 @@
   width: 100%;
 }
 
+.settings-chat-groups {
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.settings-chat-group-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+}
+
+.settings-chat-group-count {
+  font-size: 12px;
+}
+
+.settings-chat-group-body {
+  width: 100%;
+}
+
+.settings-chat-group-desc {
+  margin-bottom: 12px !important;
+}
+
 .settings-param-panel .ant-table-wrapper,
 .settings-param-panel .ant-table {
   width: 100%;
