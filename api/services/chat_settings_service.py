@@ -31,6 +31,11 @@ class ChatSettings:
     memory_prune_enabled: bool = True
     memory_prune_retention_days: int = 90
     memory_prune_top_k: int = 50
+    memory_inject_enabled: bool = True
+    memory_inject_top_k: int = 12
+    memory_inject_max_chars: int = 2000
+    memory_inject_window_days: int = 90
+    memory_inject_dedupe_topics: bool = True
 
 
 def _clamp_history_runs(value: object) -> int:
@@ -69,6 +74,31 @@ def _clamp_prune_top_k(value: object) -> int:
     return max(1, min(500, number))
 
 
+def _clamp_inject_top_k(value: object) -> int:
+    try:
+        number = int(str(value))
+    except (TypeError, ValueError):
+        return 12
+    return max(1, min(100, number))
+
+
+def _clamp_inject_max_chars(value: object) -> int:
+    try:
+        number = int(str(value))
+    except (TypeError, ValueError):
+        return 2000
+    return max(200, min(20_000, number))
+
+
+def _clamp_inject_window_days(value: object) -> int:
+    try:
+        number = int(str(value))
+    except (TypeError, ValueError):
+        return 90
+    # 0 = disable time-window filter on inject.
+    return max(0, min(3650, number))
+
+
 def _project_settings(row: Mapping[str, object]) -> dict[str, Any]:
     payload: dict[str, Any] = {}
     for key, default in DEFAULT_CHAT_SETTINGS.items():
@@ -84,6 +114,8 @@ def _project_settings(row: Mapping[str, object]) -> dict[str, Any]:
             "markdown",
             "memory_tool_content_enabled",
             "memory_prune_enabled",
+            "memory_inject_enabled",
+            "memory_inject_dedupe_topics",
         }:
             payload[key] = bool(raw if raw is not None else default)
         elif key == "num_history_runs":
@@ -96,6 +128,18 @@ def _project_settings(row: Mapping[str, object]) -> dict[str, Any]:
             )
         elif key == "memory_prune_top_k":
             payload[key] = _clamp_prune_top_k(
+                raw if raw is not None else default
+            )
+        elif key == "memory_inject_top_k":
+            payload[key] = _clamp_inject_top_k(
+                raw if raw is not None else default
+            )
+        elif key == "memory_inject_max_chars":
+            payload[key] = _clamp_inject_max_chars(
+                raw if raw is not None else default
+            )
+        elif key == "memory_inject_window_days":
+            payload[key] = _clamp_inject_window_days(
                 raw if raw is not None else default
             )
         else:
@@ -131,6 +175,11 @@ async def get_chat_settings_async() -> ChatSettings:
         memory_prune_enabled=bool(values["memory_prune_enabled"]),
         memory_prune_retention_days=int(values["memory_prune_retention_days"]),
         memory_prune_top_k=int(values["memory_prune_top_k"]),
+        memory_inject_enabled=bool(values["memory_inject_enabled"]),
+        memory_inject_top_k=int(values["memory_inject_top_k"]),
+        memory_inject_max_chars=int(values["memory_inject_max_chars"]),
+        memory_inject_window_days=int(values["memory_inject_window_days"]),
+        memory_inject_dedupe_topics=bool(values["memory_inject_dedupe_topics"]),
     )
 
 
@@ -151,6 +200,8 @@ async def update_chat_settings(values: Mapping[str, Any]) -> dict[str, Any]:
             "markdown",
             "memory_tool_content_enabled",
             "memory_prune_enabled",
+            "memory_inject_enabled",
+            "memory_inject_dedupe_topics",
         }:
             allowed[key] = bool(raw)
         elif key == "num_history_runs":
@@ -159,6 +210,12 @@ async def update_chat_settings(values: Mapping[str, Any]) -> dict[str, Any]:
             allowed[key] = _clamp_prune_retention_days(raw)
         elif key == "memory_prune_top_k":
             allowed[key] = _clamp_prune_top_k(raw)
+        elif key == "memory_inject_top_k":
+            allowed[key] = _clamp_inject_top_k(raw)
+        elif key == "memory_inject_max_chars":
+            allowed[key] = _clamp_inject_max_chars(raw)
+        elif key == "memory_inject_window_days":
+            allowed[key] = _clamp_inject_window_days(raw)
         elif key in {"max_tool_calls_from_history", "default_tool_call_limit"}:
             allowed[key] = _optional_positive_int(raw)
     if not allowed:

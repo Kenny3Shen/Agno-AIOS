@@ -2557,6 +2557,8 @@ class SecurityRunRuntime:
             await build_memory_manager(
                 tool_content_enabled=bool(chat_settings.memory_tool_content_enabled),
                 db=self.dependencies.get_db(),
+                inject_config=chat_settings,
+                inject_query="",
             )
             if memory_ok
             else None
@@ -2680,6 +2682,8 @@ class SecurityRunRuntime:
             await build_memory_manager(
                 tool_content_enabled=bool(chat_settings.memory_tool_content_enabled),
                 db=self.dependencies.get_db(),
+                inject_config=chat_settings,
+                inject_query=str(request.message or ""),
             )
             if memory_ok
             else None
@@ -2857,6 +2861,7 @@ class SecurityRunRuntime:
                 enable_tools=enable_tools,
                 store_raw_tool_io=bool(request.store_raw_tool_io),
                 media_files=request.workspace_files,
+                inject_query=str(request.message or ""),
             )
             async for event in self._stream_agent_events(team, request, chat_settings):
                 yield event

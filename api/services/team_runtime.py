@@ -250,6 +250,7 @@ async def build_team(
     enable_tools: bool = True,
     store_raw_tool_io: bool = False,
     media_files: Any = None,
+    inject_query: str = "",
 ) -> Team:
     profile = get_team_profile(team_id)
     if profile is None:
@@ -348,6 +349,8 @@ async def build_team(
         await build_memory_manager(
             tool_content_enabled=bool(chat_settings.memory_tool_content_enabled),
             db=db,
+            inject_config=chat_settings,
+            inject_query=str(inject_query or ""),
         )
         if memory_enabled
         else None

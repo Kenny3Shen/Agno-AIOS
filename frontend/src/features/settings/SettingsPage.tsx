@@ -69,6 +69,11 @@ const CHAT_SETTINGS_DEFAULTS: ChatSettings = {
   memory_prune_enabled: true,
   memory_prune_retention_days: 90,
   memory_prune_top_k: 50,
+  memory_inject_enabled: true,
+  memory_inject_top_k: 12,
+  memory_inject_max_chars: 2000,
+  memory_inject_window_days: 90,
+  memory_inject_dedupe_topics: true,
 }
 
 const GUARDRAIL_SETTINGS_DEFAULTS: GuardrailSettings = {
@@ -629,6 +634,47 @@ export function SettingsPage() {
           min: 1,
           max: 500,
         },
+        {
+          key: 'memory_inject_enabled',
+          field: 'memory_inject_enabled',
+          parameter: t('memoryInjectEnabledLabel'),
+          description: t('memoryInjectEnabledDesc'),
+          control: 'switch',
+        },
+        {
+          key: 'memory_inject_top_k',
+          field: 'memory_inject_top_k',
+          parameter: t('memoryInjectTopKLabel'),
+          description: t('memoryInjectTopKDesc'),
+          control: 'number',
+          min: 1,
+          max: 100,
+        },
+        {
+          key: 'memory_inject_max_chars',
+          field: 'memory_inject_max_chars',
+          parameter: t('memoryInjectMaxCharsLabel'),
+          description: t('memoryInjectMaxCharsDesc'),
+          control: 'number',
+          min: 200,
+          max: 20000,
+        },
+        {
+          key: 'memory_inject_window_days',
+          field: 'memory_inject_window_days',
+          parameter: t('memoryInjectWindowLabel'),
+          description: t('memoryInjectWindowDesc'),
+          control: 'number',
+          min: 0,
+          max: 3650,
+        },
+        {
+          key: 'memory_inject_dedupe_topics',
+          field: 'memory_inject_dedupe_topics',
+          parameter: t('memoryInjectDedupeLabel'),
+          description: t('memoryInjectDedupeDesc'),
+          control: 'switch',
+        },
       ],
     },
     {
@@ -719,6 +765,9 @@ export function SettingsPage() {
         num_history_runs: Number(values.num_history_runs ?? 5),
         memory_prune_retention_days: Number(values.memory_prune_retention_days ?? 90),
         memory_prune_top_k: Number(values.memory_prune_top_k ?? 50),
+        memory_inject_top_k: Number(values.memory_inject_top_k ?? 12),
+        memory_inject_max_chars: Number(values.memory_inject_max_chars ?? 2000),
+        memory_inject_window_days: Number(values.memory_inject_window_days ?? 90),
       }
       const next = await saveChatSettings(payload)
       chatForm.setFieldsValue(next)

@@ -38,6 +38,11 @@ async def test_read_chat_settings_returns_persisted_defaults() -> None:
         "memory_prune_enabled": True,
         "memory_prune_retention_days": 90,
         "memory_prune_top_k": 50,
+        "memory_inject_enabled": True,
+        "memory_inject_top_k": 12,
+        "memory_inject_max_chars": 2000,
+        "memory_inject_window_days": 90,
+        "memory_inject_dedupe_topics": True,
     }
     with patch.object(settings, "get_chat_settings", new=AsyncMock(return_value=expected)):
         assert await settings.read_chat_settings(_user=cast(User, SimpleNamespace())) == expected
@@ -62,6 +67,11 @@ async def test_patch_chat_settings_updates_only_submitted_values_and_audits() ->
         "memory_prune_enabled": True,
         "memory_prune_retention_days": 90,
         "memory_prune_top_k": 50,
+        "memory_inject_enabled": True,
+        "memory_inject_top_k": 12,
+        "memory_inject_max_chars": 2000,
+        "memory_inject_window_days": 90,
+        "memory_inject_dedupe_topics": True,
     }
     with (
         patch.object(settings, "update_chat_settings", new=AsyncMock(return_value=expected)) as update_mock,
@@ -99,6 +109,11 @@ async def test_chat_settings_service_applies_defaults_for_missing_columns() -> N
     assert result["memory_prune_enabled"] is True
     assert result["memory_prune_retention_days"] == 90
     assert result["memory_prune_top_k"] == 50
+    assert result["memory_inject_enabled"] is True
+    assert result["memory_inject_top_k"] == 12
+    assert result["memory_inject_max_chars"] == 2000
+    assert result["memory_inject_window_days"] == 90
+    assert result["memory_inject_dedupe_topics"] is True
 
 
 @pytest.fixture(autouse=True)

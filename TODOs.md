@@ -8,6 +8,16 @@
 - Chat / 模型护栏 / 知识库检索：保存旁增加「全部恢复默认」；每行增加单项恢复按钮（立即 PATCH）。
 - 知识库检索 Table 全宽铺满设置卡片（去掉 max-width 限制）。
 
+## 已完成：Memory P1 注入侧筛选
+
+- 在 Agno `get_user_memories` 路径上拦截：时间窗 → 打分（0.4 新近度 + 0.35 关键词 + 0.15 topics + 0.1 质量）→ topic 去重 → Top-k → 字符预算。
+- Settings「记忆管理」：`memory_inject_enabled` / `top_k` / `max_chars` / `window_days` / `dedupe_topics`（Alembic `20260721_0009`）。
+- Chat/Team 构建 `MemoryManager` 时传入本轮 `message` 作 keyword query。
+
+相关：`memory_inject_service.py` / `memory_manager_service.py` / Settings UI
+
+---
+
 ## 已完成：Memory P0（廉价 MemoryManager / 工具内容可选 / 自动 prune）
 
 - 独立 `MemoryManager`（优先 flash/mini 等廉价模型 + 安全 capture instructions）；`enable_agentic_memory` 默认关。

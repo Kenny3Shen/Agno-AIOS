@@ -51,6 +51,12 @@ DEFAULT_CHAT_SETTINGS: dict[str, Any] = {
     "memory_prune_enabled": True,
     "memory_prune_retention_days": 90,
     "memory_prune_top_k": 50,
+    # Memory P1 inject: score + cap before Agno dumps memories into system prompt.
+    "memory_inject_enabled": True,
+    "memory_inject_top_k": 12,
+    "memory_inject_max_chars": 2000,
+    "memory_inject_window_days": 90,
+    "memory_inject_dedupe_topics": True,
 }
 
 _BOOL_KEYS = frozenset(
@@ -65,6 +71,8 @@ _BOOL_KEYS = frozenset(
         "markdown",
         "memory_tool_content_enabled",
         "memory_prune_enabled",
+        "memory_inject_enabled",
+        "memory_inject_dedupe_topics",
     }
 )
 _INT_KEYS = frozenset(
@@ -74,6 +82,9 @@ _INT_KEYS = frozenset(
         "default_tool_call_limit",
         "memory_prune_retention_days",
         "memory_prune_top_k",
+        "memory_inject_top_k",
+        "memory_inject_max_chars",
+        "memory_inject_window_days",
     }
 )
 
@@ -137,6 +148,36 @@ def chat_settings_table(metadata: MetaData | None = None) -> Table:
             nullable=False,
             server_default="50",
         ),
+        Column(
+            "memory_inject_enabled",
+            Boolean,
+            nullable=False,
+            server_default="true",
+        ),
+        Column(
+            "memory_inject_top_k",
+            Integer,
+            nullable=False,
+            server_default="12",
+        ),
+        Column(
+            "memory_inject_max_chars",
+            Integer,
+            nullable=False,
+            server_default="2000",
+        ),
+        Column(
+            "memory_inject_window_days",
+            Integer,
+            nullable=False,
+            server_default="90",
+        ),
+        Column(
+            "memory_inject_dedupe_topics",
+            Boolean,
+            nullable=False,
+            server_default="true",
+        ),
         Column("updated_at", BigInteger, nullable=False),
     )
 
@@ -165,7 +206,14 @@ def _project_row(row: Mapping[str, Any] | None) -> dict[str, Any]:
         elif key in _INT_KEYS:
             if value is None or value == "":
                 # Nullable tool limits use None; required memory prune ints keep defaults.
-                if key in {"num_history_runs", "memory_prune_retention_days", "memory_prune_top_k"}:
+                if key in {
+                    "num_history_runs",
+                    "memory_prune_retention_days",
+                    "memory_prune_top_k",
+                    "memory_inject_top_k",
+                    "memory_inject_max_chars",
+                    "memory_inject_window_days",
+                }:
                     payload[key] = DEFAULT_CHAT_SETTINGS[key]
                 else:
                     payload[key] = None
@@ -212,6 +260,9 @@ async def update_chat_settings_row(values: Mapping[str, Any]) -> dict[str, Any]:
                     "num_history_runs",
                     "memory_prune_retention_days",
                     "memory_prune_top_k",
+                    "memory_inject_top_k",
+                    "memory_inject_max_chars",
+                    "memory_inject_window_days",
                 }:
                     updates[key] = current[key]
                 else:

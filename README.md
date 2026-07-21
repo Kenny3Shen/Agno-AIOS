@@ -64,7 +64,7 @@ TAIS_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
 
 ## 架构
 
-React 工作台通过共享 API client 携带 JWT 请求 FastAPI；后端校验权限与资源归属后，按模型、MCP、Skills、Knowledge 与 Memory 创建 Agno 运行时。Chat 走 SSE；长期记忆使用廉价 MemoryManager，可配置是否记忆工具内容，并由 durable job 按年龄 + Top-k 自动 prune。Workflow Studio 负责定义编译与流式运行；HITL 与上传审批汇入审批中心。
+React 工作台通过共享 API client 携带 JWT 请求 FastAPI；后端校验权限与资源归属后，按模型、MCP、Skills、Knowledge 与 Memory 创建 Agno 运行时。Chat 走 SSE；长期记忆使用廉价 MemoryManager，可配置是否记忆工具内容、注入侧打分截断，并由 durable job 按年龄 + Top-k 自动 prune。Workflow Studio 负责定义编译与流式运行；HITL 与上传审批汇入审批中心。
 
 ![T.A.I.S 系统架构](./docs/assets/tais-architecture.png)
 

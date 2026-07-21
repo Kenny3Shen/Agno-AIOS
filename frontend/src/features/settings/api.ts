@@ -30,6 +30,16 @@ export interface ChatSettings {
   memory_prune_retention_days: number
   /** After age prune, keep only top-k scored memories per user. */
   memory_prune_top_k: number
+  /** Rank/cap memories before injecting into the system prompt. */
+  memory_inject_enabled: boolean
+  /** Max memories injected per turn after scoring. */
+  memory_inject_top_k: number
+  /** Total character budget for injected memory text. */
+  memory_inject_max_chars: number
+  /** Only consider memories updated within N days (0 = no window). */
+  memory_inject_window_days: number
+  /** Keep one memory per topic (highest score) to reduce conflicts. */
+  memory_inject_dedupe_topics: boolean
 }
 
 export type KnowledgeSearchTypeSetting = 'hybrid' | 'vector' | 'keyword'

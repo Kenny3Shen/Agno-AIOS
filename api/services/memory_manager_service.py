@@ -99,24 +99,66 @@ async def build_memory_manager(
     tool_content_enabled: bool = False,
     model_id: str | None = None,
     db: Any | None = None,
+    inject_config: Any | None = None,
+    inject_query: str = "",
 ) -> MemoryManager:
-    """Construct a MemoryManager with a cheap model and P0-safe tool flags."""
+    """Construct a MemoryManager with a cheap model and P0-safe tool flags.
+
+    When *inject_config* enables inject-side ranking, returns a thin subclass
+    that filters ``get_user_memories`` / ``aget_user_memories`` (Agno injects
+    every memory returned by those methods into the system prompt).
+    """
     config = await resolve_memory_manager_model_config(model_id)
     model = build_agno_model(config)
     database = db if db is not None else get_async_agno_postgres_db()
-    return MemoryManager(
-        model=model,
-        db=database,
-        memory_capture_instructions=memory_capture_instructions(
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "db": database,
+        "memory_capture_instructions": memory_capture_instructions(
             tool_content_enabled=tool_content_enabled
         ),
         # Safety: agentic / automatic managers must not wipe or free-delete.
-        delete_memories=False,
-        clear_memories=False,
-        update_memories=True,
-        add_memories=True,
-        name="tais-memory-manager",
+        "delete_memories": False,
+        "clear_memories": False,
+        "update_memories": True,
+        "add_memories": True,
+        "name": "tais-memory-manager",
+    }
+    from api.services.memory_inject_service import (
+        MemoryInjectConfig,
+        memory_inject_config_from_settings,
+        select_memories_for_inject,
     )
+
+    cfg: MemoryInjectConfig | None
+    if inject_config is None:
+        cfg = None
+    elif isinstance(inject_config, MemoryInjectConfig):
+        cfg = inject_config
+    else:
+        cfg = memory_inject_config_from_settings(inject_config)
+
+    if cfg is None or not cfg.enabled:
+        return MemoryManager(**kwargs)
+
+    query = str(inject_query or "")
+
+    class _InjectFilteredMemoryManager(MemoryManager):
+        """Filter memories returned for Agno context injection only."""
+
+        def get_user_memories(self, user_id: str | None = None) -> Any:
+            raw = super().get_user_memories(user_id=user_id)
+            if not raw:
+                return raw
+            return select_memories_for_inject(raw, query=query, config=cfg)
+
+        async def aget_user_memories(self, user_id: str | None = None) -> Any:
+            raw = await super().aget_user_memories(user_id=user_id)
+            if not raw:
+                return raw
+            return select_memories_for_inject(raw, query=query, config=cfg)
+
+    return _InjectFilteredMemoryManager(**kwargs)
 
 
 async def capture_tool_content_memories(
