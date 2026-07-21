@@ -72,6 +72,10 @@ from api.services.chat_settings_service import (
     get_chat_settings_async,
     resolve_tool_call_limit,
 )
+from api.services.memory_manager_service import (
+    build_memory_manager,
+    capture_tool_content_memories,
+)
 from api.services.chat_run_events import (
     ChatRunEvent,
     completed_payload,
@@ -748,6 +752,14 @@ class SecurityRunRequest:
     @property
     def agent_user_id(self) -> str:
         return (self.user_id or "anonymous").strip() or "anonymous"
+
+    @property
+    def memory_user_id(self) -> str | None:
+        """Fail-closed owner for long-term memory (never anonymous/default)."""
+        uid = (self.user_id or "").strip()
+        if not uid or uid in {"anonymous", "default"}:
+            return None
+        return uid
 
     @property
     def capability_actor(self) -> Any:
@@ -2301,6 +2313,22 @@ class SecurityRunRuntime:
                     # Set before yield: consumer may close the stream at this event.
                     run_finished_naturally = True
                     yield ChatRunEvent("run.completed", completed)
+                    # Optional second-pass: remember durable facts from tool results.
+                    if (
+                        request.memory_enabled
+                        and request.memory_user_id is not None
+                        and bool(
+                            getattr(chat_settings, "memory_tool_content_enabled", False)
+                        )
+                    ):
+                        asyncio.create_task(
+                            _maybe_capture_tool_content_memories(
+                                agent=agent,
+                                request=request,
+                                event=event,
+                            ),
+                            name="memory-tool-content-capture",
+                        )
                     _unregister_live_run(run_id)
                     registered_run_ids.discard(run_id)
                 elif _event_matches(event_type, "run_cancelled"):
@@ -2513,11 +2541,26 @@ class SecurityRunRuntime:
         reasoning_effort: str | None = None,
         memory_enabled: bool = True,
         live_search: bool | None = None,
+        user_id: str | None = None,
     ) -> Agent:
         model = await self._build_model(model_id, reasoning_effort, live_search=live_search)
         chat_settings = await get_chat_settings_async()
         use_summaries = bool(chat_settings.session_summaries_enabled)
-        agentic = bool(chat_settings.enable_agentic_memory) and memory_enabled
+        # Fail-closed: never write/read long-term memory under anonymous/default.
+        memory_owner = (user_id or "").strip()
+        memory_ok = bool(memory_enabled) and bool(memory_owner) and memory_owner not in {
+            "anonymous",
+            "default",
+        }
+        agentic = bool(chat_settings.enable_agentic_memory) and memory_ok
+        memory_manager = (
+            await build_memory_manager(
+                tool_content_enabled=bool(chat_settings.memory_tool_content_enabled),
+                db=self.dependencies.get_db(),
+            )
+            if memory_ok
+            else None
+        )
         return self.dependencies.agent_factory(
             **apply_guardrails_kwargs(
                 {
@@ -2528,8 +2571,9 @@ class SecurityRunRuntime:
                     "instructions": [await _load_prompt_async(SAFE_FALLBACK_PROMPT)],
                     "model": model,
                     "db": self.dependencies.get_db(),
-                    "update_memory_on_run": bool(memory_enabled) and not agentic,
-                    "add_memories_to_context": memory_enabled,
+                    "memory_manager": memory_manager,
+                    "update_memory_on_run": memory_ok and not agentic,
+                    "add_memories_to_context": memory_ok,
                     "enable_agentic_memory": agentic,
                     "store_tool_messages": False,
                     "enable_session_summaries": use_summaries,
@@ -2622,9 +2666,23 @@ class SecurityRunRuntime:
         session_summaries = surface_active and bool(
             chat_settings.session_summaries_enabled
         )
-        inject_memories = bool(request.memory_enabled) and surface_active
-        agentic = bool(chat_settings.enable_agentic_memory) and bool(
-            request.memory_enabled
+        # Fail-closed: real user_id required before any long-term memory I/O.
+        memory_owner = request.memory_user_id
+        memory_ok = bool(request.memory_enabled) and memory_owner is not None
+        if bool(request.memory_enabled) and memory_owner is None:
+            logger.warning(
+                "memory fail-closed: missing user_id agent_id={}",
+                agent_id,
+            )
+        inject_memories = memory_ok and surface_active
+        agentic = bool(chat_settings.enable_agentic_memory) and memory_ok
+        memory_manager = (
+            await build_memory_manager(
+                tool_content_enabled=bool(chat_settings.memory_tool_content_enabled),
+                db=self.dependencies.get_db(),
+            )
+            if memory_ok
+            else None
         )
         tool_limit = resolve_tool_call_limit(
             profile.get("tool_call_limit"), chat_settings
@@ -2662,8 +2720,9 @@ class SecurityRunRuntime:
                     "dependencies": await _run_sync_dependency(_agent_dependencies),
                     "add_dependencies_to_context": False,
                     "add_history_to_context": add_history,
+                    "memory_manager": memory_manager,
                     # Agno: agentic memory takes precedence over update_memory_on_run.
-                    "update_memory_on_run": bool(request.memory_enabled) and not agentic,
+                    "update_memory_on_run": memory_ok and not agentic,
                     "add_memories_to_context": inject_memories,
                     "enable_agentic_memory": agentic and surface_active,
                     "store_tool_messages": (
@@ -2778,6 +2837,14 @@ class SecurityRunRuntime:
                 knowledge = await _maybe_await(self.dependencies.get_async_knowledge_base())
                 if request.knowledge_owner_user_id:
                     knowledge_filters = {"user_id": request.knowledge_owner_user_id}
+            memory_ok = (
+                bool(request.memory_enabled) and request.memory_user_id is not None
+            )
+            if bool(request.memory_enabled) and request.memory_user_id is None:
+                logger.warning(
+                    "memory fail-closed: missing user_id team_id={}",
+                    request.agent_id,
+                )
             team = await build_team(
                 str(request.agent_id),
                 model_id=request.model_id,
@@ -2786,7 +2853,7 @@ class SecurityRunRuntime:
                 search_knowledge=search_knowledge,
                 knowledge=knowledge,
                 knowledge_filters=knowledge_filters,
-                memory_enabled=bool(request.memory_enabled),
+                memory_enabled=memory_ok,
                 enable_tools=enable_tools,
                 store_raw_tool_io=bool(request.store_raw_tool_io),
                 media_files=request.workspace_files,
@@ -2956,6 +3023,71 @@ async def attach_live_security_run(
         return
     async for event in hub.subscribe(last_event_index=last_event_index):
         yield event
+
+
+def _tool_result_summaries_from_event(event: Any, *, limit: int = 8) -> list[str]:
+    """Extract truncated tool result strings from a run.completed-style event."""
+    tools = event_value(event, "tools", [])
+    if not isinstance(tools, list):
+        return []
+    summaries: list[str] = []
+    for raw in tools:
+        if len(summaries) >= limit:
+            break
+        if isinstance(raw, dict):
+            name = str(raw.get("tool_name") or raw.get("name") or "tool").strip()
+            result = raw.get("result", raw.get("output", raw.get("content")))
+        else:
+            name = str(
+                getattr(raw, "tool_name", None) or getattr(raw, "name", None) or "tool"
+            ).strip()
+            result = getattr(raw, "result", None)
+            if result is None:
+                result = getattr(raw, "output", None)
+        if result is None:
+            continue
+        text = result if isinstance(result, str) else str(result)
+        text = text.strip()
+        if not text:
+            continue
+        if len(text) > 1_500:
+            text = text[:1_500] + "…"
+        summaries.append(f"[{name}] {text}")
+    return summaries
+
+
+async def _maybe_capture_tool_content_memories(
+    *,
+    agent: Any,
+    request: SecurityRunRequest,
+    event: Any,
+) -> None:
+    """Background: optional MemoryManager pass over tool results (Settings flag)."""
+    owner = request.memory_user_id
+    if owner is None:
+        return
+    summaries = _tool_result_summaries_from_event(event)
+    if not summaries:
+        return
+    try:
+        manager = getattr(agent, "memory_manager", None)
+        if manager is None:
+            manager = await build_memory_manager(
+                tool_content_enabled=True,
+                db=getattr(agent, "db", None),
+            )
+        await capture_tool_content_memories(
+            memory_manager=manager,
+            user_id=owner,
+            agent_id=str(getattr(agent, "id", None) or request.agent_id or ""),
+            tool_summaries=summaries,
+        )
+    except Exception:
+        logger.exception(
+            "tool-content memory capture failed user_id={} agent_id={}",
+            owner,
+            request.agent_id,
+        )
 
 
 def cancel_security_run(*, user_id: str, run_id: str) -> bool:

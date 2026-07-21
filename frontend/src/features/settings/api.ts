@@ -22,6 +22,14 @@ export interface ChatSettings {
   enable_agentic_memory: boolean
   /** Agno markdown response formatting. */
   markdown: boolean
+  /** Allow MemoryManager to capture durable facts from tool results. */
+  memory_tool_content_enabled: boolean
+  /** Durable job: auto-prune memories by age + top-k. */
+  memory_prune_enabled: boolean
+  /** Delete memories whose updated_at is older than N days. */
+  memory_prune_retention_days: number
+  /** After age prune, keep only top-k scored memories per user. */
+  memory_prune_top_k: number
 }
 
 export type KnowledgeSearchTypeSetting = 'hybrid' | 'vector' | 'keyword'

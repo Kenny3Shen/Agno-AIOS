@@ -179,6 +179,13 @@ async def lifespan(app: FastAPI):
         logger.exception("启动 Workflow cron 调度器失败")
 
     try:
+        from api.services.memory_durable_jobs import ensure_memory_prune_scheduled
+
+        await ensure_memory_prune_scheduled()
+    except Exception:
+        logger.exception("调度 Memory 自动 prune 任务失败")
+
+    try:
         from api.services.guardrails import refresh_guardrail_settings_cache
 
         await refresh_guardrail_settings_cache()

@@ -45,6 +45,12 @@ DEFAULT_CHAT_SETTINGS: dict[str, Any] = {
     "enable_agentic_memory": False,
     # Agno: markdown response formatting.
     "markdown": True,
+    # Memory P0: allow MemoryManager / agentic memory to capture tool-derived facts.
+    "memory_tool_content_enabled": False,
+    # Memory P0 prune job (durable): delete by updated_at age, then keep top-k per user.
+    "memory_prune_enabled": True,
+    "memory_prune_retention_days": 90,
+    "memory_prune_top_k": 50,
 }
 
 _BOOL_KEYS = frozenset(
@@ -57,6 +63,8 @@ _BOOL_KEYS = frozenset(
         "add_datetime_to_context",
         "enable_agentic_memory",
         "markdown",
+        "memory_tool_content_enabled",
+        "memory_prune_enabled",
     }
 )
 _INT_KEYS = frozenset(
@@ -64,6 +72,8 @@ _INT_KEYS = frozenset(
         "num_history_runs",
         "max_tool_calls_from_history",
         "default_tool_call_limit",
+        "memory_prune_retention_days",
+        "memory_prune_top_k",
     }
 )
 
@@ -103,6 +113,30 @@ def chat_settings_table(metadata: MetaData | None = None) -> Table:
         Column("num_history_runs", Integer, nullable=False, server_default="5"),
         Column("max_tool_calls_from_history", Integer, nullable=True),
         Column("default_tool_call_limit", Integer, nullable=True),
+        Column(
+            "memory_tool_content_enabled",
+            Boolean,
+            nullable=False,
+            server_default="false",
+        ),
+        Column(
+            "memory_prune_enabled",
+            Boolean,
+            nullable=False,
+            server_default="true",
+        ),
+        Column(
+            "memory_prune_retention_days",
+            Integer,
+            nullable=False,
+            server_default="90",
+        ),
+        Column(
+            "memory_prune_top_k",
+            Integer,
+            nullable=False,
+            server_default="50",
+        ),
         Column("updated_at", BigInteger, nullable=False),
     )
 
@@ -130,7 +164,11 @@ def _project_row(row: Mapping[str, Any] | None) -> dict[str, Any]:
             payload[key] = bool(value) if value is not None else DEFAULT_CHAT_SETTINGS[key]
         elif key in _INT_KEYS:
             if value is None or value == "":
-                payload[key] = None if key != "num_history_runs" else DEFAULT_CHAT_SETTINGS[key]
+                # Nullable tool limits use None; required memory prune ints keep defaults.
+                if key in {"num_history_runs", "memory_prune_retention_days", "memory_prune_top_k"}:
+                    payload[key] = DEFAULT_CHAT_SETTINGS[key]
+                else:
+                    payload[key] = None
             else:
                 payload[key] = int(value)
     return payload
@@ -170,7 +208,14 @@ async def update_chat_settings_row(values: Mapping[str, Any]) -> dict[str, Any]:
             updates[key] = bool(value)
         elif key in _INT_KEYS:
             if value is None or value == "":
-                updates[key] = None if key != "num_history_runs" else current[key]
+                if key in {
+                    "num_history_runs",
+                    "memory_prune_retention_days",
+                    "memory_prune_top_k",
+                }:
+                    updates[key] = current[key]
+                else:
+                    updates[key] = None
             else:
                 updates[key] = int(value)
     if not updates:

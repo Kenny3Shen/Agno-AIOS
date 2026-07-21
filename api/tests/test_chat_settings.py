@@ -34,6 +34,10 @@ async def test_read_chat_settings_returns_persisted_defaults() -> None:
         "default_tool_call_limit": None,
         "enable_agentic_memory": False,
         "markdown": True,
+        "memory_tool_content_enabled": False,
+        "memory_prune_enabled": True,
+        "memory_prune_retention_days": 90,
+        "memory_prune_top_k": 50,
     }
     with patch.object(settings, "get_chat_settings", new=AsyncMock(return_value=expected)):
         assert await settings.read_chat_settings(_user=cast(User, SimpleNamespace())) == expected
@@ -54,6 +58,10 @@ async def test_patch_chat_settings_updates_only_submitted_values_and_audits() ->
         "default_tool_call_limit": None,
         "enable_agentic_memory": False,
         "markdown": True,
+        "memory_tool_content_enabled": False,
+        "memory_prune_enabled": True,
+        "memory_prune_retention_days": 90,
+        "memory_prune_top_k": 50,
     }
     with (
         patch.object(settings, "update_chat_settings", new=AsyncMock(return_value=expected)) as update_mock,
@@ -87,6 +95,10 @@ async def test_chat_settings_service_applies_defaults_for_missing_columns() -> N
     assert result["session_summaries_enabled"] is True
     assert result["markdown"] is True
     assert result["max_tool_calls_from_history"] is None
+    assert result["memory_tool_content_enabled"] is False
+    assert result["memory_prune_enabled"] is True
+    assert result["memory_prune_retention_days"] == 90
+    assert result["memory_prune_top_k"] == 50
 
 
 @pytest.fixture(autouse=True)

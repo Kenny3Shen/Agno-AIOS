@@ -48,6 +48,11 @@ class ChatSettingsUpdate(BaseModel):
     default_tool_call_limit: int | None = None
     enable_agentic_memory: bool | None = None
     markdown: bool | None = None
+    # Memory P0: tool-content capture + automatic prune job knobs
+    memory_tool_content_enabled: bool | None = None
+    memory_prune_enabled: bool | None = None
+    memory_prune_retention_days: int | None = None
+    memory_prune_top_k: int | None = None
 
 
 

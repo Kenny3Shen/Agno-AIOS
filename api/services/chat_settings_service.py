@@ -27,6 +27,10 @@ class ChatSettings:
     default_tool_call_limit: int | None = None
     enable_agentic_memory: bool = False
     markdown: bool = True
+    memory_tool_content_enabled: bool = False
+    memory_prune_enabled: bool = True
+    memory_prune_retention_days: int = 90
+    memory_prune_top_k: int = 50
 
 
 def _clamp_history_runs(value: object) -> int:
@@ -49,6 +53,22 @@ def _optional_positive_int(value: object) -> int | None:
     return min(500, number)
 
 
+def _clamp_prune_retention_days(value: object) -> int:
+    try:
+        number = int(str(value))
+    except (TypeError, ValueError):
+        return 90
+    return max(1, min(3650, number))
+
+
+def _clamp_prune_top_k(value: object) -> int:
+    try:
+        number = int(str(value))
+    except (TypeError, ValueError):
+        return 50
+    return max(1, min(500, number))
+
+
 def _project_settings(row: Mapping[str, object]) -> dict[str, Any]:
     payload: dict[str, Any] = {}
     for key, default in DEFAULT_CHAT_SETTINGS.items():
@@ -62,10 +82,20 @@ def _project_settings(row: Mapping[str, object]) -> dict[str, Any]:
             "add_datetime_to_context",
             "enable_agentic_memory",
             "markdown",
+            "memory_tool_content_enabled",
+            "memory_prune_enabled",
         }:
             payload[key] = bool(raw if raw is not None else default)
         elif key == "num_history_runs":
             payload[key] = _clamp_history_runs(
+                raw if raw is not None else default
+            )
+        elif key == "memory_prune_retention_days":
+            payload[key] = _clamp_prune_retention_days(
+                raw if raw is not None else default
+            )
+        elif key == "memory_prune_top_k":
+            payload[key] = _clamp_prune_top_k(
                 raw if raw is not None else default
             )
         else:
@@ -97,6 +127,10 @@ async def get_chat_settings_async() -> ChatSettings:
         default_tool_call_limit=values.get("default_tool_call_limit"),
         enable_agentic_memory=bool(values["enable_agentic_memory"]),
         markdown=bool(values["markdown"]),
+        memory_tool_content_enabled=bool(values["memory_tool_content_enabled"]),
+        memory_prune_enabled=bool(values["memory_prune_enabled"]),
+        memory_prune_retention_days=int(values["memory_prune_retention_days"]),
+        memory_prune_top_k=int(values["memory_prune_top_k"]),
     )
 
 
@@ -115,10 +149,16 @@ async def update_chat_settings(values: Mapping[str, Any]) -> dict[str, Any]:
             "add_datetime_to_context",
             "enable_agentic_memory",
             "markdown",
+            "memory_tool_content_enabled",
+            "memory_prune_enabled",
         }:
             allowed[key] = bool(raw)
         elif key == "num_history_runs":
             allowed[key] = _clamp_history_runs(raw)
+        elif key == "memory_prune_retention_days":
+            allowed[key] = _clamp_prune_retention_days(raw)
+        elif key == "memory_prune_top_k":
+            allowed[key] = _clamp_prune_top_k(raw)
         elif key in {"max_tool_calls_from_history", "default_tool_call_limit"}:
             allowed[key] = _optional_positive_int(raw)
     if not allowed:

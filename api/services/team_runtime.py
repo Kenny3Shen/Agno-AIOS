@@ -28,6 +28,7 @@ from api.services.agent_tools import (
 )
 from api.services.guardrails import apply_guardrails_kwargs
 from api.services.chat_settings_service import get_chat_settings_async
+from api.services.memory_manager_service import build_memory_manager
 from api.services.model_config_service import get_model_for_run
 from api.services.model_factory import build_agno_model
 from api.services.postgres_store import get_async_agno_postgres_db
@@ -340,7 +341,17 @@ async def build_team(
     chat_settings = await get_chat_settings_async()
     history_runs = max(1, int(chat_settings.num_history_runs or 4))
     use_summaries = bool(chat_settings.session_summaries_enabled)
+    # Fail-closed for team leader memory is enforced by the caller (SecurityRunRequest).
+    # Here we only respect the memory_enabled flag + Settings agentic default-off.
     agentic = bool(chat_settings.enable_agentic_memory) and bool(memory_enabled)
+    memory_manager = (
+        await build_memory_manager(
+            tool_content_enabled=bool(chat_settings.memory_tool_content_enabled),
+            db=db,
+        )
+        if memory_enabled
+        else None
+    )
     mode_floor = 60 if mode == TeamMode.tasks else 48
     # Team leaders need a higher floor than single-agent defaults; Settings can raise it.
     if chat_settings.default_tool_call_limit is not None:
@@ -387,6 +398,7 @@ async def build_team(
                 "num_team_history_runs": min(2, history_runs),
                 "add_name_to_context": True,
                 "add_member_tools_to_context": False,
+                "memory_manager": memory_manager,
                 "update_memory_on_run": bool(memory_enabled) and not agentic,
                 "add_memories_to_context": bool(memory_enabled),
                 "enable_agentic_memory": agentic,

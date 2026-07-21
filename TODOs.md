@@ -8,6 +8,18 @@
 - Chat / 模型护栏 / 知识库检索：保存旁增加「全部恢复默认」；每行增加单项恢复按钮（立即 PATCH）。
 - 知识库检索 Table 全宽铺满设置卡片（去掉 max-width 限制）。
 
+## 已完成：Memory P0（廉价 MemoryManager / 工具内容可选 / 自动 prune）
+
+- 独立 `MemoryManager`（优先 flash/mini 等廉价模型 + 安全 capture instructions）；`enable_agentic_memory` 默认关。
+- Settings：`memory_tool_content_enabled`（默认关）— 可选择是否从截断后的工具结果二次抽取长期记忆。
+- Durable Job `memory_prune`：按 `updated_at` 删除 >N 天；剩余按「新近度 + 内容质量 + topics」Top-k 保留（`memory_prune_retention_days` / `memory_prune_top_k`）。
+- fail-closed：无真实 `user_id`（anonymous/default）不读写长期记忆。
+- Alembic `20260721_0008`；API 启动 `ensure_memory_prune_scheduled`；Worker 注册 handler。
+
+相关：`memory_manager_service.py` / `memory_prune_service.py` / `memory_durable_jobs.py` / `security_run_runtime.py` / Settings UI
+
+---
+
 ## 已完成：Chat 设置扩展 Agno 常用运行参数
 
 - `chat_settings` 增加 history / session summary / datetime / tool history cap / tool_call_limit / agentic memory / markdown（`20260721_0007`）。

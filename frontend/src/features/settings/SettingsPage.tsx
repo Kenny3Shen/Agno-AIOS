@@ -65,6 +65,10 @@ const CHAT_SETTINGS_DEFAULTS: ChatSettings = {
   num_history_runs: 5,
   max_tool_calls_from_history: null,
   default_tool_call_limit: null,
+  memory_tool_content_enabled: false,
+  memory_prune_enabled: true,
+  memory_prune_retention_days: 90,
+  memory_prune_top_k: 50,
 }
 
 const GUARDRAIL_SETTINGS_DEFAULTS: GuardrailSettings = {
@@ -570,6 +574,38 @@ export function SettingsPage() {
       control: 'switch',
     },
     {
+      key: 'memory_tool_content_enabled',
+      field: 'memory_tool_content_enabled',
+      parameter: t('memoryToolContentLabel'),
+      description: t('memoryToolContentDesc'),
+      control: 'switch',
+    },
+    {
+      key: 'memory_prune_enabled',
+      field: 'memory_prune_enabled',
+      parameter: t('memoryPruneEnabledLabel'),
+      description: t('memoryPruneEnabledDesc'),
+      control: 'switch',
+    },
+    {
+      key: 'memory_prune_retention_days',
+      field: 'memory_prune_retention_days',
+      parameter: t('memoryPruneRetentionLabel'),
+      description: t('memoryPruneRetentionDesc'),
+      control: 'number',
+      min: 1,
+      max: 3650,
+    },
+    {
+      key: 'memory_prune_top_k',
+      field: 'memory_prune_top_k',
+      parameter: t('memoryPruneTopKLabel'),
+      description: t('memoryPruneTopKDesc'),
+      control: 'number',
+      min: 1,
+      max: 500,
+    },
+    {
       key: 'session_summaries_enabled',
       field: 'session_summaries_enabled',
       parameter: t('sessionSummariesLabel'),
@@ -641,6 +677,8 @@ export function SettingsPage() {
             ? null
             : Number(values.default_tool_call_limit),
         num_history_runs: Number(values.num_history_runs ?? 5),
+        memory_prune_retention_days: Number(values.memory_prune_retention_days ?? 90),
+        memory_prune_top_k: Number(values.memory_prune_top_k ?? 50),
       }
       const next = await saveChatSettings(payload)
       chatForm.setFieldsValue(next)

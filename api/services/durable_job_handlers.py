@@ -18,6 +18,7 @@ from api.services.durable_job_service import (
     NonRetryableJobError,
 )
 from api.services.knowledge_durable_jobs import register_knowledge_job_handler
+from api.services.memory_durable_jobs import register_memory_job_handler
 
 
 def _approval_id(job: DurableJob) -> str:
@@ -134,4 +135,5 @@ def build_durable_job_registry() -> DurableJobRegistry:
     registry.register(JobKind.SECURITY_HITL_RESUME, _resume_security_hitl)
     registry.register(JobKind.WORKFLOW_CRON_DISPATCH, _dispatch_workflow_cron)
     register_knowledge_job_handler(registry)
+    register_memory_job_handler(registry)
     return registry

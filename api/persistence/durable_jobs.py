@@ -54,6 +54,7 @@ class JobKind(StrEnum):
     WORKFLOW_RESUME = "workflow_resume"
     SECURITY_HITL_RESUME = "security_hitl_resume"
     WORKFLOW_CRON_DISPATCH = "workflow_cron_dispatch"
+    MEMORY_PRUNE = "memory_prune"
 
 
 class JobState(StrEnum):
