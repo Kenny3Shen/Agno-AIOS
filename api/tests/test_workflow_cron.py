@@ -7,7 +7,19 @@ from sqlalchemy.dialects import postgresql
 
 from api.persistence import workflows as workflow_store
 from api.persistence.durable_jobs import JobKind
-from api.services.workflow_cron import next_cron_timestamp, tick_workflow_crons
+from api.services.workflow_cron import (
+    next_cron_timestamp,
+    tick_workflow_crons,
+    validate_cron_expression,
+)
+
+
+def test_validate_cron_expression():
+    assert validate_cron_expression("* * * * *")
+    assert validate_cron_expression("0 9 * * 1-5")
+    assert not validate_cron_expression("")
+    assert not validate_cron_expression("not-a-cron")
+    assert not validate_cron_expression("60 * * * *")
 
 
 def test_next_cron_timestamp_minute():
@@ -106,10 +118,11 @@ async def test_tick_claims_and_queues_durable_dispatch():
         started = await tick_workflow_crons()
 
     assert started == 1
+    # claim_ts is the scheduled fire (AgentOS-style), not wall clock — enables catch-up.
     claim_and_enqueue.assert_awaited_once_with(
         "wf-2",
         expected_last_run_at=last_run_at,
-        claim_ts=now,
+        claim_ts=scheduled_at,
         kind=JobKind.WORKFLOW_CRON_DISPATCH,
         idempotency_key=f"workflow-cron:wf-2:{scheduled_at:.6f}",
         payload={
@@ -137,6 +150,69 @@ async def test_tick_claims_and_queues_durable_dispatch():
             "scheduled_at": scheduled_at,
         },
     )
+
+
+@pytest.mark.asyncio
+async def test_tick_catchup_enqueues_multiple_overdue_fires():
+    """When last_run is far behind, claim consecutive schedule slots up to catchup_max."""
+    last_run_at = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc).timestamp()
+    now = datetime(2026, 1, 1, 12, 3, 10, tzinfo=timezone.utc).timestamp()
+    # Overdue fires at 12:01, 12:02, 12:03 — catchup_max=2 claims first two.
+    row = {
+        "id": "wf-catchup",
+        "enabled": True,
+        "owner_user_id": "owner-c",
+        "triggers": {
+            "cron": {
+                "enabled": True,
+                "expression": "* * * * *",
+                "last_run_at": last_run_at,
+            },
+            "webhook": {"enabled": False, "secret": ""},
+        },
+        "published_definition": {
+            "name": "x",
+            "description": "",
+            "steps": [
+                {
+                    "id": "s1",
+                    "type": "step",
+                    "name": "S",
+                    "executor": {"kind": "agent", "ref": "safe-fallback"},
+                }
+            ],
+        },
+    }
+    claims: list[float] = []
+
+    async def fake_claim(
+        workflow_id: str,
+        *,
+        expected_last_run_at: float,
+        claim_ts: float,
+        **_kwargs: Any,
+    ) -> bool:
+        claims.append(claim_ts)
+        return True
+
+    with (
+        patch(
+            "api.services.workflow_cron.workflow_store.list_workflows_for_cron",
+            AsyncMock(return_value=[row]),
+        ),
+        patch.object(
+            workflow_store,
+            "claim_cron_run_and_enqueue_job",
+            side_effect=fake_claim,
+        ),
+        patch("api.services.workflow_cron.time.time", return_value=now),
+    ):
+        started = await tick_workflow_crons(catchup_max=2)
+
+    assert started == 2
+    assert len(claims) == 2
+    assert claims[0] == datetime(2026, 1, 1, 12, 1, tzinfo=timezone.utc).timestamp()
+    assert claims[1] == datetime(2026, 1, 1, 12, 2, tzinfo=timezone.utc).timestamp()
 
 
 class _MappingResult:

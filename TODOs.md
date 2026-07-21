@@ -1,3 +1,10 @@
+## 已完成：Workflow cron 对齐 Agno SchedulePoller
+
+- 进程内 `WorkflowCronPoller`：poll-first、可配置 interval/stop timeout/worker id；配置项 `TAIS_WORKFLOW_CRON_*`。
+- `croniter.is_valid` 校验表达式；启用 cron 时 create/update 拒绝非法 expression。
+- claim 将 `last_run_at` 推进到 **scheduled_at**（非 wall clock），每 tick 可 catch-up 多个 overdue fire（`CATCHUP_MAX`）。
+- 默认 poll 间隔 15s（对齐 AgentOS）；保存触发器时保留服务端 `last_run_at` 游标。
+
 ## 已完成：对话管理去掉「加载更多」
 
 - 会话列表改为单页 `useQuery`（默认 40 条），移除 ChatTaskPanel 底部「加载更多」与相关 i18n/CSS。

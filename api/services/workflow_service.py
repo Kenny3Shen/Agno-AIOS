@@ -18,7 +18,11 @@ from api.services.workflow_compiler import (
 from api.utils.pagination import pagination_meta
 
 
-def _normalize_triggers(raw: object | None) -> dict[str, Any]:
+def _normalize_triggers(
+    raw: object | None,
+    *,
+    validate_cron: bool = False,
+) -> dict[str, Any]:
     if not isinstance(raw, dict):
         return {
             "webhook": {"enabled": False, "secret": ""},
@@ -33,14 +37,27 @@ def _normalize_triggers(raw: object | None) -> dict[str, Any]:
         {str(k): v for k, v in cron_raw.items()} if isinstance(cron_raw, dict) else {}
     )
     secret = str(webhook.get("secret") or "").strip()
+    expression = str(cron.get("expression") or "").strip()
+    enabled = bool(cron.get("enabled"))
+    if validate_cron and enabled:
+        from api.services.workflow_cron import validate_cron_expression
+
+        if not expression:
+            raise WorkflowDefinitionError(
+                "cron.expression is required when cron is enabled"
+            )
+        if not validate_cron_expression(expression):
+            raise WorkflowDefinitionError(
+                f"cron.expression is invalid: {expression!r}"
+            )
     return {
         "webhook": {
             "enabled": bool(webhook.get("enabled")),
             "secret": secret,
         },
         "cron": {
-            "enabled": bool(cron.get("enabled")),
-            "expression": str(cron.get("expression") or "").strip(),
+            "enabled": enabled,
+            "expression": expression,
             "last_run_at": float(cron.get("last_run_at") or 0) or 0,
         },
     }
@@ -209,7 +226,7 @@ async def create_workflow_for_actor(
     except WorkflowDefinitionError:
         raise
     now = workflow_store.now_ts()
-    trigger_cfg = _normalize_triggers(triggers)
+    trigger_cfg = _normalize_triggers(triggers, validate_cron=True)
     if trigger_cfg["webhook"]["enabled"] and not trigger_cfg["webhook"]["secret"]:
         trigger_cfg["webhook"]["secret"] = secrets.token_urlsafe(24)
     record = {
@@ -278,12 +295,17 @@ async def update_workflow_for_actor(
     if enabled is not None:
         values["enabled"] = bool(enabled)
     if triggers is not None:
-        trigger_cfg = _normalize_triggers(triggers)
+        trigger_cfg = _normalize_triggers(triggers, validate_cron=True)
         if trigger_cfg["webhook"]["enabled"] and not trigger_cfg["webhook"]["secret"]:
             prev = _normalize_triggers(existing.get("triggers"))
             trigger_cfg["webhook"]["secret"] = (
                 prev["webhook"].get("secret") or secrets.token_urlsafe(24)
             )
+        # Preserve last_run_at from the stored row so UI saves do not reset the
+        # schedule cursor (client often omits or sends 0).
+        prev_cron = _normalize_triggers(existing_row.get("triggers")).get("cron") or {}
+        if float(trigger_cfg["cron"].get("last_run_at") or 0) <= 0:
+            trigger_cfg["cron"]["last_run_at"] = float(prev_cron.get("last_run_at") or 0)
         values["triggers"] = trigger_cfg
     owner = None if has_scope(actor, ADMIN_SCOPE) else actor_id(actor)
     row = await workflow_store.update_workflow(

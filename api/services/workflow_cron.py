@@ -1,4 +1,14 @@
-"""Cron trigger ticker for published workflows."""
+"""Cron trigger poller for published workflows.
+
+Inspired by Agno ``SchedulePoller`` / ``agno.scheduler.cron``:
+
+- poll-first loop with configurable interval
+- cooperative stop with timeout
+- stable schedule-derived idempotency keys
+- claim advances ``last_run_at`` to the **scheduled** fire time so missed
+  occurrences can catch up across ticks (not stuck on wall-clock claim time)
+- cron expression validation via ``croniter.is_valid``
+"""
 
 from __future__ import annotations
 
@@ -12,6 +22,7 @@ from uuid import uuid4
 from croniter import croniter
 from loguru import logger
 
+from api.config import get_settings
 from api.persistence import workflows as workflow_store
 from api.persistence.durable_jobs import JobKind
 from api.services.audit_service import record_audit_event_async
@@ -22,6 +33,23 @@ from api.services.workflow_service import (
     get_published_definition,
 )
 
+# Align with Agno SchedulePoller defaults when callers omit overrides.
+_DEFAULT_POLL_INTERVAL_SEC = 15.0
+_DEFAULT_STOP_TIMEOUT_SEC = 30.0
+# Small grace so clock skew / tick latency does not skip a just-due fire.
+_DUE_GRACE_SEC = 0.5
+
+
+def validate_cron_expression(expression: str) -> bool:
+    """Return True if *expression* is a valid 5-field cron string (Agno-style)."""
+    expr = (expression or "").strip()
+    if not expr:
+        return False
+    try:
+        return bool(croniter.is_valid(expr))
+    except Exception:  # noqa: BLE001 — treat unparseable as invalid
+        return False
+
 
 def next_cron_timestamp(
     expression: str,
@@ -29,9 +57,15 @@ def next_cron_timestamp(
     last_run_at: float = 0,
     now: float | None = None,
 ) -> float | None:
-    """Return next fire unix seconds after max(now, last_run_at), or None if invalid/disabled expr."""
+    """Return next fire unix seconds after max(now, last_run_at), or None if invalid.
+
+    Used for UI projection (``next_cron_at``). Includes a light monotonicity
+    guard so the displayed next fire is not in the past.
+    """
     expr = (expression or "").strip()
-    if not expr:
+    if not expr or not validate_cron_expression(expr):
+        if expr:
+            logger.warning("Invalid cron expression: {!r}", expr)
         return None
     try:
         wall = float(now if now is not None else time.time())
@@ -39,8 +73,11 @@ def next_cron_timestamp(
         base = datetime.fromtimestamp(base_ts, tz=timezone.utc)
         itr = croniter(expr, base)
         nxt = itr.get_next(datetime)
-        return float(nxt.timestamp())
-    except (ValueError, KeyError, TypeError):
+        computed = float(nxt.timestamp())
+        # Agno compute_next_run: never advertise a past fire.
+        minimum = wall + 1.0
+        return max(computed, minimum)
+    except (OverflowError, OSError, ValueError, KeyError, TypeError):
         logger.warning("Invalid cron expression: {!r}", expr)
         return None
 
@@ -48,16 +85,17 @@ def next_cron_timestamp(
 def _cron_due_timestamp(expression: str, last_run_at: float) -> float | None:
     """Return the first scheduled fire after ``last_run_at``.
 
-    The timestamp is also the durable dispatch idempotency boundary.  It must
-    be derived from the schedule, rather than from the wall clock of one API
-    process, so competing scheduler instances construct the same job key.
+    The timestamp is the durable dispatch idempotency boundary.  It must be
+    derived from the schedule (not wall clock) so competing scheduler instances
+    construct the same job key.
     """
     expr = (expression or "").strip()
-    if not expr:
+    if not expr or not validate_cron_expression(expr):
+        if expr:
+            logger.warning("Invalid cron expression: {!r}", expr)
         return None
     try:
-        # Walk from last_run forward; due if next schedule is in the past.
-        base = datetime.fromtimestamp(last_run_at or 0, tz=timezone.utc)
+        base = datetime.fromtimestamp(float(last_run_at or 0), tz=timezone.utc)
         itr = croniter(expr, base)
         nxt = itr.get_next(datetime)
         return float(nxt.timestamp())
@@ -80,11 +118,34 @@ def _system_actor(owner_user_id: str) -> SimpleNamespace:
     )
 
 
-async def tick_workflow_crons(*, limit: int = 200) -> int:
-    """Queue due cron workflows once. Returns the number durably dispatched."""
-    rows = await workflow_store.list_workflows_for_cron(limit=limit)
-    now = time.time()
+async def tick_workflow_crons(
+    *,
+    limit: int | None = None,
+    catchup_max: int | None = None,
+    now: float | None = None,
+) -> int:
+    """Queue due cron workflows. Returns the number of durable dispatches enqueued.
+
+    When a workflow has multiple overdue fires (API was down, poll interval
+    longer than schedule), up to ``catchup_max`` occurrences are claimed per
+    workflow in this tick.  ``last_run_at`` advances to each **scheduled** time
+    so the next occurrence remains discoverable.
+    """
+    settings = get_settings()
+    scan_limit = (
+        int(limit)
+        if limit is not None
+        else int(settings.workflow_cron_tick_limit)
+    )
+    max_catchup = (
+        int(catchup_max)
+        if catchup_max is not None
+        else int(settings.workflow_cron_catchup_max)
+    )
+    wall = float(now if now is not None else time.time())
+    rows = await workflow_store.list_workflows_for_cron(limit=scan_limit)
     started = 0
+
     for row in rows:
         workflow_id = str(row.get("id") or "")
         if not workflow_id:
@@ -96,36 +157,54 @@ async def tick_workflow_crons(*, limit: int = 200) -> int:
         if not cron.get("enabled"):
             continue
         expression = str(cron.get("expression") or "").strip()
-        last_run_at = float(cron.get("last_run_at") or 0)
-        scheduled_at = _cron_due_timestamp(expression, last_run_at)
-        if scheduled_at is None or scheduled_at > now + 0.5:
+        if not validate_cron_expression(expression):
+            logger.warning(
+                "Skip cron {}: invalid expression {!r}",
+                workflow_id,
+                expression,
+            )
             continue
         definition = get_published_definition(row)
         if definition is None:
             logger.debug("Skip cron {}: no published definition", workflow_id)
             continue
-        # Keep the workflow CAS and durable insert in one transaction.  A
-        # queue-write failure must leave this occurrence due for the next tick.
-        claimed = await workflow_store.claim_cron_run_and_enqueue_job(
-            workflow_id,
-            expected_last_run_at=last_run_at,
-            claim_ts=now,
-            kind=JobKind.WORKFLOW_CRON_DISPATCH,
-            payload={
-                "workflow_id": workflow_id,
-                "definition": definition,
-                "owner_user_id": str(row.get("owner_user_id") or "system"),
-                "run_id": str(uuid4()),
-                "session_id": str(uuid4()),
-                "expression": expression,
-                "scheduled_at": scheduled_at,
-            },
-            idempotency_key=_cron_dispatch_key(workflow_id, scheduled_at),
-        )
-        if not claimed:
-            logger.debug("Skip cron {}: lost lease claim", workflow_id)
-            continue
-        started += 1
+
+        last_run_at = float(cron.get("last_run_at") or 0)
+        owner_user_id = str(row.get("owner_user_id") or "system")
+        enqueued_for_wf = 0
+
+        # Catch-up loop: claim consecutive overdue fires (AgentOS-style due scan).
+        while enqueued_for_wf < max_catchup:
+            scheduled_at = _cron_due_timestamp(expression, last_run_at)
+            if scheduled_at is None or scheduled_at > wall + _DUE_GRACE_SEC:
+                break
+            # Keep the workflow CAS and durable insert in one transaction.
+            # Queue-write failure must leave this occurrence due for next tick.
+            # Advance last_run_at to *scheduled_at* (not wall clock) so the next
+            # schedule slot remains the natural successor for catch-up.
+            claimed = await workflow_store.claim_cron_run_and_enqueue_job(
+                workflow_id,
+                expected_last_run_at=last_run_at,
+                claim_ts=scheduled_at,
+                kind=JobKind.WORKFLOW_CRON_DISPATCH,
+                payload={
+                    "workflow_id": workflow_id,
+                    "definition": definition,
+                    "owner_user_id": owner_user_id,
+                    "run_id": str(uuid4()),
+                    "session_id": str(uuid4()),
+                    "expression": expression,
+                    "scheduled_at": scheduled_at,
+                },
+                idempotency_key=_cron_dispatch_key(workflow_id, scheduled_at),
+            )
+            if not claimed:
+                logger.debug("Skip cron {}: lost lease claim", workflow_id)
+                break
+            started += 1
+            enqueued_for_wf += 1
+            last_run_at = scheduled_at
+
     return started
 
 
@@ -215,39 +294,116 @@ async def _run_cron_workflow(
     return terminal
 
 
-_cron_task: asyncio.Task[None] | None = None
+class WorkflowCronPoller:
+    """In-process due-scan loop for workflow cron triggers.
 
+    Mirrors Agno ``SchedulePoller`` lifecycle (start/stop, poll-first, worker id)
+    while dispatching through our durable job queue rather than HTTP endpoints.
+    """
 
-async def start_workflow_cron_scheduler(interval_sec: float = 30.0) -> None:
-    global _cron_task
-    if _cron_task is not None and not _cron_task.done():
-        return
+    def __init__(
+        self,
+        *,
+        poll_interval: float | None = None,
+        stop_timeout: float = _DEFAULT_STOP_TIMEOUT_SEC,
+        worker_id: str | None = None,
+    ) -> None:
+        settings = get_settings()
+        self.poll_interval = float(
+            poll_interval
+            if poll_interval is not None
+            else settings.workflow_cron_poll_interval_sec
+        )
+        self.stop_timeout = float(stop_timeout)
+        self.worker_id = worker_id or f"workflow-cron-{uuid4().hex[:8]}"
+        self._task: asyncio.Task[None] | None = None
+        self._running = False
 
-    async def _loop() -> None:
-        logger.info("Workflow cron scheduler started (interval={}s)", interval_sec)
-        while True:
+    @property
+    def running(self) -> bool:
+        return self._running and self._task is not None and not self._task.done()
+
+    async def start(self) -> None:
+        if self._running and self._task is not None and not self._task.done():
+            return
+        if not get_settings().workflow_cron_enabled:
+            logger.info(
+                "Workflow cron poller disabled (TAIS_WORKFLOW_CRON_ENABLED=false)"
+            )
+            return
+        self._running = True
+        self._task = asyncio.create_task(
+            self._poll_loop(),
+            name="workflow-cron-scheduler",
+        )
+        logger.info(
+            "Workflow cron poller started (worker={}, interval={}s)",
+            self.worker_id,
+            self.poll_interval,
+        )
+
+    async def stop(self) -> None:
+        """Stop the poll loop (AgentOS SchedulePoller-style graceful cancel)."""
+        self._running = False
+        task = self._task
+        self._task = None
+        if task is None:
+            return
+        task.cancel()
+        try:
+            await asyncio.wait_for(task, timeout=self.stop_timeout)
+        except (asyncio.CancelledError, TimeoutError, asyncio.TimeoutError):
+            pass
+        logger.info("Workflow cron poller stopped (worker={})", self.worker_id)
+
+    async def _poll_loop(self) -> None:
+        """Main loop: poll first, then sleep (Agno SchedulePoller)."""
+        while self._running:
             try:
                 n = await tick_workflow_crons()
                 if n:
-                    logger.info("Workflow cron ticker started {} run(s)", n)
+                    logger.info(
+                        "Workflow cron poller ({}) enqueued {} dispatch(es)",
+                        self.worker_id,
+                        n,
+                    )
+                if not self._running:
+                    break
+                await asyncio.sleep(self.poll_interval)
             except asyncio.CancelledError:
-                raise
+                break
             except Exception:
-                logger.exception("Workflow cron tick failed")
-            await asyncio.sleep(interval_sec)
+                logger.exception(
+                    "Workflow cron poll failed (worker={})", self.worker_id
+                )
+                await asyncio.sleep(self.poll_interval)
 
-    _cron_task = asyncio.create_task(_loop(), name="workflow-cron-scheduler")
+
+_poller: WorkflowCronPoller | None = None
+
+
+async def start_workflow_cron_scheduler(
+    interval_sec: float | None = None,
+) -> None:
+    """Start the process-global workflow cron poller (idempotent)."""
+    global _poller
+    if _poller is not None and _poller.running:
+        return
+    _poller = WorkflowCronPoller(
+        poll_interval=(
+            interval_sec
+            if interval_sec is not None
+            else get_settings().workflow_cron_poll_interval_sec
+        )
+        or _DEFAULT_POLL_INTERVAL_SEC
+    )
+    await _poller.start()
 
 
 async def stop_workflow_cron_scheduler() -> None:
-    global _cron_task
-    task = _cron_task
-    _cron_task = None
-    if task is None:
+    global _poller
+    poller = _poller
+    _poller = None
+    if poller is None:
         return
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
-    logger.info("Workflow cron scheduler stopped")
+    await poller.stop()

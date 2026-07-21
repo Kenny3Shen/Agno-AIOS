@@ -180,6 +180,37 @@ class Settings(BaseSettings):
         validation_alias="TAIS_UPLOAD_APPROVAL_DIR",
     )
 
+    # Workflow cron poller (AgentOS SchedulePoller-inspired; in-process ticker).
+    workflow_cron_poll_interval_sec: float = Field(
+        default=15.0,
+        ge=1.0,
+        le=3600.0,
+        validation_alias="TAIS_WORKFLOW_CRON_POLL_INTERVAL_SEC",
+        description="Seconds between workflow cron due-scan ticks (default 15, AgentOS-like).",
+    )
+    workflow_cron_tick_limit: int = Field(
+        default=200,
+        ge=1,
+        le=500,
+        validation_alias="TAIS_WORKFLOW_CRON_TICK_LIMIT",
+        description="Max enabled workflows scanned per cron tick.",
+    )
+    workflow_cron_catchup_max: int = Field(
+        default=3,
+        ge=1,
+        le=50,
+        validation_alias="TAIS_WORKFLOW_CRON_CATCHUP_MAX",
+        description=(
+            "Max overdue cron occurrences to enqueue per workflow per tick "
+            "(claim advances last_run_at to scheduled_at for catch-up)."
+        ),
+    )
+    workflow_cron_enabled: bool = Field(
+        default=True,
+        validation_alias="TAIS_WORKFLOW_CRON_ENABLED",
+        description="When false, API process does not start the in-process cron poller.",
+    )
+
     cve_source_config_path: str = Field(
         default="cve_sources.toml",
         validation_alias="TAIS_CVE_SOURCE_CONFIG_PATH",
