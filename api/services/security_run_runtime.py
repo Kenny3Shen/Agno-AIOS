@@ -78,6 +78,11 @@ from api.services.chat_run_events import (
     team_tasks_payload,
     tool_update,
 )
+from api.services.guardrails import (
+    apply_guardrails_kwargs,
+    guardrail_failure_payload,
+    is_input_check_error,
+)
 
 
 async def _build_model(
@@ -1754,6 +1759,16 @@ class SecurityRunRuntime:
                                 },
                             )
                         break
+                    if is_input_check_error(payload):
+                        detail = guardrail_failure_payload(payload)
+                        yield ChatRunEvent(
+                            "run.failed",
+                            {
+                                "run_id": active_run_id or "",
+                                **detail,
+                            },
+                        )
+                        break
                     raise payload
                 agent_waiter = asyncio.create_task(agent_queue.get(), name="security-run-agent-wait")
                 event = payload
@@ -2498,20 +2513,24 @@ class SecurityRunRuntime:
     ) -> Agent:
         model = await self._build_model(model_id, reasoning_effort, live_search=live_search)
         return self.dependencies.agent_factory(
-            id="security-operations",
-            name="安全防御助手",
-            role="安全防御运营助手",
-            description="无工具模式下的安全防御运营助手。",
-            instructions=[await _load_prompt_async(SAFE_FALLBACK_PROMPT)],
-            model=model,
-            db=self.dependencies.get_db(),
-            update_memory_on_run=memory_enabled,
-            add_memories_to_context=memory_enabled,
-            store_tool_messages=False,
-            enable_session_summaries=True,
-            session_summary_manager=_session_summary_manager(model),
-            add_datetime_to_context=True,
-            markdown=True,
+            **apply_guardrails_kwargs(
+                {
+                    "id": "security-operations",
+                    "name": "安全防御助手",
+                    "role": "安全防御运营助手",
+                    "description": "无工具模式下的安全防御运营助手。",
+                    "instructions": [await _load_prompt_async(SAFE_FALLBACK_PROMPT)],
+                    "model": model,
+                    "db": self.dependencies.get_db(),
+                    "update_memory_on_run": memory_enabled,
+                    "add_memories_to_context": memory_enabled,
+                    "store_tool_messages": False,
+                    "enable_session_summaries": True,
+                    "session_summary_manager": _session_summary_manager(model),
+                    "add_datetime_to_context": True,
+                    "markdown": True,
+                }
+            )
         )
 
     async def _build_security_agent(
@@ -2587,34 +2606,50 @@ class SecurityRunRuntime:
         if agent_id == DEFAULT_AGENT_ID and not surface_active:
             description = "安全运营助手（轻量）：无 MCP/Skills，适合闲聊与概念解答。"
         return self.dependencies.agent_factory(
-            id=agent_id,
-            name=str(profile.get("name") or agent_id),
-            role=str(profile.get("role") or ""),
-            description=description,
-            instructions=[await _load_prompt_async(prompt_name)] if prompt_name else [],
-            model=model,
-            tools=tools,
-            knowledge=knowledge,
-            knowledge_retriever=build_knowledge_retriever(knowledge) if knowledge is not None else None,
-            knowledge_filters={"user_id": request.knowledge_owner_user_id}
-            if request.knowledge_owner_user_id and search_knowledge
-            else None,
-            search_knowledge=search_knowledge,
-            add_search_knowledge_instructions=search_knowledge,
-            skills=skills,
-            db=self.dependencies.get_db(),
-            dependencies=await _run_sync_dependency(_agent_dependencies),
-            add_dependencies_to_context=False,
-            add_history_to_context=add_history,
-            update_memory_on_run=request.memory_enabled,
-            add_memories_to_context=inject_memories,
-            store_tool_messages=request.store_raw_tool_io if surface_active else False,
-            enable_session_summaries=session_summaries,
-            session_summary_manager=_session_summary_manager(model) if session_summaries else None,
-            num_history_runs=history_runs,
-            add_datetime_to_context=add_datetime,
-            tool_call_limit=profile.get("tool_call_limit"),
-            markdown=True,
+            **apply_guardrails_kwargs(
+                {
+                    "id": agent_id,
+                    "name": str(profile.get("name") or agent_id),
+                    "role": str(profile.get("role") or ""),
+                    "description": description,
+                    "instructions": (
+                        [await _load_prompt_async(prompt_name)] if prompt_name else []
+                    ),
+                    "model": model,
+                    "tools": tools,
+                    "knowledge": knowledge,
+                    "knowledge_retriever": (
+                        build_knowledge_retriever(knowledge)
+                        if knowledge is not None
+                        else None
+                    ),
+                    "knowledge_filters": (
+                        {"user_id": request.knowledge_owner_user_id}
+                        if request.knowledge_owner_user_id and search_knowledge
+                        else None
+                    ),
+                    "search_knowledge": search_knowledge,
+                    "add_search_knowledge_instructions": search_knowledge,
+                    "skills": skills,
+                    "db": self.dependencies.get_db(),
+                    "dependencies": await _run_sync_dependency(_agent_dependencies),
+                    "add_dependencies_to_context": False,
+                    "add_history_to_context": add_history,
+                    "update_memory_on_run": request.memory_enabled,
+                    "add_memories_to_context": inject_memories,
+                    "store_tool_messages": (
+                        request.store_raw_tool_io if surface_active else False
+                    ),
+                    "enable_session_summaries": session_summaries,
+                    "session_summary_manager": (
+                        _session_summary_manager(model) if session_summaries else None
+                    ),
+                    "num_history_runs": history_runs,
+                    "add_datetime_to_context": add_datetime,
+                    "tool_call_limit": profile.get("tool_call_limit"),
+                    "markdown": True,
+                }
+            )
         )
 
     @asynccontextmanager

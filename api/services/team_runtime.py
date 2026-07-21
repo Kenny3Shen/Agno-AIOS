@@ -26,6 +26,7 @@ from api.services.agent_tools import (
     profile_uses_analysis_sandbox,
     stage_media_into_analysis_dir,
 )
+from api.services.guardrails import apply_guardrails_kwargs
 from api.services.model_config_service import get_model_for_run
 from api.services.model_factory import build_agno_model
 from api.services.postgres_store import get_async_agno_postgres_db
@@ -203,6 +204,7 @@ async def _member_from_profile(
         if enable_tools and profile.get("builtin_tools")
         else []
     )
+    # Members do not get input guardrails — Team leader pre_hooks cover user input.
     return Agent(
         id=str(profile["id"]),
         name=str(profile["name"]),
@@ -335,57 +337,65 @@ async def build_team(
         ]
 
     team = Team(
-        members=cast(Any, members),
-        id=str(profile["id"]),
-        name=str(profile["name"]),
-        role=str(profile.get("role") or ""),
-        description=str(profile.get("description") or ""),
-        mode=mode,
-        model=model,
-        db=db,
-        markdown=True,
-        instructions=leader_instructions,
-        expected_output=(
-            "结构化 Markdown：先给结论，再列证据/数字与来源；"
-            "route 模式直接呈现专员结果即可。"
-        ),
-        # Coordinate: leader synthesizes; route: member response may surface directly.
-        respond_directly=mode == TeamMode.route,
-        # Route returns the selected member's answer directly, so preserve the
-        # user's original wording instead of paying for a leader rewrite.
-        determine_input_for_members=mode != TeamMode.route,
-        max_iterations=10 if mode == TeamMode.tasks else 8,
-        tool_call_limit=60 if mode == TeamMode.tasks else 48,
-        get_member_information_tool=True,
-        share_member_interactions=mode
-        in {TeamMode.coordinate, TeamMode.broadcast, TeamMode.tasks},
-        show_members_responses=False,
-        stream_member_events=True,
-        store_member_responses=True,
-        store_tool_messages=store_raw_tool_io,
-        add_datetime_to_context=True,
-        add_history_to_context=True,
-        num_history_runs=4,
-        add_team_history_to_members=True,
-        num_team_history_runs=2,
-        add_name_to_context=True,
-        add_member_tools_to_context=False,
-        update_memory_on_run=bool(memory_enabled),
-        add_memories_to_context=bool(memory_enabled),
-        # Multi-turn Team chats benefit from compact session summaries.
-        session_summary_manager=SessionSummaryManager(model=model),
-        add_session_summary_to_context=True,
-        knowledge=knowledge if search_knowledge and enable_tools else None,
-        knowledge_retriever=(
-            build_knowledge_retriever(knowledge)
-            if search_knowledge and enable_tools and knowledge is not None
-            else None
-        ),
-        knowledge_filters=knowledge_filters if search_knowledge and enable_tools else None,
-        search_knowledge=bool(search_knowledge and enable_tools and knowledge is not None),
-        add_search_knowledge_instructions=bool(
-            search_knowledge and enable_tools and knowledge is not None
-        ),
+        **apply_guardrails_kwargs(
+            {
+                "members": cast(Any, members),
+                "id": str(profile["id"]),
+                "name": str(profile["name"]),
+                "role": str(profile.get("role") or ""),
+                "description": str(profile.get("description") or ""),
+                "mode": mode,
+                "model": model,
+                "db": db,
+                "markdown": True,
+                "instructions": leader_instructions,
+                "expected_output": (
+                    "结构化 Markdown：先给结论，再列证据/数字与来源；"
+                    "route 模式直接呈现专员结果即可。"
+                ),
+                # Coordinate: leader synthesizes; route: member response may surface.
+                "respond_directly": mode == TeamMode.route,
+                # Route returns the selected member's answer directly, so preserve the
+                # user's original wording instead of paying for a leader rewrite.
+                "determine_input_for_members": mode != TeamMode.route,
+                "max_iterations": 10 if mode == TeamMode.tasks else 8,
+                "tool_call_limit": 60 if mode == TeamMode.tasks else 48,
+                "get_member_information_tool": True,
+                "share_member_interactions": mode
+                in {TeamMode.coordinate, TeamMode.broadcast, TeamMode.tasks},
+                "show_members_responses": False,
+                "stream_member_events": True,
+                "store_member_responses": True,
+                "store_tool_messages": store_raw_tool_io,
+                "add_datetime_to_context": True,
+                "add_history_to_context": True,
+                "num_history_runs": 4,
+                "add_team_history_to_members": True,
+                "num_team_history_runs": 2,
+                "add_name_to_context": True,
+                "add_member_tools_to_context": False,
+                "update_memory_on_run": bool(memory_enabled),
+                "add_memories_to_context": bool(memory_enabled),
+                # Multi-turn Team chats benefit from compact session summaries.
+                "session_summary_manager": SessionSummaryManager(model=model),
+                "add_session_summary_to_context": True,
+                "knowledge": knowledge if search_knowledge and enable_tools else None,
+                "knowledge_retriever": (
+                    build_knowledge_retriever(knowledge)
+                    if search_knowledge and enable_tools and knowledge is not None
+                    else None
+                ),
+                "knowledge_filters": (
+                    knowledge_filters if search_knowledge and enable_tools else None
+                ),
+                "search_knowledge": bool(
+                    search_knowledge and enable_tools and knowledge is not None
+                ),
+                "add_search_knowledge_instructions": bool(
+                    search_knowledge and enable_tools and knowledge is not None
+                ),
+            }
+        )
     )
     member_list = team.members if isinstance(team.members, list) else []
     logger.info(

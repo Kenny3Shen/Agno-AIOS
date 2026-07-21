@@ -910,18 +910,24 @@ async def _build_agent(
         else None
     )
     tools = build_tools_for_profile(profile) if profile.get("builtin_tools") else []
+    from api.services.guardrails import apply_guardrails_kwargs
+
     return Agent(
-        id=str(meta["id"]),
-        name=str(meta["name"]),
-        role=str(meta["role"]),
-        description=str(meta["description"]),
-        instructions=instruction_parts,
-        model=model,
-        db=get_async_agno_postgres_db(),
-        markdown=True,
-        tools=tools,
-        skills=skills,
-        tool_call_limit=profile.get("tool_call_limit"),
+        **apply_guardrails_kwargs(
+            {
+                "id": str(meta["id"]),
+                "name": str(meta["name"]),
+                "role": str(meta["role"]),
+                "description": str(meta["description"]),
+                "instructions": instruction_parts,
+                "model": model,
+                "db": get_async_agno_postgres_db(),
+                "markdown": True,
+                "tools": tools,
+                "skills": skills,
+                "tool_call_limit": profile.get("tool_call_limit"),
+            }
+        )
     )
 
 

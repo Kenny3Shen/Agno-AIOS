@@ -1,3 +1,9 @@
+## 已完成：Agno 模型输入护栏（PII + Prompt Injection）
+
+- `api/services/guardrails.py`：组装 `PIIDetectionGuardrail` + `PromptInjectionGuardrail`（**不含** OpenAI Moderation）。
+- Chat Agent / Team leader / Workflow step Agent 经 `pre_hooks` 接入；配置 `TAIS_GUARDRAILS_*`。
+- 流式 `InputCheckError` → `run.failed`（`GUARDRAIL_*`，不可重试）。
+
 ## 已完成：Workflow cron 对齐 Agno SchedulePoller
 
 - 进程内 `WorkflowCronPoller`：poll-first、可配置 interval/stop timeout/worker id；配置项 `TAIS_WORKFLOW_CRON_*`。

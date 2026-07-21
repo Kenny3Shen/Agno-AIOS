@@ -211,6 +211,38 @@ class Settings(BaseSettings):
         description="When false, API process does not start the in-process cron poller.",
     )
 
+    # Agno input guardrails (pre_hooks). OpenAI Moderation is intentionally omitted.
+    guardrails_enabled: bool = Field(
+        default=True,
+        validation_alias="TAIS_GUARDRAILS_ENABLED",
+        description="Master switch for Agno pre_hooks on Chat/Team/Workflow agents.",
+    )
+    guardrails_pii_enabled: bool = Field(
+        default=True,
+        validation_alias="TAIS_GUARDRAILS_PII_ENABLED",
+        description="Enable PIIDetectionGuardrail on user input.",
+    )
+    guardrails_pii_mask: bool = Field(
+        default=False,
+        validation_alias="TAIS_GUARDRAILS_PII_MASK",
+        description="When true, mask PII in-place instead of blocking the run.",
+    )
+    guardrails_pii_check_email: bool = Field(
+        default=False,
+        validation_alias="TAIS_GUARDRAILS_PII_CHECK_EMAIL",
+        description="Detect email addresses as PII (often too noisy for SOC chat).",
+    )
+    guardrails_pii_check_phone: bool = Field(
+        default=True,
+        validation_alias="TAIS_GUARDRAILS_PII_CHECK_PHONE",
+        description="Detect phone numbers as PII.",
+    )
+    guardrails_prompt_injection_enabled: bool = Field(
+        default=True,
+        validation_alias="TAIS_GUARDRAILS_PROMPT_INJECTION_ENABLED",
+        description="Enable PromptInjectionGuardrail on user input.",
+    )
+
     cve_source_config_path: str = Field(
         default="cve_sources.toml",
         validation_alias="TAIS_CVE_SOURCE_CONFIG_PATH",
