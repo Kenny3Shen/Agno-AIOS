@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Card, Collapse, Flex, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
+import { App, Button, Card, Collapse, Flex, Form, Input, InputNumber, Modal, Popconfirm, Radio, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
 import { ApiOutlined, CheckCircleOutlined, DeleteOutlined, EditOutlined, PlusOutlined, QuestionCircleOutlined, UndoOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { currentUserQuery } from '@/features/auth'
@@ -24,6 +24,7 @@ import {
   type ChatSettings,
   type GuardrailSettings,
   type KnowledgeRagSettings,
+  type MemoryMode,
   type ModelConfigInput,
   type ModelConfigUpdatePayload,
 } from './api'
@@ -57,6 +58,7 @@ const CHAT_SETTINGS_DEFAULTS: ChatSettings = {
   show_thought_chain: true,
   show_raw_reasoning: false,
   show_raw_tool_io: false,
+  memory_mode: 'automatic',
   memory_enabled: true,
   enable_agentic_memory: false,
   session_summaries_enabled: true,
@@ -74,6 +76,28 @@ const CHAT_SETTINGS_DEFAULTS: ChatSettings = {
   memory_inject_max_chars: 2000,
   memory_inject_window_days: 90,
   memory_inject_dedupe_topics: true,
+}
+
+const memoryModeFromFlags = (enabled: boolean, agentic: boolean): MemoryMode => {
+  if (!enabled) return 'off'
+  if (agentic) return 'agentic'
+  return 'automatic'
+}
+
+const flagsFromMemoryMode = (mode: MemoryMode): Pick<ChatSettings, 'memory_enabled' | 'enable_agentic_memory'> => {
+  if (mode === 'off') return { memory_enabled: false, enable_agentic_memory: false }
+  if (mode === 'agentic') return { memory_enabled: true, enable_agentic_memory: true }
+  return { memory_enabled: true, enable_agentic_memory: false }
+}
+
+const normalizeChatSettings = (raw: Partial<ChatSettings> | undefined): ChatSettings => {
+  const base = { ...CHAT_SETTINGS_DEFAULTS, ...raw }
+  const mode =
+    raw?.memory_mode === 'off' || raw?.memory_mode === 'automatic' || raw?.memory_mode === 'agentic'
+      ? raw.memory_mode
+      : memoryModeFromFlags(Boolean(base.memory_enabled), Boolean(base.enable_agentic_memory))
+  const flags = flagsFromMemoryMode(mode)
+  return { ...base, memory_mode: mode, ...flags }
 }
 
 const GUARDRAIL_SETTINGS_DEFAULTS: GuardrailSettings = {
@@ -539,7 +563,7 @@ export function SettingsPage() {
   }
 
   type ChatField = keyof ChatSettings
-  type ChatControl = 'switch' | 'number' | 'optional_number'
+  type ChatControl = 'switch' | 'number' | 'optional_number' | 'memory_mode'
   type ChatSettingRow = SettingRow & {
     field: ChatField
     control: ChatControl
@@ -589,18 +613,11 @@ export function SettingsPage() {
       description: t('chatGroupMemoryDesc'),
       rows: [
         {
-          key: 'memory_enabled',
-          field: 'memory_enabled',
-          parameter: t('longTermMemory'),
-          description: t('longTermMemoryDesc'),
-          control: 'switch',
-        },
-        {
-          key: 'enable_agentic_memory',
-          field: 'enable_agentic_memory',
-          parameter: t('agenticMemoryLabel'),
-          description: t('agenticMemoryDesc'),
-          control: 'switch',
+          key: 'memory_mode',
+          field: 'memory_mode',
+          parameter: t('memoryModeLabel'),
+          description: t('memoryModeDesc'),
+          control: 'memory_mode',
         },
         {
           key: 'memory_tool_content_enabled',
@@ -745,15 +762,19 @@ export function SettingsPage() {
   const [chatSaving, setChatSaving] = useState(false)
   useEffect(() => {
     if (chatSettings.data) {
-      chatForm.setFieldsValue(chatSettings.data)
+      chatForm.setFieldsValue(normalizeChatSettings(chatSettings.data))
     }
   }, [chatForm, chatSettings.data])
 
   const saveChatRuntime = async (values: ChatSettings) => {
     setChatSaving(true)
     try {
+      const mode = (values.memory_mode ?? 'automatic') as MemoryMode
+      const flags = flagsFromMemoryMode(mode)
       const payload: Partial<ChatSettings> = {
         ...values,
+        memory_mode: mode,
+        ...flags,
         max_tool_calls_from_history:
           values.max_tool_calls_from_history == null || Number(values.max_tool_calls_from_history) <= 0
             ? null
@@ -770,7 +791,7 @@ export function SettingsPage() {
         memory_inject_window_days: Number(values.memory_inject_window_days ?? 90),
       }
       const next = await saveChatSettings(payload)
-      chatForm.setFieldsValue(next)
+      chatForm.setFieldsValue(normalizeChatSettings(next))
       await client.invalidateQueries({ queryKey: ['settings', 'chat'] })
       message.success(t('chatSettingsSaved'))
     } catch (error) {
@@ -822,8 +843,25 @@ export function SettingsPage() {
         {
           title: t('colValue'),
           dataIndex: 'field',
-          width: 180,
+          width: 260,
           render: (_field, row) => {
+            if (row.control === 'memory_mode') {
+              return (
+                <Form.Item name="memory_mode" noStyle>
+                  <Radio.Group
+                    optionType="button"
+                    buttonStyle="solid"
+                    size="small"
+                    aria-label={String(row.field)}
+                    options={[
+                      { value: 'off', label: t('memoryModeOff') },
+                      { value: 'automatic', label: t('memoryModeAutomatic') },
+                      { value: 'agentic', label: t('memoryModeAgentic') },
+                    ]}
+                  />
+                </Form.Item>
+              )
+            }
             if (row.control === 'switch') {
               return (
                 <Form.Item name={row.field} noStyle valuePropName="checked">

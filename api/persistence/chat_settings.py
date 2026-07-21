@@ -17,9 +17,12 @@ from sqlalchemy import (
     select,
     update,
 )
+
 from api.config import get_settings
 from api.persistence.database import get_async_control_plane_engine
 from api.persistence.migrations import ensure_control_plane_schema_current
+
+MEMORY_MODES = frozenset({"off", "automatic", "agentic"})
 
 CHAT_SETTINGS_TABLE = "chat_settings"
 GLOBAL_CHAT_SETTINGS_ID = "global"
@@ -30,6 +33,8 @@ DEFAULT_CHAT_SETTINGS: dict[str, Any] = {
     "show_raw_reasoning": False,
     "show_raw_tool_io": False,
     "show_thought_chain": True,
+    # Unified memory mode (Settings radio). Legacy bools are derived on read/write.
+    "memory_mode": "automatic",
     "memory_enabled": True,
     # Agno: num_history_runs — past runs injected into context (docs recommend 3–5).
     "num_history_runs": 5,
@@ -87,6 +92,32 @@ _INT_KEYS = frozenset(
         "memory_inject_window_days",
     }
 )
+_STR_KEYS = frozenset({"memory_mode"})
+
+
+def normalize_memory_mode(value: object) -> str:
+    mode = str(value or "").strip().lower()
+    if mode in MEMORY_MODES:
+        return mode
+    return "automatic"
+
+
+def memory_flags_from_mode(mode: str) -> tuple[bool, bool]:
+    """Return (memory_enabled, enable_agentic_memory) for a memory_mode value."""
+    normalized = normalize_memory_mode(mode)
+    if normalized == "off":
+        return False, False
+    if normalized == "agentic":
+        return True, True
+    return True, False
+
+
+def memory_mode_from_flags(*, memory_enabled: bool, enable_agentic_memory: bool) -> str:
+    if not memory_enabled:
+        return "off"
+    if enable_agentic_memory:
+        return "agentic"
+    return "automatic"
 
 
 def _app_schema() -> str:
@@ -102,6 +133,12 @@ def chat_settings_table(metadata: MetaData | None = None) -> Table:
         Column("show_raw_tool_io", Boolean, nullable=False, server_default="false"),
         Column("show_thought_chain", Boolean, nullable=False, server_default="true"),
         Column("memory_enabled", Boolean, nullable=False, server_default="true"),
+        Column(
+            "memory_mode",
+            String(16),
+            nullable=False,
+            server_default="automatic",
+        ),
         Column(
             "session_summaries_enabled",
             Boolean,
@@ -203,6 +240,12 @@ def _project_row(row: Mapping[str, Any] | None) -> dict[str, Any]:
         value = row[key]
         if key in _BOOL_KEYS:
             payload[key] = bool(value) if value is not None else DEFAULT_CHAT_SETTINGS[key]
+        elif key in _STR_KEYS:
+            payload[key] = (
+                normalize_memory_mode(value)
+                if key == "memory_mode"
+                else (str(value) if value is not None else DEFAULT_CHAT_SETTINGS[key])
+            )
         elif key in _INT_KEYS:
             if value is None or value == "":
                 # Nullable tool limits use None; required memory prune ints keep defaults.
@@ -219,6 +262,22 @@ def _project_row(row: Mapping[str, Any] | None) -> dict[str, Any]:
                     payload[key] = None
             else:
                 payload[key] = int(value)
+    # Prefer memory_mode when present; keep legacy bools consistent.
+    if "memory_mode" in row and row.get("memory_mode") is not None:
+        mode = normalize_memory_mode(row.get("memory_mode"))
+        enabled, agentic = memory_flags_from_mode(mode)
+        payload["memory_mode"] = mode
+        payload["memory_enabled"] = enabled
+        payload["enable_agentic_memory"] = agentic
+    else:
+        mode = memory_mode_from_flags(
+            memory_enabled=bool(payload["memory_enabled"]),
+            enable_agentic_memory=bool(payload["enable_agentic_memory"]),
+        )
+        payload["memory_mode"] = mode
+        enabled, agentic = memory_flags_from_mode(mode)
+        payload["memory_enabled"] = enabled
+        payload["enable_agentic_memory"] = agentic
     return payload
 
 
@@ -254,6 +313,11 @@ async def update_chat_settings_row(values: Mapping[str, Any]) -> dict[str, Any]:
             continue
         if key in _BOOL_KEYS:
             updates[key] = bool(value)
+        elif key in _STR_KEYS:
+            if key == "memory_mode":
+                updates[key] = normalize_memory_mode(value)
+            else:
+                updates[key] = str(value)
         elif key in _INT_KEYS:
             if value is None or value == "":
                 if key in {
@@ -269,6 +333,28 @@ async def update_chat_settings_row(values: Mapping[str, Any]) -> dict[str, Any]:
                     updates[key] = None
             else:
                 updates[key] = int(value)
+    # memory_mode is source of truth when provided; otherwise reconcile from bools.
+    if "memory_mode" in updates:
+        enabled, agentic = memory_flags_from_mode(str(updates["memory_mode"]))
+        updates["memory_enabled"] = enabled
+        updates["enable_agentic_memory"] = agentic
+    elif "memory_enabled" in updates or "enable_agentic_memory" in updates:
+        enabled = bool(
+            updates.get("memory_enabled", current.get("memory_enabled", True))
+        )
+        agentic = bool(
+            updates.get(
+                "enable_agentic_memory",
+                current.get("enable_agentic_memory", False),
+            )
+        )
+        mode = memory_mode_from_flags(
+            memory_enabled=enabled, enable_agentic_memory=agentic
+        )
+        updates["memory_mode"] = mode
+        enabled, agentic = memory_flags_from_mode(mode)
+        updates["memory_enabled"] = enabled
+        updates["enable_agentic_memory"] = agentic
     if not updates:
         return current
     updates["updated_at"] = int(time())

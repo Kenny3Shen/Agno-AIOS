@@ -90,7 +90,11 @@ describe('model settings editor', () => {
     expect(await screen.findByText('上下文与输出')).toBeTruthy()
     expect(await screen.findByText('工具调用')).toBeTruthy()
     expect(await screen.findByText('安全执行时间线')).toBeTruthy()
-    expect(await screen.findByText('长期记忆')).toBeTruthy()
+    // Unified memory_mode radio replaces dual long-term / agentic switches.
+    expect(await screen.findByText('记忆模式 (memory_mode)')).toBeTruthy()
+    expect(await screen.findByText('关闭')).toBeTruthy()
+    expect(await screen.findByText('自动抽取')).toBeTruthy()
+    expect(await screen.findByText('Agentic')).toBeTruthy()
     expect(screen.queryByText('添加模型')).toBeNull()
   })
 

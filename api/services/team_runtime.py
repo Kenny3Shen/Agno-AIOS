@@ -343,16 +343,25 @@ async def build_team(
     history_runs = max(1, int(chat_settings.num_history_runs or 4))
     use_summaries = bool(chat_settings.session_summaries_enabled)
     # Fail-closed for team leader memory is enforced by the caller (SecurityRunRequest).
-    # Here we only respect the memory_enabled flag + Settings agentic default-off.
-    agentic = bool(chat_settings.enable_agentic_memory) and bool(memory_enabled)
+    # memory_mode is the single source of truth (off / automatic / agentic).
+    memory_mode = str(getattr(chat_settings, "memory_mode", "") or "").strip().lower()
+    if memory_mode not in {"off", "automatic", "agentic"}:
+        memory_mode = (
+            "agentic"
+            if chat_settings.enable_agentic_memory
+            else ("automatic" if memory_enabled else "off")
+        )
+    memory_ok = memory_mode != "off" and bool(memory_enabled)
+    agentic = memory_ok and memory_mode == "agentic"
     memory_manager = (
         await build_memory_manager(
             tool_content_enabled=bool(chat_settings.memory_tool_content_enabled),
             db=db,
             inject_config=chat_settings,
             inject_query=str(inject_query or ""),
+            agent_id=str(profile.get("id") or team_id),
         )
-        if memory_enabled
+        if memory_ok
         else None
     )
     mode_floor = 60 if mode == TeamMode.tasks else 48
@@ -402,8 +411,8 @@ async def build_team(
                 "add_name_to_context": True,
                 "add_member_tools_to_context": False,
                 "memory_manager": memory_manager,
-                "update_memory_on_run": bool(memory_enabled) and not agentic,
-                "add_memories_to_context": bool(memory_enabled),
+                "update_memory_on_run": memory_ok and not agentic,
+                "add_memories_to_context": memory_ok,
                 "enable_agentic_memory": agentic,
                 "session_summary_manager": (
                     SessionSummaryManager(model=model) if use_summaries else None

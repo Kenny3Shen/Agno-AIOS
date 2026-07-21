@@ -8,6 +8,16 @@
 - Chat / 模型护栏 / 知识库检索：保存旁增加「全部恢复默认」；每行增加单项恢复按钮（立即 PATCH）。
 - 知识库检索 Table 全宽铺满设置卡片（去掉 max-width 限制）。
 
+## 已完成：Memory P1 行为质量（capture / SOC / 三态 mode）
+
+- 全局 `memory_capture_instructions`：只记偏好、职责、长期事实；禁记一次性任务与临时 IP/告警。
+- `security-operations`：SOC 附录 + agentic 时附加 instructions；工具二次抽取对 SOC 直接跳过（IOE 不进 user memory）。
+- Settings 单选 `memory_mode`：`off` / `automatic` / `agentic`（Alembic `20260721_0010`）；`memory_enabled` / `enable_agentic_memory` 派生。
+
+相关：`memory_capture.py` / `memory_manager_service.py` / Settings Radio
+
+---
+
 ## 已完成：Memory P1 注入侧筛选
 
 - 在 Agno `get_user_memories` 路径上拦截：时间窗 → 打分（0.4 新近度 + 0.35 关键词 + 0.15 topics + 0.1 质量）→ topic 去重 → Top-k → 字符预算。

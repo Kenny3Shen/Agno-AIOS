@@ -40,6 +40,8 @@ class ChatSettingsUpdate(BaseModel):
     show_raw_tool_io: bool | None = None
     show_thought_chain: bool | None = None
     memory_enabled: bool | None = None
+    # Preferred: single radio (off | automatic | agentic). Legacy bools still accepted.
+    memory_mode: str | None = None
     # Agno runtime knobs (history / session summary / tools / memory mode)
     num_history_runs: int | None = None
     session_summaries_enabled: bool | None = None

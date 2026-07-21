@@ -38,6 +38,12 @@
   margin-bottom: 12px !important;
 }
 
+.settings-chat-panel .ant-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+}
+
 .settings-param-panel .ant-table-wrapper,
 .settings-param-panel .ant-table {
   width: 100%;

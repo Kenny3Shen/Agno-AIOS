@@ -6,6 +6,9 @@ from typing import Any, Mapping
 from api.persistence.chat_settings import (
     DEFAULT_CHAT_SETTINGS,
     get_chat_settings_row,
+    memory_flags_from_mode,
+    memory_mode_from_flags,
+    normalize_memory_mode,
     update_chat_settings_row,
 )
 from api.utils.ttl_cache import TtlCache
@@ -13,12 +16,15 @@ from api.utils.ttl_cache import TtlCache
 # Short-lived process cache for hot chat paths; cleared on update.
 _SETTINGS_CACHE: TtlCache[dict[str, Any]] = TtlCache(ttl_sec=5.0)
 
+MemoryMode = str  # "off" | "automatic" | "agentic"
+
 
 @dataclass(frozen=True)
 class ChatSettings:
     show_raw_reasoning: bool = False
     show_raw_tool_io: bool = False
     show_thought_chain: bool = True
+    memory_mode: str = "automatic"
     memory_enabled: bool = True
     num_history_runs: int = 5
     session_summaries_enabled: bool = True
@@ -118,6 +124,10 @@ def _project_settings(row: Mapping[str, object]) -> dict[str, Any]:
             "memory_inject_dedupe_topics",
         }:
             payload[key] = bool(raw if raw is not None else default)
+        elif key == "memory_mode":
+            payload[key] = normalize_memory_mode(
+                raw if raw is not None else default
+            )
         elif key == "num_history_runs":
             payload[key] = _clamp_history_runs(
                 raw if raw is not None else default
@@ -144,6 +154,22 @@ def _project_settings(row: Mapping[str, object]) -> dict[str, Any]:
             )
         else:
             payload[key] = _optional_positive_int(raw)
+    # Keep mode and legacy bools aligned (mode wins when both present).
+    if "memory_mode" in row or "memory_mode" in payload:
+        mode = normalize_memory_mode(payload.get("memory_mode"))
+        enabled, agentic = memory_flags_from_mode(mode)
+        payload["memory_mode"] = mode
+        payload["memory_enabled"] = enabled
+        payload["enable_agentic_memory"] = agentic
+    else:
+        mode = memory_mode_from_flags(
+            memory_enabled=bool(payload.get("memory_enabled", True)),
+            enable_agentic_memory=bool(payload.get("enable_agentic_memory", False)),
+        )
+        payload["memory_mode"] = mode
+        enabled, agentic = memory_flags_from_mode(mode)
+        payload["memory_enabled"] = enabled
+        payload["enable_agentic_memory"] = agentic
     return payload
 
 
@@ -159,17 +185,20 @@ async def get_chat_settings() -> dict[str, Any]:
 
 async def get_chat_settings_async() -> ChatSettings:
     values = await get_chat_settings()
+    mode = normalize_memory_mode(values.get("memory_mode"))
+    enabled, agentic = memory_flags_from_mode(mode)
     return ChatSettings(
         show_raw_reasoning=bool(values["show_raw_reasoning"]),
         show_raw_tool_io=bool(values["show_raw_tool_io"]),
         show_thought_chain=bool(values["show_thought_chain"]),
-        memory_enabled=bool(values["memory_enabled"]),
+        memory_mode=mode,
+        memory_enabled=enabled,
         num_history_runs=int(values["num_history_runs"]),
         session_summaries_enabled=bool(values["session_summaries_enabled"]),
         add_datetime_to_context=bool(values["add_datetime_to_context"]),
         max_tool_calls_from_history=values.get("max_tool_calls_from_history"),
         default_tool_call_limit=values.get("default_tool_call_limit"),
-        enable_agentic_memory=bool(values["enable_agentic_memory"]),
+        enable_agentic_memory=agentic,
         markdown=bool(values["markdown"]),
         memory_tool_content_enabled=bool(values["memory_tool_content_enabled"]),
         memory_prune_enabled=bool(values["memory_prune_enabled"]),
@@ -204,6 +233,8 @@ async def update_chat_settings(values: Mapping[str, Any]) -> dict[str, Any]:
             "memory_inject_dedupe_topics",
         }:
             allowed[key] = bool(raw)
+        elif key == "memory_mode":
+            allowed[key] = normalize_memory_mode(raw)
         elif key == "num_history_runs":
             allowed[key] = _clamp_history_runs(raw)
         elif key == "memory_prune_retention_days":
@@ -218,6 +249,24 @@ async def update_chat_settings(values: Mapping[str, Any]) -> dict[str, Any]:
             allowed[key] = _clamp_inject_window_days(raw)
         elif key in {"max_tool_calls_from_history", "default_tool_call_limit"}:
             allowed[key] = _optional_positive_int(raw)
+    # Prefer explicit memory_mode over dual switches when both are sent.
+    if "memory_mode" in allowed:
+        enabled, agentic = memory_flags_from_mode(str(allowed["memory_mode"]))
+        allowed["memory_enabled"] = enabled
+        allowed["enable_agentic_memory"] = agentic
+    elif "memory_enabled" in allowed or "enable_agentic_memory" in allowed:
+        current = await get_chat_settings()
+        enabled = bool(allowed.get("memory_enabled", current["memory_enabled"]))
+        agentic = bool(
+            allowed.get("enable_agentic_memory", current["enable_agentic_memory"])
+        )
+        mode = memory_mode_from_flags(
+            memory_enabled=enabled, enable_agentic_memory=agentic
+        )
+        allowed["memory_mode"] = mode
+        enabled, agentic = memory_flags_from_mode(mode)
+        allowed["memory_enabled"] = enabled
+        allowed["enable_agentic_memory"] = agentic
     if not allowed:
         return await get_chat_settings()
     row = await update_chat_settings_row(allowed)

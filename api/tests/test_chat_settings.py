@@ -26,6 +26,7 @@ async def test_read_chat_settings_returns_persisted_defaults() -> None:
         "show_raw_reasoning": False,
         "show_raw_tool_io": False,
         "show_thought_chain": True,
+        "memory_mode": "automatic",
         "memory_enabled": True,
         "num_history_runs": 5,
         "session_summaries_enabled": True,
@@ -55,6 +56,7 @@ async def test_patch_chat_settings_updates_only_submitted_values_and_audits() ->
         "show_raw_reasoning": True,
         "show_raw_tool_io": False,
         "show_thought_chain": True,
+        "memory_mode": "automatic",
         "memory_enabled": True,
         "num_history_runs": 3,
         "session_summaries_enabled": True,
@@ -100,7 +102,9 @@ async def test_chat_settings_service_applies_defaults_for_missing_columns() -> N
     assert result["show_raw_reasoning"] is False
     assert result["show_raw_tool_io"] is False
     assert result["show_thought_chain"] is True
+    assert result["memory_mode"] == "automatic"
     assert result["memory_enabled"] is True
+    assert result["enable_agentic_memory"] is False
     assert result["num_history_runs"] == 5
     assert result["session_summaries_enabled"] is True
     assert result["markdown"] is True
@@ -114,6 +118,63 @@ async def test_chat_settings_service_applies_defaults_for_missing_columns() -> N
     assert result["memory_inject_max_chars"] == 2000
     assert result["memory_inject_window_days"] == 90
     assert result["memory_inject_dedupe_topics"] is True
+
+
+@pytest.mark.asyncio
+async def test_update_memory_mode_sets_derived_bools() -> None:
+    with (
+        patch.object(
+            chat_settings_service,
+            "get_chat_settings_row",
+            new=AsyncMock(
+                return_value={
+                    "memory_mode": "automatic",
+                    "memory_enabled": True,
+                    "enable_agentic_memory": False,
+                }
+            ),
+        ),
+        patch.object(
+            chat_settings_service,
+            "update_chat_settings_row",
+            new=AsyncMock(
+                side_effect=lambda values: {
+                    "memory_mode": values.get("memory_mode", "automatic"),
+                    "memory_enabled": values.get("memory_enabled", True),
+                    "enable_agentic_memory": values.get("enable_agentic_memory", False),
+                    "show_raw_reasoning": False,
+                    "show_raw_tool_io": False,
+                    "show_thought_chain": True,
+                    "num_history_runs": 5,
+                    "session_summaries_enabled": True,
+                    "add_datetime_to_context": True,
+                    "max_tool_calls_from_history": None,
+                    "default_tool_call_limit": None,
+                    "markdown": True,
+                    "memory_tool_content_enabled": False,
+                    "memory_prune_enabled": True,
+                    "memory_prune_retention_days": 90,
+                    "memory_prune_top_k": 50,
+                    "memory_inject_enabled": True,
+                    "memory_inject_top_k": 12,
+                    "memory_inject_max_chars": 2000,
+                    "memory_inject_window_days": 90,
+                    "memory_inject_dedupe_topics": True,
+                }
+            ),
+        ) as update_row,
+    ):
+        result = await chat_settings_service.update_chat_settings(
+            {"memory_mode": "agentic"}
+        )
+    assert result["memory_mode"] == "agentic"
+    assert result["memory_enabled"] is True
+    assert result["enable_agentic_memory"] is True
+    update_row.assert_awaited_once()
+    sent = update_row.await_args.args[0]
+    assert sent["memory_mode"] == "agentic"
+    assert sent["memory_enabled"] is True
+    assert sent["enable_agentic_memory"] is True
 
 
 @pytest.fixture(autouse=True)

@@ -282,7 +282,8 @@ async def _start_chat_stream(
         knowledge_owner_user_id=None
         if has_scope(user, ADMIN_SCOPE)
         else actor_id(user),
-        memory_enabled=chat_settings["memory_enabled"],
+        memory_enabled=bool(chat_settings.get("memory_enabled", True))
+        and str(chat_settings.get("memory_mode") or "automatic") != "off",
         store_raw_tool_io=chat_settings["show_raw_tool_io"],
         search_knowledge=search_knowledge,
         live_search=live_search,

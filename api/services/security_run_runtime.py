@@ -72,6 +72,7 @@ from api.services.chat_settings_service import (
     get_chat_settings_async,
     resolve_tool_call_limit,
 )
+from api.services.memory_capture import soc_memory_agent_instructions
 from api.services.memory_manager_service import (
     build_memory_manager,
     capture_tool_content_memories,
@@ -2548,21 +2549,36 @@ class SecurityRunRuntime:
         use_summaries = bool(chat_settings.session_summaries_enabled)
         # Fail-closed: never write/read long-term memory under anonymous/default.
         memory_owner = (user_id or "").strip()
-        memory_ok = bool(memory_enabled) and bool(memory_owner) and memory_owner not in {
-            "anonymous",
-            "default",
-        }
-        agentic = bool(chat_settings.enable_agentic_memory) and memory_ok
+        memory_mode = str(getattr(chat_settings, "memory_mode", "") or "").strip().lower()
+        if memory_mode not in {"off", "automatic", "agentic"}:
+            memory_mode = (
+                "agentic"
+                if chat_settings.enable_agentic_memory
+                else ("automatic" if memory_enabled else "off")
+            )
+        memory_ok = (
+            memory_mode != "off"
+            and bool(memory_enabled)
+            and bool(memory_owner)
+            and memory_owner not in {"anonymous", "default"}
+        )
+        agentic = memory_ok and memory_mode == "agentic"
         memory_manager = (
             await build_memory_manager(
                 tool_content_enabled=bool(chat_settings.memory_tool_content_enabled),
                 db=self.dependencies.get_db(),
                 inject_config=chat_settings,
                 inject_query="",
+                agent_id=DEFAULT_AGENT_ID,
             )
             if memory_ok
             else None
         )
+        fallback_instructions = [await _load_prompt_async(SAFE_FALLBACK_PROMPT)]
+        if agentic:
+            fallback_instructions.extend(
+                soc_memory_agent_instructions(DEFAULT_AGENT_ID)
+            )
         return self.dependencies.agent_factory(
             **apply_guardrails_kwargs(
                 {
@@ -2570,7 +2586,7 @@ class SecurityRunRuntime:
                     "name": "安全防御助手",
                     "role": "安全防御运营助手",
                     "description": "无工具模式下的安全防御运营助手。",
-                    "instructions": [await _load_prompt_async(SAFE_FALLBACK_PROMPT)],
+                    "instructions": fallback_instructions,
                     "model": model,
                     "db": self.dependencies.get_db(),
                     "memory_manager": memory_manager,
@@ -2669,21 +2685,34 @@ class SecurityRunRuntime:
             chat_settings.session_summaries_enabled
         )
         # Fail-closed: real user_id required before any long-term memory I/O.
+        # memory_mode is the single source of truth (off / automatic / agentic).
         memory_owner = request.memory_user_id
-        memory_ok = bool(request.memory_enabled) and memory_owner is not None
+        memory_mode = str(getattr(chat_settings, "memory_mode", "") or "").strip().lower()
+        if memory_mode not in {"off", "automatic", "agentic"}:
+            memory_mode = (
+                "agentic"
+                if chat_settings.enable_agentic_memory
+                else ("automatic" if request.memory_enabled else "off")
+            )
+        memory_ok = (
+            memory_mode != "off"
+            and bool(request.memory_enabled)
+            and memory_owner is not None
+        )
         if bool(request.memory_enabled) and memory_owner is None:
             logger.warning(
                 "memory fail-closed: missing user_id agent_id={}",
                 agent_id,
             )
         inject_memories = memory_ok and surface_active
-        agentic = bool(chat_settings.enable_agentic_memory) and memory_ok
+        agentic = memory_ok and memory_mode == "agentic"
         memory_manager = (
             await build_memory_manager(
                 tool_content_enabled=bool(chat_settings.memory_tool_content_enabled),
                 db=self.dependencies.get_db(),
                 inject_config=chat_settings,
                 inject_query=str(request.message or ""),
+                agent_id=agent_id,
             )
             if memory_ok
             else None
@@ -2694,6 +2723,11 @@ class SecurityRunRuntime:
         description = str(profile.get("description") or profile.get("name") or agent_id)
         if agent_id == DEFAULT_AGENT_ID and not surface_active:
             description = "安全运营助手（轻量）：无 MCP/Skills，适合闲聊与概念解答。"
+        agent_instructions: list[str] = (
+            [await _load_prompt_async(prompt_name)] if prompt_name else []
+        )
+        if agentic:
+            agent_instructions.extend(soc_memory_agent_instructions(agent_id))
         return self.dependencies.agent_factory(
             **apply_guardrails_kwargs(
                 {
@@ -2701,9 +2735,7 @@ class SecurityRunRuntime:
                     "name": str(profile.get("name") or agent_id),
                     "role": str(profile.get("role") or ""),
                     "description": description,
-                    "instructions": (
-                        [await _load_prompt_async(prompt_name)] if prompt_name else []
-                    ),
+                    "instructions": agent_instructions,
                     "model": model,
                     "tools": tools,
                     "knowledge": knowledge,

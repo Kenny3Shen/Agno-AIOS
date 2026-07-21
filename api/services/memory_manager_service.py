@@ -1,9 +1,10 @@
 """Build a cheap Agno MemoryManager shared by Chat / Team runtimes.
 
-P0 goals:
+P0/P1 goals:
 - Prefer a lower-cost model for memory extraction (not the chat leader model).
-- Optional tool-content capture via ``memory_capture_instructions``.
-- Agentic memory stays default-off; delete/clear tools stay off for safety.
+- Strict capture instructions (preferences only; SOC IOE blocked).
+- Optional tool-content capture + inject-side ranking filter.
+- Agentic memory is Settings-gated via memory_mode (not dual switches).
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from typing import Any
 from agno.memory import MemoryManager
 from loguru import logger
 
+from api.services.memory_capture import memory_capture_instructions
 from api.services.model_config_service import get_model_for_run, load_model_config_store
 from api.services.model_factory import build_agno_model
 from api.services.postgres_store import get_async_agno_postgres_db
@@ -25,39 +27,6 @@ _CHEAP_MODEL_PREFERENCE: tuple[str, ...] = (
     "lite",
     "haiku",
 )
-
-_CAPTURE_WITHOUT_TOOLS = """\
-Memories should capture durable personal or operational preferences about the user, such as:
-- Role, team, preferred language, escalation contacts
-- Stable workflow preferences (report format, severity thresholds)
-- Significant goals or constraints the user explicitly stated in conversation
-
-Do NOT store:
-- Raw tool outputs, MCP payloads, CVE dumps, IP blacklists, or log excerpts
-- One-off investigation artifacts (single IPs, temporary case numbers) unless the user
-  explicitly asked to remember them
-- Secrets, tokens, passwords, webhook URLs, or full message histories
-- Casual chatter or temporary states
-"""
-
-_CAPTURE_WITH_TOOLS = """\
-Memories should capture durable facts about the user and their environment, including:
-- Personal / operational preferences stated in conversation
-- Stable facts the user confirmed after tool use (e.g. preferred containment playbook,
-  recurring asset ownership, standing allow/block policies)
-- High-signal tool findings the user asked to retain for future sessions
-
-When tool results are provided, extract only durable, third-person statements.
-Do NOT store:
-- Full raw tool dumps, multi-page CVE feeds, bulk IP lists, or entire log files
-- Secrets, tokens, passwords, or webhook URLs
-- Transient run noise (retry counts, stream status, one-off timestamps)
-"""
-
-
-def memory_capture_instructions(*, tool_content_enabled: bool) -> str:
-    """Return MemoryManager capture criteria for the current Settings flag."""
-    return _CAPTURE_WITH_TOOLS if tool_content_enabled else _CAPTURE_WITHOUT_TOOLS
 
 
 async def resolve_memory_manager_model_config(
@@ -101,8 +70,9 @@ async def build_memory_manager(
     db: Any | None = None,
     inject_config: Any | None = None,
     inject_query: str = "",
+    agent_id: str | None = None,
 ) -> MemoryManager:
-    """Construct a MemoryManager with a cheap model and P0-safe tool flags.
+    """Construct a MemoryManager with a cheap model and P0/P1-safe tool flags.
 
     When *inject_config* enables inject-side ranking, returns a thin subclass
     that filters ``get_user_memories`` / ``aget_user_memories`` (Agno injects
@@ -115,7 +85,8 @@ async def build_memory_manager(
         "model": model,
         "db": database,
         "memory_capture_instructions": memory_capture_instructions(
-            tool_content_enabled=tool_content_enabled
+            tool_content_enabled=tool_content_enabled,
+            agent_id=agent_id,
         ),
         # Safety: agentic / automatic managers must not wipe or free-delete.
         "delete_memories": False,
@@ -173,6 +144,15 @@ async def capture_tool_content_memories(
     if not owner or owner in {"anonymous", "default"}:
         logger.warning("skip tool-content memory write: fail-closed missing user_id")
         return
+    from api.services.memory_capture import is_soc_memory_profile
+
+    if is_soc_memory_profile(agent_id):
+        # SOC: never second-pass tool dumps into user memory (IOE / IOC risk).
+        logger.info(
+            "skip tool-content memory write for SOC agent_id={}",
+            agent_id,
+        )
+        return
     messages_payload: list[str] = []
     for raw in tool_summaries:
         text = str(raw or "").strip()
@@ -191,7 +171,8 @@ async def capture_tool_content_memories(
             role="user",
             content=(
                 "The following tool results were observed in this run. "
-                "Extract durable memories only if warranted:\n\n"
+                "Extract durable user preferences only if warranted; "
+                "do not store one-off investigation artifacts:\n\n"
                 + "\n---\n".join(messages_payload)
             ),
         )
