@@ -61,6 +61,28 @@ def test_score_prefers_keyword_overlap() -> None:
     assert relevant > unrelated
 
 
+def test_score_has_no_quality_length_bias_without_query() -> None:
+    """Without a query, ranking is recency-only (no content-length quality term)."""
+    now = datetime(2026, 7, 21, 12, 0, tzinfo=UTC)
+    short = score_memory_for_inject(
+        _mem("s", "ok", days_ago=1, now=now),
+        query_tokens=frozenset(),
+        now=now,
+    )
+    long = score_memory_for_inject(
+        _mem(
+            "l",
+            "User is a SOC analyst who prefers Chinese language incident reports "
+            "and high severity first triage.",
+            days_ago=1,
+            now=now,
+        ),
+        query_tokens=frozenset(),
+        now=now,
+    )
+    assert abs(short - long) < 1e-9
+
+
 def test_select_respects_top_k_and_window() -> None:
     now = datetime(2026, 7, 21, 12, 0, tzinfo=UTC)
     rows = [

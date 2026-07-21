@@ -6,10 +6,9 @@ formula and returns a capped subset.
 
 Score (higher is better, each component in [0, 1]):
 
-    score = 0.40 * recency
-          + 0.35 * keyword
+    score = 0.45 * recency
+          + 0.40 * keyword
           + 0.15 * topic
-          + 0.10 * quality
 
 Then:
 1. Drop rows outside the time window (``window_days``; 0 = disabled).
@@ -29,10 +28,9 @@ from typing import Any, Sequence
 from loguru import logger
 
 # Weight vector — fixed product defaults (Settings expose operational caps only).
-W_RECENCY = 0.40
-W_KEYWORD = 0.35
+W_RECENCY = 0.45
+W_KEYWORD = 0.40
 W_TOPIC = 0.15
-W_QUALITY = 0.10
 
 # Latin tokens ≥2 chars; CJK runs ≥1 char; digits/IP-ish tokens kept when ≥2.
 _TOKEN_RE = re.compile(
@@ -212,7 +210,7 @@ def score_memory_for_inject(
     topic_tokens = tokenize_for_memory_match(" ".join(topics))
 
     if not query_tokens:
-        # No query → pure recency + quality (last_n-like with quality prior).
+        # No query → pure recency (last_n-like).
         keyword = 0.0
         topic = 0.0
     else:
@@ -231,20 +229,7 @@ def score_memory_for_inject(
                     topic = max(topic, 0.6)
                     break
 
-    length = len(text.strip())
-    if length <= 0:
-        quality = 0.0
-    elif length < 12:
-        quality = 0.2
-    else:
-        quality = min(1.0, length / 280.0)
-
-    return (
-        W_RECENCY * recency
-        + W_KEYWORD * keyword
-        + W_TOPIC * topic
-        + W_QUALITY * quality
-    )
+    return W_RECENCY * recency + W_KEYWORD * keyword + W_TOPIC * topic
 
 
 def select_memories_for_inject(
@@ -322,7 +307,6 @@ def select_memories_for_inject(
 __all__ = [
     "MemoryInjectConfig",
     "W_KEYWORD",
-    "W_QUALITY",
     "W_RECENCY",
     "W_TOPIC",
     "memory_inject_config_from_settings",

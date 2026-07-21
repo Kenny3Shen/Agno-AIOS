@@ -29,7 +29,7 @@
 
 ## 已完成：Memory P1 注入侧筛选
 
-- 在 Agno `get_user_memories` 路径上拦截：时间窗 → 打分（0.4 新近度 + 0.35 关键词 + 0.15 topics + 0.1 质量）→ topic 去重 → Top-k。
+- 在 Agno `get_user_memories` 路径上拦截：时间窗 → 打分（0.45 新近度 + 0.40 关键词 + 0.15 topics）→ topic 去重 → Top-k。
 - Settings「记忆」Tab：`memory_inject_enabled` / `top_k` / `window_days` / `dedupe_topics`（Alembic `20260721_0009`，后去掉 max_chars）。
 - Chat/Team 构建 `MemoryManager` 时传入本轮 `message` 作 keyword query。
 
