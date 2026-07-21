@@ -26,6 +26,7 @@ from api.persistence.cves import cves_table
 from api.persistence.durable_jobs import durable_jobs_table
 from api.persistence.ip_blacklist import ip_blacklist_table
 from api.persistence.knowledge_sources import knowledge_sources_table
+from api.persistence.guardrail_settings import guardrail_settings_table
 from api.persistence.knowledge_rag_settings import knowledge_rag_settings_table
 from api.persistence.mcp import (
     mcp_component_overrides_table,
@@ -75,6 +76,7 @@ def control_plane_metadata() -> MetaData:
         durable_jobs_table(),
         knowledge_sources_table(),
         knowledge_rag_settings_table(),
+        guardrail_settings_table(),
         model_configs_table(),
         notifications_table(),
         upload_approvals_table(),

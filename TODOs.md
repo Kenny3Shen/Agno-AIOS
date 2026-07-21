@@ -3,6 +3,7 @@
 - `api/services/guardrails.py`：组装 `PIIDetectionGuardrail` + `PromptInjectionGuardrail`（**不含** OpenAI Moderation）。
 - Chat Agent / Team leader / Workflow step Agent 经 `pre_hooks` 接入；配置 `TAIS_GUARDRAILS_*`。
 - 流式 `InputCheckError` → `run.failed`（`GUARDRAIL_*`，不可重试）。
+- Settings「模型护栏」Tab + `GET/PATCH /api/settings/guardrails` + 表 `guardrail_settings`（`20260721_0006`）；DB 覆盖 env 默认并 5s 进程缓存。
 
 ## 已完成：Workflow cron 对齐 Agno SchedulePoller
 

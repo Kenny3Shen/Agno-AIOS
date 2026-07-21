@@ -88,6 +88,21 @@ export const getKnowledgeRagSettings = () =>
 export const saveKnowledgeRagSettings = (payload: Partial<KnowledgeRagSettings>) =>
   requestJson<KnowledgeRagSettings>('/settings/knowledge', jsonInit('PATCH', payload))
 
+/** Global Agno input guardrails (no OpenAI Moderation). */
+export interface GuardrailSettings {
+  enabled: boolean
+  pii_enabled: boolean
+  pii_mask: boolean
+  pii_check_email: boolean
+  pii_check_phone: boolean
+  prompt_injection_enabled: boolean
+}
+
+export const getGuardrailSettings = () =>
+  requestJson<GuardrailSettings>('/settings/guardrails')
+export const saveGuardrailSettings = (payload: Partial<GuardrailSettings>) =>
+  requestJson<GuardrailSettings>('/settings/guardrails', jsonInit('PATCH', payload))
+
 export const listRolePresets = async () => (await requestJson<{ data: RolePreset[] }>('/auth/roles')).data
 
 export const listAdminUsers = async (page = 1, limit = 50): Promise<AdminUserListResult> => {

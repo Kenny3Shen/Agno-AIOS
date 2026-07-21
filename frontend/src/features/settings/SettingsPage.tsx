@@ -7,12 +7,14 @@ import { currentUserQuery } from '@/features/auth'
 import { roleOf } from '@/shared/auth/permissions'
 import {
   getChatSettings,
+  getGuardrailSettings,
   getKnowledgeRagSettings,
   getModels,
   getNotificationSettings,
   listAdminUsers,
   listRolePresets,
   saveChatSettings,
+  saveGuardrailSettings,
   saveKnowledgeRagSettings,
   saveModels,
   saveNotificationSettings,
@@ -20,6 +22,7 @@ import {
   setUserRole,
   testModel,
   type ChatSettings,
+  type GuardrailSettings,
   type KnowledgeRagSettings,
   type ModelConfigInput,
   type ModelConfigUpdatePayload,
@@ -75,6 +78,18 @@ export function SettingsPage() {
       knowledgeForm.setFieldsValue(knowledgeRagSettings.data)
     }
   }, [knowledgeForm, knowledgeRagSettings.data])
+  const guardrailSettings = useQuery({
+    queryKey: ['settings', 'guardrails'],
+    queryFn: getGuardrailSettings,
+    enabled: isAdmin && activeTab === 'guardrails',
+  })
+  const [guardrailForm] = Form.useForm<GuardrailSettings>()
+  const [guardrailSaving, setGuardrailSaving] = useState(false)
+  useEffect(() => {
+    if (guardrailSettings.data) {
+      guardrailForm.setFieldsValue(guardrailSettings.data)
+    }
+  }, [guardrailForm, guardrailSettings.data])
   const usersQuery = useQuery({
     queryKey: ['settings', 'admin-users'],
     queryFn: () => listAdminUsers(1, 100),
@@ -178,6 +193,20 @@ export function SettingsPage() {
       message.error(error instanceof Error ? error.message : t('knowledgeRagSaveFailed'))
     } finally {
       setKnowledgeSaving(false)
+    }
+  }
+
+  const saveGuardrails = async (values: GuardrailSettings) => {
+    setGuardrailSaving(true)
+    try {
+      const next = await saveGuardrailSettings(values)
+      guardrailForm.setFieldsValue(next)
+      await client.invalidateQueries({ queryKey: ['settings', 'guardrails'] })
+      message.success(t('guardrailsSaved'))
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('guardrailsSaveFailed'))
+    } finally {
+      setGuardrailSaving(false)
     }
   }
 
@@ -654,6 +683,111 @@ export function SettingsPage() {
     },
   ]
 
+  type GuardrailField = keyof GuardrailSettings
+  const guardrailSettingRows: Array<{
+    key: GuardrailField
+    field: GuardrailField
+    parameter: string
+    description: string
+  }> = [
+    {
+      key: 'enabled',
+      field: 'enabled',
+      parameter: t('guardrailsEnabledLabel'),
+      description: t('guardrailsEnabledDesc'),
+    },
+    {
+      key: 'pii_enabled',
+      field: 'pii_enabled',
+      parameter: t('guardrailsPiiEnabledLabel'),
+      description: t('guardrailsPiiEnabledDesc'),
+    },
+    {
+      key: 'pii_mask',
+      field: 'pii_mask',
+      parameter: t('guardrailsPiiMaskLabel'),
+      description: t('guardrailsPiiMaskDesc'),
+    },
+    {
+      key: 'pii_check_email',
+      field: 'pii_check_email',
+      parameter: t('guardrailsPiiEmailLabel'),
+      description: t('guardrailsPiiEmailDesc'),
+    },
+    {
+      key: 'pii_check_phone',
+      field: 'pii_check_phone',
+      parameter: t('guardrailsPiiPhoneLabel'),
+      description: t('guardrailsPiiPhoneDesc'),
+    },
+    {
+      key: 'prompt_injection_enabled',
+      field: 'prompt_injection_enabled',
+      parameter: t('guardrailsPromptInjectionLabel'),
+      description: t('guardrailsPromptInjectionDesc'),
+    },
+  ]
+
+  const guardrailControls = (
+    <div className="settings-param-panel settings-guardrails-panel">
+      <Typography.Paragraph type="secondary">{t('guardrailsHint')}</Typography.Paragraph>
+      <Form
+        form={guardrailForm}
+        layout="vertical"
+        initialValues={{
+          enabled: true,
+          pii_enabled: true,
+          pii_mask: false,
+          pii_check_email: false,
+          pii_check_phone: true,
+          prompt_injection_enabled: true,
+        }}
+        onFinish={(values) => void saveGuardrails(values)}
+        disabled={guardrailSettings.isLoading || guardrailSaving}
+      >
+        <Table<(typeof guardrailSettingRows)[number]>
+          rowKey="key"
+          size="middle"
+          loading={guardrailSettings.isLoading}
+          pagination={false}
+          dataSource={guardrailSettingRows}
+          columns={[
+            {
+              title: t('colParameter'),
+              dataIndex: 'parameter',
+              width: 240,
+              render: (value: string) => <Typography.Text strong>{value}</Typography.Text>,
+            },
+            {
+              title: t('colDescription'),
+              dataIndex: 'description',
+              render: (value: string) => (
+                <Typography.Text type="secondary" className="settings-param-description">
+                  {value}
+                </Typography.Text>
+              ),
+            },
+            {
+              title: t('colValue'),
+              dataIndex: 'field',
+              width: 120,
+              render: (_field, row) => (
+                <Form.Item name={row.field} noStyle valuePropName="checked">
+                  <Switch />
+                </Form.Item>
+              ),
+            },
+          ]}
+        />
+        <div className="settings-param-actions">
+          <Button type="primary" htmlType="submit" loading={guardrailSaving}>
+            {t('guardrailsSave')}
+          </Button>
+        </div>
+      </Form>
+    </div>
+  )
+
   const knowledgeControls = (
     <div className="settings-param-panel settings-knowledge-panel">
       <Typography.Paragraph type="secondary">{t('knowledgeRagHint')}</Typography.Paragraph>
@@ -815,6 +949,7 @@ export function SettingsPage() {
             ...(isAdmin
               ? [
                   { key: 'chat', label: t('chatSettings'), children: chatControls },
+                  { key: 'guardrails', label: t('guardrailsTab'), children: guardrailControls },
                   { key: 'knowledge', label: t('knowledgeRagTab'), children: knowledgeControls },
                   { key: 'users', label: t('usersTab'), children: usersPanel },
                 ]

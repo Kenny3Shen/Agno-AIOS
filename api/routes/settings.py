@@ -24,6 +24,10 @@ from api.services.knowledge_rag_settings_service import (
     get_knowledge_rag_settings,
     update_knowledge_rag_settings,
 )
+from api.services.guardrail_settings_service import (
+    get_guardrail_settings,
+    update_guardrail_settings,
+)
 from api.services.user_notification_settings_service import (
     read_user_notification_settings,
     update_user_feishu_webhook,
@@ -49,6 +53,17 @@ class KnowledgeRagSettingsUpdate(BaseModel):
     rerank_enabled: bool | None = None
     rerank_candidate_multiplier: int | None = None
     rerank_min_candidates: int | None = None
+
+
+class GuardrailSettingsUpdate(BaseModel):
+    """Global Agno input guardrails (no OpenAI Moderation)."""
+
+    enabled: bool | None = None
+    pii_enabled: bool | None = None
+    pii_mask: bool | None = None
+    pii_check_email: bool | None = None
+    pii_check_phone: bool | None = None
+    prompt_injection_enabled: bool | None = None
 
 
 class UserNotificationSettingsUpdate(BaseModel):
@@ -222,6 +237,33 @@ async def patch_knowledge_rag_settings(
         **audit_request_context(request),
     )
     return result
+
+
+@router.get("/settings/guardrails")
+async def read_guardrail_settings(
+    _user: User = Depends(require_scope(ADMIN_SCOPE)),
+) -> dict[str, Any]:
+    """Read global Agno input-guardrail settings (PII + prompt injection)."""
+    return await get_guardrail_settings()
+
+
+@router.patch("/settings/guardrails")
+async def patch_guardrail_settings(
+    request: Request,
+    body: GuardrailSettingsUpdate,
+    user: User = Depends(require_scope(ADMIN_SCOPE)),
+) -> dict[str, Any]:
+    values = body.model_dump(exclude_unset=True)
+    result = await update_guardrail_settings(values)
+    await record_audit_event_async(
+        user,
+        action="settings.guardrails.update",
+        resource_type="guardrail_settings",
+        metadata={"keys": sorted(values)},
+        **audit_request_context(request),
+    )
+    return result
+
 
 @router.get("/models")
 async def get_models(_user: User = Depends(require_scope("config:read"))) -> dict:

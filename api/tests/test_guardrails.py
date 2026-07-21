@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -13,16 +12,23 @@ from agno.run.agent import RunInput
 from api.services import guardrails as guardrails_service
 
 
+def _cfg(**overrides: object) -> dict[str, object]:
+    base: dict[str, object] = {
+        "enabled": True,
+        "pii_enabled": True,
+        "pii_mask": False,
+        "pii_check_email": False,
+        "pii_check_phone": True,
+        "prompt_injection_enabled": True,
+    }
+    base.update(overrides)
+    return base
+
+
 def test_build_input_guardrails_includes_pii_and_injection_not_openai():
-    settings = SimpleNamespace(
-        guardrails_enabled=True,
-        guardrails_pii_enabled=True,
-        guardrails_pii_mask=False,
-        guardrails_pii_check_email=False,
-        guardrails_pii_check_phone=True,
-        guardrails_prompt_injection_enabled=True,
-    )
-    with patch.object(guardrails_service, "get_settings", return_value=settings):
+    with patch.object(
+        guardrails_service, "effective_guardrail_settings", return_value=_cfg()
+    ):
         hooks = guardrails_service.build_input_guardrails()
     assert len(hooks) == 2
     assert isinstance(hooks[0], PIIDetectionGuardrail)
@@ -31,28 +37,18 @@ def test_build_input_guardrails_includes_pii_and_injection_not_openai():
 
 
 def test_build_input_guardrails_disabled_returns_empty():
-    settings = SimpleNamespace(
-        guardrails_enabled=False,
-        guardrails_pii_enabled=True,
-        guardrails_pii_mask=False,
-        guardrails_pii_check_email=False,
-        guardrails_pii_check_phone=True,
-        guardrails_prompt_injection_enabled=True,
-    )
-    with patch.object(guardrails_service, "get_settings", return_value=settings):
+    with patch.object(
+        guardrails_service,
+        "effective_guardrail_settings",
+        return_value=_cfg(enabled=False),
+    ):
         assert guardrails_service.build_input_guardrails() == []
 
 
 def test_apply_guardrails_kwargs_prepends_pre_hooks():
-    settings = SimpleNamespace(
-        guardrails_enabled=True,
-        guardrails_pii_enabled=True,
-        guardrails_pii_mask=False,
-        guardrails_pii_check_email=False,
-        guardrails_pii_check_phone=True,
-        guardrails_prompt_injection_enabled=True,
-    )
-    with patch.object(guardrails_service, "get_settings", return_value=settings):
+    with patch.object(
+        guardrails_service, "effective_guardrail_settings", return_value=_cfg()
+    ):
         out = guardrails_service.apply_guardrails_kwargs({"name": "a", "pre_hooks": ["x"]})
     assert out["name"] == "a"
     assert len(out["pre_hooks"]) == 3

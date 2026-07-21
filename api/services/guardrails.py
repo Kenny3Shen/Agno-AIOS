@@ -5,7 +5,8 @@ Uses built-in Agno pre-hooks only (no OpenAI Moderation):
 - :class:`agno.guardrails.PIIDetectionGuardrail`
 - :class:`agno.guardrails.PromptInjectionGuardrail`
 
-See https://docs.agno.com/guardrails/overview
+Runtime knobs come from Settings UI / DB (``guardrail_settings``) with env
+defaults from :mod:`api.config`. See https://docs.agno.com/guardrails/overview
 """
 
 from __future__ import annotations
@@ -17,6 +18,10 @@ from agno.guardrails import PIIDetectionGuardrail, PromptInjectionGuardrail
 from loguru import logger
 
 from api.config import get_settings
+from api.services.guardrail_settings_service import (
+    get_guardrail_settings as load_guardrail_settings_async,
+)
+from api.utils.ttl_cache import TtlCache
 
 # User-facing Chinese messages (SSE / audit). Keep codes stable for clients.
 _GUARDRAIL_MESSAGES: dict[str, str] = {
@@ -29,9 +34,53 @@ _GUARDRAIL_MESSAGES: dict[str, str] = {
     CheckTrigger.INPUT_NOT_ALLOWED.value: "输入未通过安全护栏校验，已拦截。",
 }
 
+# Sync path used when building agents: env defaults + last async cache hit.
+_EFFECTIVE_CACHE: TtlCache[dict[str, Any]] = TtlCache(ttl_sec=5.0)
+
+
+def _env_guardrail_settings() -> dict[str, Any]:
+    settings = get_settings()
+    return {
+        "enabled": bool(settings.guardrails_enabled),
+        "pii_enabled": bool(settings.guardrails_pii_enabled),
+        "pii_mask": bool(settings.guardrails_pii_mask),
+        "pii_check_email": bool(settings.guardrails_pii_check_email),
+        "pii_check_phone": bool(settings.guardrails_pii_check_phone),
+        "prompt_injection_enabled": bool(settings.guardrails_prompt_injection_enabled),
+    }
+
+
+def effective_guardrail_settings() -> dict[str, Any]:
+    """Best-effort settings for Agent construction (sync).
+
+    Prefers the process cache populated by Settings API or warm async loads;
+    falls back to environment defaults.
+    """
+    cached = _EFFECTIVE_CACHE.get()
+    if cached is not None:
+        return dict(cached)
+    # Share the settings-service cache when populated via GET/PATCH.
+    try:
+        from api.services import guardrail_settings_service as svc
+
+        shared = svc._SETTINGS_CACHE.get()
+        if shared is not None:
+            _EFFECTIVE_CACHE.set(shared)
+            return dict(shared)
+    except Exception:  # noqa: BLE001
+        pass
+    return _env_guardrail_settings()
+
+
+async def refresh_guardrail_settings_cache() -> dict[str, Any]:
+    """Load DB settings into the process cache (call on API startup / tests)."""
+    values = await load_guardrail_settings_async()
+    _EFFECTIVE_CACHE.set(values)
+    return dict(values)
+
 
 def is_guardrails_enabled() -> bool:
-    return bool(get_settings().guardrails_enabled)
+    return bool(effective_guardrail_settings().get("enabled"))
 
 
 def build_input_guardrails() -> list[Any]:
@@ -39,23 +88,21 @@ def build_input_guardrails() -> list[Any]:
 
     Never includes OpenAI Moderation Guardrail.
     """
-    if not is_guardrails_enabled():
+    cfg = effective_guardrail_settings()
+    if not cfg.get("enabled"):
         return []
-    settings = get_settings()
     hooks: list[Any] = []
-    if settings.guardrails_pii_enabled:
+    if cfg.get("pii_enabled"):
         hooks.append(
             PIIDetectionGuardrail(
-                mask_pii=bool(settings.guardrails_pii_mask),
+                mask_pii=bool(cfg.get("pii_mask")),
                 enable_ssn_check=True,
                 enable_credit_card_check=True,
-                # Chat often includes operator emails; keep off by default for mask mode
-                # or when operators paste contact info — SSN/CC are higher risk.
-                enable_email_check=bool(settings.guardrails_pii_check_email),
-                enable_phone_check=bool(settings.guardrails_pii_check_phone),
+                enable_email_check=bool(cfg.get("pii_check_email")),
+                enable_phone_check=bool(cfg.get("pii_check_phone")),
             )
         )
-    if settings.guardrails_prompt_injection_enabled:
+    if cfg.get("prompt_injection_enabled"):
         hooks.append(PromptInjectionGuardrail())
     return hooks
 
@@ -103,7 +150,6 @@ def guardrail_failure_payload(exc: BaseException | Exception) -> dict[str, Any]:
         "check_trigger": str(error_id),
     }
     if isinstance(extra, dict) and extra:
-        # Safe projection: only known PII type names, no raw matched text.
         detected = extra.get("detected_pii")
         if isinstance(detected, list):
             payload["detected_pii"] = [str(item) for item in detected[:12]]

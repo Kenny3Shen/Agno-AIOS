@@ -178,6 +178,13 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("启动 Workflow cron 调度器失败")
 
+    try:
+        from api.services.guardrails import refresh_guardrail_settings_cache
+
+        await refresh_guardrail_settings_cache()
+    except Exception:
+        logger.exception("加载模型护栏设置失败")
+
     app.state.is_ready = True
     try:
         yield
