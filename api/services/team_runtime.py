@@ -27,6 +27,7 @@ from api.services.agent_tools import (
     stage_media_into_analysis_dir,
 )
 from api.services.guardrails import apply_guardrails_kwargs
+from api.services.chat_settings_service import get_chat_settings_async
 from api.services.model_config_service import get_model_for_run
 from api.services.model_factory import build_agno_model
 from api.services.postgres_store import get_async_agno_postgres_db
@@ -336,6 +337,17 @@ async def build_team(
             "不要假装调用了 MCP 或安全 Skills；需要处置告警时建议用户改用安全运营助手。",
         ]
 
+    chat_settings = await get_chat_settings_async()
+    history_runs = max(1, int(chat_settings.num_history_runs or 4))
+    use_summaries = bool(chat_settings.session_summaries_enabled)
+    agentic = bool(chat_settings.enable_agentic_memory) and bool(memory_enabled)
+    mode_floor = 60 if mode == TeamMode.tasks else 48
+    # Team leaders need a higher floor than single-agent defaults; Settings can raise it.
+    if chat_settings.default_tool_call_limit is not None:
+        leader_tool_limit = max(mode_floor, int(chat_settings.default_tool_call_limit))
+    else:
+        leader_tool_limit = mode_floor
+
     team = Team(
         **apply_guardrails_kwargs(
             {
@@ -347,7 +359,7 @@ async def build_team(
                 "mode": mode,
                 "model": model,
                 "db": db,
-                "markdown": True,
+                "markdown": bool(chat_settings.markdown),
                 "instructions": leader_instructions,
                 "expected_output": (
                     "结构化 Markdown：先给结论，再列证据/数字与来源；"
@@ -359,7 +371,7 @@ async def build_team(
                 # user's original wording instead of paying for a leader rewrite.
                 "determine_input_for_members": mode != TeamMode.route,
                 "max_iterations": 10 if mode == TeamMode.tasks else 8,
-                "tool_call_limit": 60 if mode == TeamMode.tasks else 48,
+                "tool_call_limit": leader_tool_limit,
                 "get_member_information_tool": True,
                 "share_member_interactions": mode
                 in {TeamMode.coordinate, TeamMode.broadcast, TeamMode.tasks},
@@ -367,18 +379,22 @@ async def build_team(
                 "stream_member_events": True,
                 "store_member_responses": True,
                 "store_tool_messages": store_raw_tool_io,
-                "add_datetime_to_context": True,
-                "add_history_to_context": True,
-                "num_history_runs": 4,
+                "add_datetime_to_context": bool(chat_settings.add_datetime_to_context),
+                "add_history_to_context": history_runs > 0,
+                "num_history_runs": history_runs,
+                "max_tool_calls_from_history": chat_settings.max_tool_calls_from_history,
                 "add_team_history_to_members": True,
-                "num_team_history_runs": 2,
+                "num_team_history_runs": min(2, history_runs),
                 "add_name_to_context": True,
                 "add_member_tools_to_context": False,
-                "update_memory_on_run": bool(memory_enabled),
+                "update_memory_on_run": bool(memory_enabled) and not agentic,
                 "add_memories_to_context": bool(memory_enabled),
-                # Multi-turn Team chats benefit from compact session summaries.
-                "session_summary_manager": SessionSummaryManager(model=model),
-                "add_session_summary_to_context": True,
+                "enable_agentic_memory": agentic,
+                "session_summary_manager": (
+                    SessionSummaryManager(model=model) if use_summaries else None
+                ),
+                "enable_session_summaries": use_summaries,
+                "add_session_summary_to_context": use_summaries,
                 "knowledge": knowledge if search_knowledge and enable_tools else None,
                 "knowledge_retriever": (
                     build_knowledge_retriever(knowledge)

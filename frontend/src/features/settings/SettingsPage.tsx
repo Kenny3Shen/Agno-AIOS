@@ -137,16 +137,6 @@ export function SettingsPage() {
     }
   }
 
-  const setChatSetting = async (key: keyof ChatSettings, value: boolean) => {
-    try {
-      await saveChatSettings({ [key]: value })
-      await client.invalidateQueries({ queryKey: ['settings', 'chat'] })
-      message.success(t('chatUpdated'))
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : t('chatUpdateFailed'))
-    }
-  }
-
   const saveFeishuWebhook = async () => {
     setNotificationSaving(true)
     try {
@@ -473,73 +463,207 @@ export function SettingsPage() {
     description: string
   }
 
-  const chatSettingRows: Array<SettingRow & { field: keyof ChatSettings }> = [
+  type ChatField = keyof ChatSettings
+  type ChatControl = 'switch' | 'number' | 'optional_number'
+  const chatSettingRows: Array<
+    SettingRow & { field: ChatField; control: ChatControl; min?: number; max?: number }
+  > = [
     {
       key: 'show_thought_chain',
       field: 'show_thought_chain',
       parameter: t('securityTimeline'),
       description: t('securityTimelineDesc'),
+      control: 'switch',
     },
     {
       key: 'show_raw_reasoning',
       field: 'show_raw_reasoning',
       parameter: t('rawReasoning'),
       description: t('rawReasoningDesc'),
+      control: 'switch',
     },
     {
       key: 'show_raw_tool_io',
       field: 'show_raw_tool_io',
       parameter: t('rawToolIo'),
       description: t('rawToolIoDesc'),
+      control: 'switch',
     },
     {
       key: 'memory_enabled',
       field: 'memory_enabled',
       parameter: t('longTermMemory'),
       description: t('longTermMemoryDesc'),
+      control: 'switch',
+    },
+    {
+      key: 'enable_agentic_memory',
+      field: 'enable_agentic_memory',
+      parameter: t('agenticMemoryLabel'),
+      description: t('agenticMemoryDesc'),
+      control: 'switch',
+    },
+    {
+      key: 'session_summaries_enabled',
+      field: 'session_summaries_enabled',
+      parameter: t('sessionSummariesLabel'),
+      description: t('sessionSummariesDesc'),
+      control: 'switch',
+    },
+    {
+      key: 'add_datetime_to_context',
+      field: 'add_datetime_to_context',
+      parameter: t('addDatetimeLabel'),
+      description: t('addDatetimeDesc'),
+      control: 'switch',
+    },
+    {
+      key: 'markdown',
+      field: 'markdown',
+      parameter: t('markdownLabel'),
+      description: t('markdownDesc'),
+      control: 'switch',
+    },
+    {
+      key: 'num_history_runs',
+      field: 'num_history_runs',
+      parameter: t('numHistoryRunsLabel'),
+      description: t('numHistoryRunsDesc'),
+      control: 'number',
+      min: 0,
+      max: 50,
+    },
+    {
+      key: 'max_tool_calls_from_history',
+      field: 'max_tool_calls_from_history',
+      parameter: t('maxToolCallsHistoryLabel'),
+      description: t('maxToolCallsHistoryDesc'),
+      control: 'optional_number',
+      min: 1,
+      max: 200,
+    },
+    {
+      key: 'default_tool_call_limit',
+      field: 'default_tool_call_limit',
+      parameter: t('defaultToolCallLimitLabel'),
+      description: t('defaultToolCallLimitDesc'),
+      control: 'optional_number',
+      min: 1,
+      max: 200,
     },
   ]
 
+  const [chatForm] = Form.useForm<ChatSettings>()
+  const [chatSaving, setChatSaving] = useState(false)
+  useEffect(() => {
+    if (chatSettings.data) {
+      chatForm.setFieldsValue(chatSettings.data)
+    }
+  }, [chatForm, chatSettings.data])
+
+  const saveChatRuntime = async (values: ChatSettings) => {
+    setChatSaving(true)
+    try {
+      const payload: Partial<ChatSettings> = {
+        ...values,
+        max_tool_calls_from_history:
+          values.max_tool_calls_from_history == null || Number(values.max_tool_calls_from_history) <= 0
+            ? null
+            : Number(values.max_tool_calls_from_history),
+        default_tool_call_limit:
+          values.default_tool_call_limit == null || Number(values.default_tool_call_limit) <= 0
+            ? null
+            : Number(values.default_tool_call_limit),
+        num_history_runs: Number(values.num_history_runs ?? 5),
+      }
+      const next = await saveChatSettings(payload)
+      chatForm.setFieldsValue(next)
+      await client.invalidateQueries({ queryKey: ['settings', 'chat'] })
+      message.success(t('chatSettingsSaved'))
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('chatSettingsSaveFailed'))
+    } finally {
+      setChatSaving(false)
+    }
+  }
+
   const chatControls = (
     <div className="settings-param-panel">
-      <Table<(typeof chatSettingRows)[number]>
-        rowKey="key"
-        size="middle"
-        loading={chatSettings.isLoading}
-        pagination={false}
-        dataSource={chatSettingRows}
-        columns={[
-          {
-            title: t('colParameter'),
-            dataIndex: 'parameter',
-            width: 200,
-            render: (value: string) => <Typography.Text strong>{value}</Typography.Text>,
-          },
-          {
-            title: t('colDescription'),
-            dataIndex: 'description',
-            render: (value: string) => (
-              <Typography.Text type="secondary" className="settings-param-description">
-                {value}
-              </Typography.Text>
-            ),
-          },
-          {
-            title: t('colValue'),
-            dataIndex: 'field',
-            width: 120,
-            align: 'center',
-            render: (field: keyof ChatSettings) => (
-              <Switch
-                checked={Boolean(chatSettings.data?.[field])}
-                loading={chatSettings.isFetching}
-                onChange={(next) => void setChatSetting(field, next)}
-                aria-label={String(field)}
-              />
-            ),
-          },
-        ]}
-      />
+      <Typography.Paragraph type="secondary">{t('chatRuntimeHint')}</Typography.Paragraph>
+      <Form
+        form={chatForm}
+        layout="vertical"
+        initialValues={{
+          show_thought_chain: true,
+          show_raw_reasoning: false,
+          show_raw_tool_io: false,
+          memory_enabled: true,
+          enable_agentic_memory: false,
+          session_summaries_enabled: true,
+          add_datetime_to_context: true,
+          markdown: true,
+          num_history_runs: 5,
+          max_tool_calls_from_history: null,
+          default_tool_call_limit: null,
+        }}
+        onFinish={(values) => void saveChatRuntime(values)}
+        disabled={chatSettings.isLoading || chatSaving}
+      >
+        <Table<(typeof chatSettingRows)[number]>
+          rowKey="key"
+          size="middle"
+          loading={chatSettings.isLoading}
+          pagination={false}
+          dataSource={chatSettingRows}
+          columns={[
+            {
+              title: t('colParameter'),
+              dataIndex: 'parameter',
+              width: 260,
+              render: (value: string) => <Typography.Text strong>{value}</Typography.Text>,
+            },
+            {
+              title: t('colDescription'),
+              dataIndex: 'description',
+              render: (value: string) => (
+                <Typography.Text type="secondary" className="settings-param-description">
+                  {value}
+                </Typography.Text>
+              ),
+            },
+            {
+              title: t('colValue'),
+              dataIndex: 'field',
+              width: 160,
+              render: (_field, row) => {
+                if (row.control === 'switch') {
+                  return (
+                    <Form.Item name={row.field} noStyle valuePropName="checked">
+                      <Switch aria-label={String(row.field)} />
+                    </Form.Item>
+                  )
+                }
+                return (
+                  <Form.Item name={row.field} noStyle>
+                    <InputNumber
+                      min={row.min}
+                      max={row.max}
+                      step={1}
+                      style={{ width: '100%' }}
+                      placeholder={row.control === 'optional_number' ? '—' : undefined}
+                    />
+                  </Form.Item>
+                )
+              },
+            },
+          ]}
+        />
+        <div className="settings-param-actions">
+          <Button type="primary" htmlType="submit" loading={chatSaving}>
+            {t('chatSettingsSave')}
+          </Button>
+        </div>
+      </Form>
       <div className="settings-chat-privacy">
         <Tooltip title={t('privacyNote')}>
           <Typography.Text type="secondary" className="settings-chat-privacy-trigger">

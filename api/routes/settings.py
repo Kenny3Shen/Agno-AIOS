@@ -40,6 +40,14 @@ class ChatSettingsUpdate(BaseModel):
     show_raw_tool_io: bool | None = None
     show_thought_chain: bool | None = None
     memory_enabled: bool | None = None
+    # Agno runtime knobs (history / session summary / tools / memory mode)
+    num_history_runs: int | None = None
+    session_summaries_enabled: bool | None = None
+    add_datetime_to_context: bool | None = None
+    max_tool_calls_from_history: int | None = None
+    default_tool_call_limit: int | None = None
+    enable_agentic_memory: bool | None = None
+    markdown: bool | None = None
 
 
 
@@ -151,8 +159,8 @@ async def run_model_connectivity_test(
 @router.get("/settings/chat")
 async def read_chat_settings(
     _user: User = Depends(require_scope(ADMIN_SCOPE)),
-) -> dict[str, bool]:
-    """Read globally enforced chat privacy and memory settings."""
+) -> dict[str, Any]:
+    """Read chat privacy toggles and Agno runtime knobs (history, memory, tools)."""
     return await get_chat_settings()
 
 
@@ -161,7 +169,7 @@ async def patch_chat_settings(
     request: Request,
     body: ChatSettingsUpdate,
     user: User = Depends(require_scope(ADMIN_SCOPE)),
-) -> dict[str, bool]:
+) -> dict[str, Any]:
     values = body.model_dump(exclude_unset=True)
     result = await update_chat_settings(values)
     await record_audit_event_async(

@@ -1,3 +1,8 @@
+## 已完成：Chat 设置扩展 Agno 常用运行参数
+
+- `chat_settings` 增加 history / session summary / datetime / tool history cap / tool_call_limit / agentic memory / markdown（`20260721_0007`）。
+- Settings「Chat 设置」参数表支持开关 + 数值；写入后驱动 `security_run_runtime` 与 Team leader 构造。
+
 ## 已完成：Agno 模型输入护栏（PII + Prompt Injection）
 
 - `api/services/guardrails.py`：组装 `PIIDetectionGuardrail` + `PromptInjectionGuardrail`（**不含** OpenAI Moderation）。

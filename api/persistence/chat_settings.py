@@ -9,6 +9,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     Column,
+    Integer,
     MetaData,
     String,
     Table,
@@ -22,12 +23,49 @@ from api.persistence.migrations import ensure_control_plane_schema_current
 
 CHAT_SETTINGS_TABLE = "chat_settings"
 GLOBAL_CHAT_SETTINGS_ID = "global"
-DEFAULT_CHAT_SETTINGS = {
+
+# Workbench privacy toggles + Agno Agent runtime knobs (history / memory / tools).
+# Integer fields use None for "use profile default / unlimited".
+DEFAULT_CHAT_SETTINGS: dict[str, Any] = {
     "show_raw_reasoning": False,
     "show_raw_tool_io": False,
     "show_thought_chain": True,
     "memory_enabled": True,
+    # Agno: num_history_runs — past runs injected into context (docs recommend 3–5).
+    "num_history_runs": 5,
+    # Agno: enable_session_summaries + add_session_summary_to_context.
+    "session_summaries_enabled": True,
+    # Agno: add_datetime_to_context.
+    "add_datetime_to_context": True,
+    # Agno: max_tool_calls_from_history (None = no extra filter).
+    "max_tool_calls_from_history": None,
+    # Global tool_call_limit when agent profile does not set one (None = profile).
+    "default_tool_call_limit": None,
+    # Agno: enable_agentic_memory (takes precedence over update_memory_on_run).
+    "enable_agentic_memory": False,
+    # Agno: markdown response formatting.
+    "markdown": True,
 }
+
+_BOOL_KEYS = frozenset(
+    {
+        "show_raw_reasoning",
+        "show_raw_tool_io",
+        "show_thought_chain",
+        "memory_enabled",
+        "session_summaries_enabled",
+        "add_datetime_to_context",
+        "enable_agentic_memory",
+        "markdown",
+    }
+)
+_INT_KEYS = frozenset(
+    {
+        "num_history_runs",
+        "max_tool_calls_from_history",
+        "default_tool_call_limit",
+    }
+)
 
 
 def _app_schema() -> str:
@@ -43,6 +81,28 @@ def chat_settings_table(metadata: MetaData | None = None) -> Table:
         Column("show_raw_tool_io", Boolean, nullable=False, server_default="false"),
         Column("show_thought_chain", Boolean, nullable=False, server_default="true"),
         Column("memory_enabled", Boolean, nullable=False, server_default="true"),
+        Column(
+            "session_summaries_enabled",
+            Boolean,
+            nullable=False,
+            server_default="true",
+        ),
+        Column(
+            "add_datetime_to_context",
+            Boolean,
+            nullable=False,
+            server_default="true",
+        ),
+        Column(
+            "enable_agentic_memory",
+            Boolean,
+            nullable=False,
+            server_default="false",
+        ),
+        Column("markdown", Boolean, nullable=False, server_default="true"),
+        Column("num_history_runs", Integer, nullable=False, server_default="5"),
+        Column("max_tool_calls_from_history", Integer, nullable=True),
+        Column("default_tool_call_limit", Integer, nullable=True),
         Column("updated_at", BigInteger, nullable=False),
     )
 
@@ -56,6 +116,24 @@ async def _create_chat_settings_table_async() -> None:
 
 async def ensure_chat_settings_table_async() -> None:
     await _chat_settings_table_once.run(_create_chat_settings_table_async)
+
+
+def _project_row(row: Mapping[str, Any] | None) -> dict[str, Any]:
+    payload = dict(DEFAULT_CHAT_SETTINGS)
+    if not row:
+        return payload
+    for key in DEFAULT_CHAT_SETTINGS:
+        if key not in row:
+            continue
+        value = row[key]
+        if key in _BOOL_KEYS:
+            payload[key] = bool(value) if value is not None else DEFAULT_CHAT_SETTINGS[key]
+        elif key in _INT_KEYS:
+            if value is None or value == "":
+                payload[key] = None if key != "num_history_runs" else DEFAULT_CHAT_SETTINGS[key]
+            else:
+                payload[key] = int(value)
+    return payload
 
 
 async def get_chat_settings_row() -> dict[str, Any]:
@@ -78,17 +156,23 @@ async def get_chat_settings_row() -> dict[str, Any]:
                 "updated_at": int(time()),
             }
             await conn.execute(insert(table).values(**values))
-            return values
-    return dict(row)
+            return dict(DEFAULT_CHAT_SETTINGS)
+    return _project_row(dict(row))
 
 
-async def update_chat_settings_row(values: Mapping[str, bool]) -> dict[str, Any]:
+async def update_chat_settings_row(values: Mapping[str, Any]) -> dict[str, Any]:
     current = await get_chat_settings_row()
-    updates: dict[str, Any] = {
-        key: bool(value)
-        for key, value in values.items()
-        if key in DEFAULT_CHAT_SETTINGS
-    }
+    updates: dict[str, Any] = {}
+    for key, value in values.items():
+        if key not in DEFAULT_CHAT_SETTINGS:
+            continue
+        if key in _BOOL_KEYS:
+            updates[key] = bool(value)
+        elif key in _INT_KEYS:
+            if value is None or value == "":
+                updates[key] = None if key != "num_history_runs" else current[key]
+            else:
+                updates[key] = int(value)
     if not updates:
         return current
     updates["updated_at"] = int(time())
@@ -97,4 +181,4 @@ async def update_chat_settings_row(values: Mapping[str, bool]) -> dict[str, Any]
         await conn.execute(
             update(table).where(table.c.id == GLOBAL_CHAT_SETTINGS_ID).values(**updates)
         )
-    return {**current, **updates}
+    return {**current, **{k: v for k, v in updates.items() if k != "updated_at"}}

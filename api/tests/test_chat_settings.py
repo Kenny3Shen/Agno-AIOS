@@ -27,6 +27,13 @@ async def test_read_chat_settings_returns_persisted_defaults() -> None:
         "show_raw_tool_io": False,
         "show_thought_chain": True,
         "memory_enabled": True,
+        "num_history_runs": 5,
+        "session_summaries_enabled": True,
+        "add_datetime_to_context": True,
+        "max_tool_calls_from_history": None,
+        "default_tool_call_limit": None,
+        "enable_agentic_memory": False,
+        "markdown": True,
     }
     with patch.object(settings, "get_chat_settings", new=AsyncMock(return_value=expected)):
         assert await settings.read_chat_settings(_user=cast(User, SimpleNamespace())) == expected
@@ -40,6 +47,13 @@ async def test_patch_chat_settings_updates_only_submitted_values_and_audits() ->
         "show_raw_tool_io": False,
         "show_thought_chain": True,
         "memory_enabled": True,
+        "num_history_runs": 3,
+        "session_summaries_enabled": True,
+        "add_datetime_to_context": True,
+        "max_tool_calls_from_history": 10,
+        "default_tool_call_limit": None,
+        "enable_agentic_memory": False,
+        "markdown": True,
     }
     with (
         patch.object(settings, "update_chat_settings", new=AsyncMock(return_value=expected)) as update_mock,
@@ -65,12 +79,14 @@ async def test_chat_settings_service_applies_defaults_for_missing_columns() -> N
         new=AsyncMock(return_value={}),
     ):
         result = await chat_settings_service.get_chat_settings()
-    assert result == {
-        "show_raw_reasoning": False,
-        "show_raw_tool_io": False,
-        "show_thought_chain": True,
-        "memory_enabled": True,
-    }
+    assert result["show_raw_reasoning"] is False
+    assert result["show_raw_tool_io"] is False
+    assert result["show_thought_chain"] is True
+    assert result["memory_enabled"] is True
+    assert result["num_history_runs"] == 5
+    assert result["session_summaries_enabled"] is True
+    assert result["markdown"] is True
+    assert result["max_tool_calls_from_history"] is None
 
 
 @pytest.fixture(autouse=True)

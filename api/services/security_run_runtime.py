@@ -68,7 +68,10 @@ from api.services.agent_tools import (
     profile_uses_analysis_sandbox,
     stage_media_into_analysis_dir,
 )
-from api.services.chat_settings_service import get_chat_settings_async
+from api.services.chat_settings_service import (
+    get_chat_settings_async,
+    resolve_tool_call_limit,
+)
 from api.services.chat_run_events import (
     ChatRunEvent,
     completed_payload,
@@ -2512,6 +2515,9 @@ class SecurityRunRuntime:
         live_search: bool | None = None,
     ) -> Agent:
         model = await self._build_model(model_id, reasoning_effort, live_search=live_search)
+        chat_settings = await get_chat_settings_async()
+        use_summaries = bool(chat_settings.session_summaries_enabled)
+        agentic = bool(chat_settings.enable_agentic_memory) and memory_enabled
         return self.dependencies.agent_factory(
             **apply_guardrails_kwargs(
                 {
@@ -2522,13 +2528,21 @@ class SecurityRunRuntime:
                     "instructions": [await _load_prompt_async(SAFE_FALLBACK_PROMPT)],
                     "model": model,
                     "db": self.dependencies.get_db(),
-                    "update_memory_on_run": memory_enabled,
+                    "update_memory_on_run": bool(memory_enabled) and not agentic,
                     "add_memories_to_context": memory_enabled,
+                    "enable_agentic_memory": agentic,
                     "store_tool_messages": False,
-                    "enable_session_summaries": True,
-                    "session_summary_manager": _session_summary_manager(model),
-                    "add_datetime_to_context": True,
-                    "markdown": True,
+                    "enable_session_summaries": use_summaries,
+                    "session_summary_manager": (
+                        _session_summary_manager(model) if use_summaries else None
+                    ),
+                    "add_session_summary_to_context": use_summaries,
+                    "num_history_runs": int(chat_settings.num_history_runs),
+                    "max_tool_calls_from_history": chat_settings.max_tool_calls_from_history,
+                    "add_datetime_to_context": bool(
+                        chat_settings.add_datetime_to_context
+                    ),
+                    "markdown": bool(chat_settings.markdown),
                 }
             )
         )
@@ -2592,16 +2606,29 @@ class SecurityRunRuntime:
         else:
             prompt_name = str(profile.get("prompt_full") or profile.get("prompt_lite") or "")
         has_session = bool(str(request.session_id or "").strip())
+        chat_settings = await get_chat_settings_async()
+        settings_history = int(chat_settings.num_history_runs)
+        profile_history = int(profile.get("history_runs") or settings_history or 5)
+        # Prefer Settings override when set; otherwise profile default.
+        # Lean path still trims history for cost.
         if surface_active:
-            history_runs = int(profile.get("history_runs") or 5)
-            add_history = True
-            add_datetime = True
+            history_runs = settings_history if settings_history > 0 else profile_history
+            add_history = history_runs > 0
+            add_datetime = bool(chat_settings.add_datetime_to_context)
         else:
-            history_runs = 2 if has_session else 0
-            add_history = has_session
+            history_runs = min(2, settings_history) if has_session else 0
+            add_history = has_session and history_runs > 0
             add_datetime = False
-        session_summaries = surface_active
+        session_summaries = surface_active and bool(
+            chat_settings.session_summaries_enabled
+        )
         inject_memories = bool(request.memory_enabled) and surface_active
+        agentic = bool(chat_settings.enable_agentic_memory) and bool(
+            request.memory_enabled
+        )
+        tool_limit = resolve_tool_call_limit(
+            profile.get("tool_call_limit"), chat_settings
+        )
         description = str(profile.get("description") or profile.get("name") or agent_id)
         if agent_id == DEFAULT_AGENT_ID and not surface_active:
             description = "安全运营助手（轻量）：无 MCP/Skills，适合闲聊与概念解答。"
@@ -2635,8 +2662,10 @@ class SecurityRunRuntime:
                     "dependencies": await _run_sync_dependency(_agent_dependencies),
                     "add_dependencies_to_context": False,
                     "add_history_to_context": add_history,
-                    "update_memory_on_run": request.memory_enabled,
+                    # Agno: agentic memory takes precedence over update_memory_on_run.
+                    "update_memory_on_run": bool(request.memory_enabled) and not agentic,
                     "add_memories_to_context": inject_memories,
+                    "enable_agentic_memory": agentic and surface_active,
                     "store_tool_messages": (
                         request.store_raw_tool_io if surface_active else False
                     ),
@@ -2644,10 +2673,16 @@ class SecurityRunRuntime:
                     "session_summary_manager": (
                         _session_summary_manager(model) if session_summaries else None
                     ),
+                    "add_session_summary_to_context": session_summaries,
                     "num_history_runs": history_runs,
+                    "max_tool_calls_from_history": (
+                        chat_settings.max_tool_calls_from_history
+                        if surface_active
+                        else None
+                    ),
                     "add_datetime_to_context": add_datetime,
-                    "tool_call_limit": profile.get("tool_call_limit"),
-                    "markdown": True,
+                    "tool_call_limit": tool_limit,
+                    "markdown": bool(chat_settings.markdown),
                 }
             )
         )
@@ -2761,6 +2796,18 @@ class SecurityRunRuntime:
 
     async def stream(self, request: SecurityRunRequest) -> AsyncIterator[ChatRunEvent]:
         chat_settings = await get_chat_settings_async()
+        # Fail closed before capability/DB resolution when Team beta is off.
+        if is_team_id(request.agent_id) and not team_feature_enabled():
+            yield ChatRunEvent(
+                "run.failed",
+                {
+                    "run_id": "",
+                    "code": "TEAM_DISABLED",
+                    "message": "Agno Team 未启用（设置环境变量 TAIS_ENABLE_AGNO_TEAM=1）",
+                    "retryable": False,
+                },
+            )
+            return
         # One directory per Chat invocation, including Team and provider fallback
         # paths.  Nested helpers share it and its ``finally`` cleanup runs when
         # this async generator is closed on completion/disconnect.
@@ -2768,17 +2815,6 @@ class SecurityRunRuntime:
             try:
                 request = await self._resolve_effective_capabilities(request)
                 if is_team_id(request.agent_id):
-                    if not team_feature_enabled():
-                        yield ChatRunEvent(
-                            "run.failed",
-                            {
-                                "run_id": "",
-                                "code": "TEAM_DISABLED",
-                                "message": "Agno Team 未启用（设置环境变量 TAIS_ENABLE_AGNO_TEAM=1）",
-                                "retryable": False,
-                            },
-                        )
-                        return
                     try:
                         async for event in self._stream_team(request, chat_settings):
                             yield event

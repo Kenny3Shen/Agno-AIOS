@@ -8,6 +8,20 @@ export interface ChatSettings {
   show_raw_tool_io: boolean
   show_thought_chain: boolean
   memory_enabled: boolean
+  /** Agno num_history_runs — past runs injected into model context. */
+  num_history_runs: number
+  /** Agno enable_session_summaries + add_session_summary_to_context. */
+  session_summaries_enabled: boolean
+  /** Agno add_datetime_to_context. */
+  add_datetime_to_context: boolean
+  /** Agno max_tool_calls_from_history; null = unlimited. */
+  max_tool_calls_from_history: number | null
+  /** Fallback tool_call_limit when agent profile has none; null = profile only. */
+  default_tool_call_limit: number | null
+  /** Agno enable_agentic_memory (takes precedence over update_memory_on_run). */
+  enable_agentic_memory: boolean
+  /** Agno markdown response formatting. */
+  markdown: boolean
 }
 
 export type KnowledgeSearchTypeSetting = 'hybrid' | 'vector' | 'keyword'

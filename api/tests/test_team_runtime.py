@@ -24,13 +24,20 @@ async def test_stream_team_disabled_fails(monkeypatch):
     assert team_feature_enabled() is False
 
     async def fake_settings():
-        return SimpleNamespace(
+        from api.services.chat_settings_service import ChatSettings
+
+        return ChatSettings(
             show_raw_reasoning=False,
             show_raw_tool_io=False,
             show_thought_chain=True,
         )
 
     monkeypatch.setattr(srr, "get_chat_settings_async", fake_settings)
+    # stream() also imports the name through chat_settings_service in some paths.
+    monkeypatch.setattr(
+        "api.services.chat_settings_service.get_chat_settings_async",
+        fake_settings,
+    )
     events = [
         event
         async for event in srr.DEFAULT_SECURITY_RUN_RUNTIME.stream(req)
@@ -60,12 +67,18 @@ async def test_stream_team_enable_tools_false_skips_member_tools(monkeypatch):
     async def fake_get_model(_model_id=None):
         return {"provider": "openai-compatible", "model_id": "fake"}
 
+    async def fake_chat_settings():
+        from api.services.chat_settings_service import ChatSettings
+
+        return ChatSettings()
+
     monkeypatch.setattr(tr, "Agent", fake_agent)
     monkeypatch.setattr(tr, "Team", FakeTeam)
     monkeypatch.setattr(tr, "get_model_for_run", fake_get_model)
     monkeypatch.setattr(tr, "build_agno_model", lambda *_a, **_k: object())
     monkeypatch.setattr(tr, "get_async_agno_postgres_db", lambda: None)
     monkeypatch.setattr(tr, "build_tools_for_profile", lambda _p: ["tool"])
+    monkeypatch.setattr(tr, "get_chat_settings_async", fake_chat_settings)
 
     await build_team("research-analysis-team", enable_tools=False)
     assert created_tools
