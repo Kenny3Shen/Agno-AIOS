@@ -28,7 +28,7 @@
   "chatRuntimeHint": "Privacy and Agno runtime knobs grouped by concern. Expand a section to edit; one save writes all chat settings.",
   "chatGroupPrivacy": "Display & privacy",
   "chatGroupPrivacyDesc": "Chat timeline and whether raw reasoning / tool I/O is sent to the browser.",
-  "chatGroupMemory": "Long-term memory",
+  "chatGroupMemory": "Memory management",
   "chatGroupMemoryDesc": "Cross-session memory, agentic mode, optional tool-content capture, and auto-prune.",
   "chatGroupContext": "Context & output",
   "chatGroupContextDesc": "History runs, session summaries, datetime injection, and Markdown formatting.",

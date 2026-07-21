@@ -86,10 +86,11 @@ describe('model settings editor', () => {
     await waitFor(() => expect(chatTab?.getAttribute('aria-selected')).toBe('true'))
     // Grouped collapse panels (privacy + memory open by default).
     expect(await screen.findByText('展示与隐私')).toBeTruthy()
-    expect(await screen.findByText('长期记忆')).toBeTruthy()
+    expect(await screen.findByText('记忆管理')).toBeTruthy()
     expect(await screen.findByText('上下文与输出')).toBeTruthy()
     expect(await screen.findByText('工具调用')).toBeTruthy()
     expect(await screen.findByText('安全执行时间线')).toBeTruthy()
+    expect(await screen.findByText('长期记忆')).toBeTruthy()
     expect(screen.queryByText('添加模型')).toBeNull()
   })
 
