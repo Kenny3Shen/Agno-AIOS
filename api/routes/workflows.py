@@ -21,7 +21,7 @@ from api.services.audit_service import (
 )
 from api.services.workflow_compiler import WorkflowDefinitionError
 from api.services.workflow_run_runtime import (
-    cancel_workflow_run,
+    acancel_workflow_run,
     stream_workflow_run,
     workflow_capability_issues,
 )
@@ -618,8 +618,12 @@ async def cancel_workflow_run_endpoint(
     run_id: str,
     user: User = Depends(require_scope("workflows:run")),
 ):
-    """Cancel a live Studio workflow run owned by the current user."""
-    if not cancel_workflow_run(user_id=actor_id(user), run_id=run_id):
+    """Cancel a live Studio workflow run owned by the current user.
+
+    Uses Agno ``acancel_run`` when available; supports cancel-before-start for
+    client-preallocated ``run_id`` (AgentOS-compatible intent storage).
+    """
+    if not await acancel_workflow_run(user_id=actor_id(user), run_id=run_id):
         raise HTTPException(status_code=404, detail="运行不存在或已结束")
     await record_audit_event_async(
         user,

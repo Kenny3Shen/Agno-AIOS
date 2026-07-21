@@ -1,3 +1,9 @@
+## 已完成：Chat/Workflow cancel 与 live hub 对齐 AgentOS
+
+- Cancel：请求路径改用 `acancel_run` / `acancel_workflow_run`（优先 `acancel_run`，回退 `cancel_run` + `agno.run.cancel`）；Chat 仍按 owner 注册表 404，Workflow 支持 cancel-before-start（预分配 `run_id`）。
+- Live hub：单调 `event_index`、缓冲上限 10k、`GET .../live?last_event_index=` 增量 catch-up（对齐 AgentOS `/resume`）；前端 `lastEventIndexRef` 在流式帧中更新，离开页后重连可跳过已渲染事件。
+- 单测：hub index、acancel 优先、workflow cancel-before-start；ruff/ty 通过。
+
 ## 已完成：README 瘦身、架构图与无权限隐藏操作
 
 - README 保留 onboarding；HITL / 工作流 / 运维 / Agents 等技术长文迁至 `docs/*.md`，索引见 `docs/README.md`。

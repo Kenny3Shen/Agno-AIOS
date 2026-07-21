@@ -63,7 +63,9 @@ def test_chat_write_route_rejects_guest_actor():
 @pytest.mark.asyncio
 async def test_cancel_chat_run_requires_a_live_run_owned_by_the_actor():
     current_actor = actor("u1")
-    with patch.object(chat, "cancel_security_run", return_value=False):
+    with patch.object(
+        chat, "acancel_security_run", new_callable=AsyncMock, return_value=False
+    ):
         with pytest.raises(HTTPException) as exc:
             await chat.cancel_chat_run("run-1", user=current_actor)
     assert exc.value.status_code == 404

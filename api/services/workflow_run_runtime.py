@@ -94,31 +94,73 @@ async def resolve_workflow_skill_names(definition: dict[str, Any]) -> list[str]:
 
 # Live Studio / webhook runs keyed by (user_id, run_id) for cancel_run.
 _active_workflows: dict[tuple[str, str], Any] = {}
+# Pre-register cancel intent when client pre-allocates run_id (cancel-before-start).
+_workflow_cancel_intent: set[tuple[str, str]] = set()
 
 
 def register_workflow_run(*, user_id: str, run_id: str, workflow: Any) -> None:
     if not user_id or not run_id:
         return
-    _active_workflows[(user_id, run_id)] = workflow
+    key = (user_id, run_id)
+    _active_workflows[key] = workflow
+    # Honour cancel-before-start if Stop was pressed before registration.
+    if key in _workflow_cancel_intent:
+        _workflow_cancel_intent.discard(key)
+        cancel = getattr(workflow, "cancel_run", None)
+        if callable(cancel):
+            try:
+                cancel(run_id)
+            except Exception:
+                logger.exception("workflow cancel-before-start failed for {}", run_id)
+        else:
+            try:
+                from agno.run.cancel import cancel_run as agno_cancel_run
+
+                agno_cancel_run(run_id)
+            except Exception:
+                logger.debug("agno cancel-before-start failed for {}", run_id)
 
 
 def unregister_workflow_run(*, user_id: str, run_id: str) -> None:
     if not user_id or not run_id:
         return
-    _active_workflows.pop((user_id, run_id), None)
+    key = (user_id, run_id)
+    _active_workflows.pop(key, None)
+    _workflow_cancel_intent.discard(key)
+
+
+def _workflow_owned_by_other(*, user_id: str, run_id: str) -> bool:
+    """True when another user already holds this live run_id."""
+    return any(
+        rid == run_id and uid != user_id for (uid, rid) in _active_workflows
+    )
 
 
 def cancel_workflow_run(*, user_id: str, run_id: str) -> bool:
-    """Cancel a live Agno workflow run owned by ``user_id``.
+    """Cancel a live Agno workflow run owned by ``user_id`` (sync).
 
-    Uses Agno ``Workflow.cancel_run`` so step executors observe cancellation
-    (client SSE abort alone does not stop server-side model work).
+    Prefer :func:`acancel_workflow_run` on request paths.
+
+    Supports cancel-before-start when the client pre-allocated ``run_id`` before
+    ``register_workflow_run`` (Studio Stop race). Denies cancel when the run is
+    registered to a different owner.
     """
     if not user_id or not run_id:
         return False
-    workflow = _active_workflows.get((user_id, run_id))
-    if workflow is None:
+    if _workflow_owned_by_other(user_id=user_id, run_id=run_id):
         return False
+    key = (user_id, run_id)
+    workflow = _active_workflows.get(key)
+    if workflow is None:
+        # Cancel-before-start: remember intent until register_workflow_run.
+        _workflow_cancel_intent.add(key)
+        try:
+            from agno.run.cancel import cancel_run as agno_cancel_run
+
+            agno_cancel_run(run_id)
+        except Exception:
+            logger.debug("agno cancel_run for unregistered workflow {}", run_id)
+        return True
     cancel = getattr(workflow, "cancel_run", None)
     if callable(cancel):
         try:
@@ -126,9 +168,48 @@ def cancel_workflow_run(*, user_id: str, run_id: str) -> bool:
         except Exception:
             logger.exception("workflow cancel_run failed for {}", run_id)
             return False
-    # Fallback: drop registration so late events are ignored after client stop.
-    unregister_workflow_run(user_id=user_id, run_id=run_id)
-    return True
+    try:
+        from agno.run.cancel import cancel_run as agno_cancel_run
+
+        return bool(agno_cancel_run(run_id))
+    except Exception:
+        unregister_workflow_run(user_id=user_id, run_id=run_id)
+        return True
+
+
+async def acancel_workflow_run(*, user_id: str, run_id: str) -> bool:
+    """Async cancel aligned with AgentOS ``await workflow.acancel_run``."""
+    if not user_id or not run_id:
+        return False
+    if _workflow_owned_by_other(user_id=user_id, run_id=run_id):
+        return False
+    key = (user_id, run_id)
+    workflow = _active_workflows.get(key)
+    if workflow is None:
+        _workflow_cancel_intent.add(key)
+        try:
+            from agno.run.cancel import acancel_run as agno_acancel_run
+
+            await agno_acancel_run(run_id)
+        except Exception:
+            try:
+                from agno.run.cancel import cancel_run as agno_cancel_run
+
+                agno_cancel_run(run_id)
+            except Exception:
+                logger.debug("agno acancel for unregistered workflow {}", run_id)
+        return True
+    acancel = getattr(workflow, "acancel_run", None)
+    if callable(acancel):
+        try:
+            result = acancel(run_id)
+            if isawaitable(result):
+                result = await result
+            return bool(result)
+        except Exception:
+            logger.exception("workflow acancel_run failed for {}", run_id)
+            return False
+    return cancel_workflow_run(user_id=user_id, run_id=run_id)
 
 
 def _preview(value: Any, limit: int = 2000) -> str:

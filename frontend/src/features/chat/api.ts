@@ -132,13 +132,28 @@ export const getChatAgents = async (): Promise<ChatAgentCatalogItem[]> =>
 export const cancelRun = (runId: string) =>
   requestJson<{ success?: boolean }>(`/chat/runs/${encodeURIComponent(runId)}/cancel`, jsonInit('POST'))
 
-/** Re-attach to a leave-page detached server run (catch-up + live SSE). */
+/** Re-attach to a leave-page detached server run (catch-up + live SSE).
+ *
+ * Pass ``lastEventIndex`` (AgentOS /resume style) to skip events already received
+ * in this tab; omit for full buffer catch-up after a fresh page load.
+ */
 export const attachLiveSessionStream = async (
   sessionId: string,
   onEvent: (event: ChatRunEvent) => void,
   signal: AbortSignal,
+  options?: {
+    lastEventIndex?: number | null
+    /** Updated on each frame so leave/return can resume after this index. */
+    eventIndexCursor?: { current: number | null }
+  },
 ) => {
-  const response = await apiFetch(`/chat/sessions/${encodeURIComponent(sessionId)}/live`, {
+  const params = new URLSearchParams()
+  if (options?.lastEventIndex != null && Number.isFinite(options.lastEventIndex)) {
+    params.set('last_event_index', String(options.lastEventIndex))
+  }
+  const qs = params.toString()
+  const path = `/chat/sessions/${encodeURIComponent(sessionId)}/live${qs ? `?${qs}` : ''}`
+  const response = await apiFetch(path, {
     method: 'GET',
     headers: { Accept: 'text/event-stream' },
     signal,
@@ -164,6 +179,22 @@ export const attachLiveSessionStream = async (
   await consumeSse(
     response.body,
     ({ event, data }) => {
+      // Track monotonic event_index from raw SSE before parse filters.
+      try {
+        const raw: unknown = JSON.parse(data)
+        if (raw && typeof raw === 'object' && 'event_index' in raw) {
+          const idx = (raw as { event_index?: unknown }).event_index
+          if (
+            typeof idx === 'number' &&
+            Number.isFinite(idx) &&
+            options?.eventIndexCursor
+          ) {
+            options.eventIndexCursor.current = idx
+          }
+        }
+      } catch {
+        // ignore
+      }
       const chatEvent = parseEvent(event, data)
       if (!chatEvent) return
       terminal ||=
@@ -405,7 +436,9 @@ type StreamMessagePayload = {
 export const streamMessage = async (
   payload: StreamMessagePayload,
   onEvent: (event: ChatRunEvent) => void,
-  signal: AbortSignal
+  signal: AbortSignal,
+  /** Optional cursor updated on each SSE frame (survives mid-stream abort). */
+  eventIndexCursor?: { current: number | null },
 ) => {
   const files = (payload.files ?? []).filter((file) => file instanceof File)
   let response: Response
@@ -452,6 +485,17 @@ export const streamMessage = async (
   await consumeSse(
     response.body,
     ({ event, data }) => {
+      try {
+        const raw: unknown = JSON.parse(data)
+        if (raw && typeof raw === 'object' && 'event_index' in raw) {
+          const idx = (raw as { event_index?: unknown }).event_index
+          if (typeof idx === 'number' && Number.isFinite(idx) && eventIndexCursor) {
+            eventIndexCursor.current = idx
+          }
+        }
+      } catch {
+        // ignore
+      }
       const chatEvent = parseEvent(event, data)
       if (!chatEvent) return
       terminal ||=

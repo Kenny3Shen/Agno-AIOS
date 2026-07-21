@@ -128,32 +128,90 @@ def _event_matches(event_type: str, name: str) -> bool:
 
 
 
-def _invoke_runner_cancel(runner: Any, run_id: str) -> bool:
-    """Cancel an Agno Agent/Team run.
+def _agno_global_cancel(run_id: str) -> bool:
+    """Store Agno cancellation intent by run_id (AgentOS cancel-before-start path)."""
+    if not run_id:
+        return False
+    try:
+        from agno.run.cancel import cancel_run as agno_cancel_run
 
-    Agno exposes ``cancel_run`` as a ``@staticmethod``; tests and wrappers may
-    expose it as an instance method. Try instance first, then type.
+        return bool(agno_cancel_run(run_id))
+    except Exception:  # noqa: BLE001 — cancel is best-effort
+        return False
+
+
+async def _agno_global_acancel(run_id: str) -> bool:
+    if not run_id:
+        return False
+    try:
+        from agno.run.cancel import acancel_run as agno_acancel_run
+
+        return bool(await agno_acancel_run(run_id))
+    except Exception:  # noqa: BLE001
+        return _agno_global_cancel(run_id)
+
+
+def _invoke_runner_cancel(runner: Any | None, run_id: str) -> bool:
+    """Cancel an Agno Agent/Team run (sync).
+
+    Prefers instance/type ``cancel_run``, then global ``agno.run.cancel``.
+    Agno exposes cancel as a ``@staticmethod``; tests may bind instance methods.
     """
     if not run_id:
         return False
-    # Instance method / bound callable
-    inst = getattr(runner, "cancel_run", None)
-    if callable(inst):
-        try:
-            return bool(inst(run_id))
-        except TypeError:
-            # Unbound-like callable that expects (self, run_id) but was already bound wrong.
-            pass
-    cls_fn = getattr(type(runner), "cancel_run", None)
-    if callable(cls_fn):
-        try:
-            return bool(cls_fn(run_id))
-        except TypeError:
+    if runner is not None:
+        inst = getattr(runner, "cancel_run", None)
+        if callable(inst):
             try:
-                return bool(cls_fn(runner, run_id))
-            except Exception:
-                return False
-    return False
+                return bool(inst(run_id))
+            except TypeError:
+                pass
+        cls_fn = getattr(type(runner), "cancel_run", None)
+        if callable(cls_fn):
+            try:
+                return bool(cls_fn(run_id))
+            except TypeError:
+                try:
+                    return bool(cls_fn(runner, run_id))
+                except Exception:
+                    pass
+    return _agno_global_cancel(run_id)
+
+
+async def _ainvoke_runner_cancel(runner: Any | None, run_id: str) -> bool:
+    """Cancel an Agno Agent/Team run (async; prefer ``acancel_run`` like AgentOS)."""
+    if not run_id:
+        return False
+    if runner is not None:
+        inst = getattr(runner, "acancel_run", None)
+        if callable(inst):
+            try:
+                result = inst(run_id)
+                if isawaitable(result):
+                    result = await result
+                return bool(result)
+            except TypeError:
+                pass
+        cls_fn = getattr(type(runner), "acancel_run", None)
+        if callable(cls_fn):
+            try:
+                result = cls_fn(run_id)
+                if isawaitable(result):
+                    result = await result
+                return bool(result)
+            except TypeError:
+                try:
+                    result = cls_fn(runner, run_id)
+                    if isawaitable(result):
+                        result = await result
+                    return bool(result)
+                except Exception:
+                    pass
+        # Sync cancel_run still marks the global manager immediately.
+        synced = _invoke_runner_cancel(runner, run_id)
+        if synced:
+            return True
+    return await _agno_global_acancel(run_id)
 
 
 def _is_member_agent_event(event: Any) -> bool:
@@ -891,9 +949,16 @@ class _LiveChatStreamHub:
 
     Primary SSE and later re-attach clients all subscribe here. Leave-page
     cancels only the subscriber; the worker keeps publishing until COMPLETED.
+
+    Mirrors AgentOS ``EventsBuffer`` + ``SSESubscriberManager`` patterns:
+    monotonic ``event_index`` per event, bounded buffer, and optional
+    ``last_event_index`` catch-up on re-attach.
     """
 
-    __slots__ = ("buffer", "subscribers", "done", "error", "_lock")
+    # AgentOS default max_events_per_run is 10_000.
+    MAX_EVENTS = 10_000
+
+    __slots__ = ("buffer", "subscribers", "done", "error", "_lock", "_next_index")
 
     def __init__(self) -> None:
         self.buffer: list[ChatRunEvent] = []
@@ -901,13 +966,45 @@ class _LiveChatStreamHub:
         self.done = False
         self.error: BaseException | None = None
         self._lock = asyncio.Lock()
+        self._next_index = 0
+
+    def _stamp(self, event: ChatRunEvent) -> ChatRunEvent:
+        idx = self._next_index
+        self._next_index += 1
+        data = dict(event.data)
+        data["event_index"] = idx
+        return ChatRunEvent(event=event.event, data=data)
+
+    @staticmethod
+    def _event_index(event: ChatRunEvent) -> int | None:
+        raw = event.data.get("event_index")
+        if isinstance(raw, int):
+            return raw
+        if isinstance(raw, float) and raw.is_integer():
+            return int(raw)
+        if isinstance(raw, str) and raw.isdigit():
+            return int(raw)
+        return None
+
+    def _events_after(self, last_event_index: int | None) -> list[ChatRunEvent]:
+        """Events strictly after ``last_event_index`` (AgentOS get_events semantics)."""
+        if last_event_index is None:
+            return list(self.buffer)
+        return [
+            event
+            for event in self.buffer
+            if (idx := self._event_index(event)) is None or idx > last_event_index
+        ]
 
     async def publish(self, event: ChatRunEvent) -> None:
         async with self._lock:
-            self.buffer.append(event)
+            stamped = self._stamp(event)
+            self.buffer.append(stamped)
+            if len(self.buffer) > self.MAX_EVENTS:
+                self.buffer = self.buffer[-self.MAX_EVENTS :]
             targets = list(self.subscribers)
         for queue in targets:
-            queue.put_nowait(event)
+            queue.put_nowait(stamped)
 
     async def finish(self, error: BaseException | None = None) -> None:
         async with self._lock:
@@ -921,10 +1018,17 @@ class _LiveChatStreamHub:
         for queue in targets:
             queue.put_nowait(sentinel)
 
-    async def subscribe(self) -> AsyncIterator[ChatRunEvent]:
+    async def subscribe(
+        self, *, last_event_index: int | None = None
+    ) -> AsyncIterator[ChatRunEvent]:
+        """Catch-up then live fan-out.
+
+        Subscribe registration happens under the same lock as catch-up so events
+        published mid-subscribe are not lost (AgentOS resume PATH 1 pattern).
+        """
         queue: asyncio.Queue[ChatRunEvent | BaseException | None] = asyncio.Queue()
         async with self._lock:
-            for event in self.buffer:
+            for event in self._events_after(last_event_index):
                 queue.put_nowait(event)
             if self.done:
                 queue.put_nowait(self.error)
@@ -937,6 +1041,13 @@ class _LiveChatStreamHub:
                     return
                 if isinstance(item, BaseException):
                     raise item
+                # Dedup: live queue may race with catch-up on rare re-entrancy.
+                if last_event_index is not None:
+                    idx = self._event_index(item)
+                    if idx is not None and idx <= last_event_index:
+                        continue
+                    if idx is not None:
+                        last_event_index = idx
                 yield item
         finally:
             async with self._lock:
@@ -1006,19 +1117,50 @@ class SecurityRunRuntime:
                         self._session_run_ids.pop((user_id, session), None)
 
     def cancel_run(self, *, user_id: str, run_id: str) -> bool:
+        """Sync cancel (tests / supersede). Prefer :meth:`acancel_run` on request paths.
+
+        Returns False when this owner has no live run and no in-flight stream
+        cancel event (HTTP 404). Unlike bare AgentOS, we do not accept cancel for
+        arbitrary run_ids without a known stream.
+        """
         key = (user_id, run_id)
-        cancel_event = self._stream_cancels.get(key) or self._user_stream_cancels.get(user_id)
+        cancel_event = self._stream_cancels.get(key) or self._user_stream_cancels.get(
+            user_id
+        )
         if cancel_event is not None:
             cancel_event.set()
         agent = self._active_agents.get(key)
         if agent is None:
-            # Interrupted retry backoff / stream before agent.cancel_run is available.
+            # Retry backoff / stream before agent registration: local Event is enough.
+            # Still stamp Agno intent when we know the run_id.
+            if cancel_event is not None and run_id:
+                _agno_global_cancel(run_id)
             return cancel_event is not None
         cancelled = False
         try:
             cancelled = _invoke_runner_cancel(agent, run_id)
         except Exception as exc:  # noqa: BLE001 — cancel is best-effort
             logger.debug("cancel_run on runner failed run_id={}: {}", run_id, exc)
+        return cancelled or cancel_event is not None
+
+    async def acancel_run(self, *, user_id: str, run_id: str) -> bool:
+        """Async cancel aligned with AgentOS ``await agent.acancel_run``."""
+        key = (user_id, run_id)
+        cancel_event = self._stream_cancels.get(key) or self._user_stream_cancels.get(
+            user_id
+        )
+        if cancel_event is not None:
+            cancel_event.set()
+        agent = self._active_agents.get(key)
+        if agent is None:
+            if cancel_event is not None and run_id:
+                await _agno_global_acancel(run_id)
+            return cancel_event is not None
+        cancelled = False
+        try:
+            cancelled = await _ainvoke_runner_cancel(agent, run_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("acancel_run on runner failed run_id={}: {}", run_id, exc)
         return cancelled or cancel_event is not None
 
     def supersede_session_stream(
@@ -1540,11 +1682,11 @@ class SecurityRunRuntime:
         # Member error summaries when member fails but team continues
         member_error_notes: list[str] = []
 
-        def _request_runner_cancel() -> None:
+        async def _arequest_runner_cancel() -> None:
             if not active_run_id:
                 return
             try:
-                _invoke_runner_cancel(agent, active_run_id)
+                await _ainvoke_runner_cancel(agent, active_run_id)
             except Exception:  # noqa: BLE001
                 pass
 
@@ -1553,7 +1695,7 @@ class SecurityRunRuntime:
                 if stream_cancel.is_set():
                     if not producer.done():
                         producer.cancel()
-                    _request_runner_cancel()
+                    await _arequest_runner_cancel()
                     if not cancelled_emitted:
                         cancelled_emitted = True
                         yield ChatRunEvent(
@@ -1575,7 +1717,7 @@ class SecurityRunRuntime:
                     # User/stop requested: stop producer and emit one cancelled event.
                     if not producer.done():
                         producer.cancel()
-                    _request_runner_cancel()
+                    await _arequest_runner_cancel()
                     if not cancelled_emitted:
                         cancelled_emitted = True
                         yield ChatRunEvent(
@@ -1601,7 +1743,7 @@ class SecurityRunRuntime:
                     agent_waiter = None
                     # Cancel during model retry backoff (or agent.arun) → clean cancelled SSE.
                     if isinstance(payload, asyncio.CancelledError) or stream_cancel.is_set():
-                        _request_runner_cancel()
+                        await _arequest_runner_cancel()
                         if not cancelled_emitted:
                             cancelled_emitted = True
                             yield ChatRunEvent(
@@ -2274,7 +2416,7 @@ class SecurityRunRuntime:
                         await producer
                     except asyncio.CancelledError:
                         pass
-                    _request_runner_cancel()
+                    await _arequest_runner_cancel()
                     return
                 try:
                     await asyncio.wait_for(producer, timeout=drain_timeout)
@@ -2284,7 +2426,7 @@ class SecurityRunRuntime:
                         await producer
                     except asyncio.CancelledError:
                         pass
-                    _request_runner_cancel()
+                    await _arequest_runner_cancel()
 
             if not producer.done():
                 if user_stop:
@@ -2729,19 +2871,28 @@ async def attach_live_security_run(
     *,
     user_id: str,
     session_id: str,
+    last_event_index: int | None = None,
     runtime: SecurityRunRuntime | None = None,
 ) -> AsyncIterator[ChatRunEvent]:
-    """Re-attach to a leave-page detached chat worker (catch-up + live)."""
+    """Re-attach to a leave-page detached chat worker (catch-up + live).
+
+    ``last_event_index`` matches AgentOS ``/resume``: only events strictly after
+    that monotonic index are replayed, then live deltas follow.
+    """
     active_runtime = runtime or DEFAULT_SECURITY_RUN_RUNTIME
     hub = active_runtime.get_live_hub(user_id=user_id, session_id=session_id)
     if hub is None:
         return
-    async for event in hub.subscribe():
+    async for event in hub.subscribe(last_event_index=last_event_index):
         yield event
 
 
 def cancel_security_run(*, user_id: str, run_id: str) -> bool:
     return DEFAULT_SECURITY_RUN_RUNTIME.cancel_run(user_id=user_id, run_id=run_id)
+
+
+async def acancel_security_run(*, user_id: str, run_id: str) -> bool:
+    return await DEFAULT_SECURITY_RUN_RUNTIME.acancel_run(user_id=user_id, run_id=run_id)
 
 
 def has_live_security_run(

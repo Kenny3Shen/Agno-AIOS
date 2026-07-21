@@ -98,11 +98,33 @@ def test_cancel_workflow_run_requires_registered_owner():
         assert workflow.cancelled == []
         assert workflow_run_runtime.cancel_workflow_run(user_id="u1", run_id="run-x")
         assert workflow.cancelled == ["run-x"]
-        assert not workflow_run_runtime.cancel_workflow_run(
-            user_id="u1", run_id="missing"
+        # Cancel-before-start succeeds (AgentOS always stores intent).
+        assert workflow_run_runtime.cancel_workflow_run(
+            user_id="u1", run_id="missing-pre"
         )
+        workflow_run_runtime._workflow_cancel_intent.discard(("u1", "missing-pre"))
     finally:
         workflow_run_runtime.unregister_workflow_run(user_id="u1", run_id="run-x")
+
+
+def test_cancel_before_start_applied_on_register():
+    class FakeCancellable:
+        def __init__(self) -> None:
+            self.cancelled: list[str] = []
+
+        def cancel_run(self, run_id: str) -> bool:
+            self.cancelled.append(run_id)
+            return True
+
+    assert workflow_run_runtime.cancel_workflow_run(user_id="u1", run_id="run-pre")
+    workflow = FakeCancellable()
+    workflow_run_runtime.register_workflow_run(
+        user_id="u1", run_id="run-pre", workflow=workflow
+    )
+    try:
+        assert workflow.cancelled == ["run-pre"]
+    finally:
+        workflow_run_runtime.unregister_workflow_run(user_id="u1", run_id="run-pre")
 
 
 @pytest.mark.asyncio
@@ -150,8 +172,8 @@ async def test_stream_registers_and_unregisters_workflow():
         ]
     assert events[0].event == "workflow.started"
     assert events[-1].event == "workflow.completed"
-    # After stream completes, registration is cleared.
-    assert not workflow_run_runtime.cancel_workflow_run(user_id="u1", run_id="run-reg")
+    # After stream completes, live registration is cleared.
+    assert ("u1", "run-reg") not in workflow_run_runtime._active_workflows
 
 
 @pytest.mark.asyncio

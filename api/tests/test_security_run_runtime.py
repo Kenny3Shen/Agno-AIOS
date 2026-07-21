@@ -420,6 +420,50 @@ def test_runtime_cancellation_requires_the_matching_user_and_live_run():
     assert not runtime.cancel_run(user_id="u2", run_id="run-1")
     assert runtime.cancel_run(user_id="u1", run_id="run-1")
     assert agent.cancelled_run_ids == ["run-1"]
+    # Unknown run without stream cancel event → 404 semantics (not AgentOS open cancel).
+    assert not runtime.cancel_run(user_id="u1", run_id="ghost-run")
+
+
+@pytest.mark.asyncio
+async def test_live_hub_last_event_index_skips_catchup():
+    """AgentOS-style resume: last_event_index skips already-seen frames."""
+    hub = security_run_runtime._LiveChatStreamHub()
+    await hub.publish(ChatRunEvent("run.started", {"run_id": "r1"}))
+    await hub.publish(ChatRunEvent("content.delta", {"run_id": "r1", "delta": "a"}))
+    await hub.publish(ChatRunEvent("content.delta", {"run_id": "r1", "delta": "b"}))
+    await hub.finish()
+
+    # Full catch-up
+    all_events = [e async for e in hub.subscribe()]
+    assert len(all_events) == 3
+    assert all(isinstance(e.data.get("event_index"), int) for e in all_events)
+    assert [e.data["event_index"] for e in all_events] == [0, 1, 2]
+
+    # Skip first two (indices 0,1)
+    partial = [e async for e in hub.subscribe(last_event_index=1)]
+    assert len(partial) == 1
+    assert partial[0].data.get("delta") == "b"
+    assert partial[0].data["event_index"] == 2
+
+
+@pytest.mark.asyncio
+async def test_acancel_run_prefers_async_runner_method():
+    runtime = security_run_runtime.SecurityRunRuntime()
+    calls: list[str] = []
+
+    class AsyncCancelAgent:
+        async def acancel_run(self, run_id: str) -> bool:
+            calls.append(f"a:{run_id}")
+            return True
+
+        def cancel_run(self, run_id: str) -> bool:
+            calls.append(f"s:{run_id}")
+            return True
+
+    agent = AsyncCancelAgent()
+    runtime.register_run(user_id="u1", run_id="run-async", agent=agent)
+    assert await runtime.acancel_run(user_id="u1", run_id="run-async")
+    assert calls == ["a:run-async"]
 
 
 def test_supersede_session_stream_cancels_prior_cancel_event():

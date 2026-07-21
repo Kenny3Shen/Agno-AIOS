@@ -44,6 +44,8 @@ export function useChat() {
   const [attachments, setAttachments] = useState<File[]>([])
   const abortRef = useRef<AbortController | null>(null)
   const activeRunIdRef = useRef<string | null>(null)
+  /** Highest SSE ``event_index`` seen this tab (AgentOS-style live resume). */
+  const lastEventIndexRef = useRef<number | null>(null)
   /** When true, AbortError means leave/unmount — do not mark cancelled or cancel server. */
   const detachOnlyRef = useRef(false)
   /** Files from the last submitted user turn (for regenerate while still in session). */
@@ -120,6 +122,7 @@ export function useChat() {
     if (prev != null) {
       dispatch({ type: 'session-switch' })
       lastTurnFilesRef.current = []
+      lastEventIndexRef.current = null
       setAttachments([])
     }
   }, [sessionId])
@@ -204,6 +207,10 @@ export function useChat() {
             dispatch({ type: 'event', id: assistantId, event })
           },
           controller.signal,
+          {
+            lastEventIndex: lastEventIndexRef.current,
+            eventIndexCursor: lastEventIndexRef,
+          },
         )
       } catch (error) {
         if (cancelled || (error as Error).name === 'AbortError') {
@@ -221,6 +228,7 @@ export function useChat() {
           clearChatStream(controller)
           if (abortRef.current === controller) abortRef.current = null
           activeRunIdRef.current = null
+          lastEventIndexRef.current = null
           void queryClient.invalidateQueries({ queryKey: chatKeys.history(attachSession) })
           void queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
         }
@@ -434,6 +442,7 @@ export function useChat() {
     const controller = new AbortController()
     abortRef.current = controller
     activeRunIdRef.current = null
+    lastEventIndexRef.current = null
     detachOnlyRef.current = false
     registerChatStream(controller, activeSession)
     try {
@@ -461,15 +470,18 @@ export function useChat() {
           }
           dispatch({ type: 'event', id: assistantId, event })
         },
-        controller.signal
+        controller.signal,
+        lastEventIndexRef,
       )
     } catch (error) {
       if ((error as Error).name === 'AbortError') {
         // Leave/unmount: drop the client stream; server keeps running.
+        // Keep lastEventIndexRef so re-attach can skip already-rendered events.
         if (detachOnlyRef.current) {
           detachOnlyRef.current = false
         } else if (prevSessionIdRef.current === activeSession) {
           // Explicit stop or session switch on the same view.
+          lastEventIndexRef.current = null
           dispatch({ type: 'clear-error' })
           dispatch({
             type: 'event',
@@ -482,6 +494,7 @@ export function useChat() {
           })
         }
       } else if (prevSessionIdRef.current === activeSession) {
+        lastEventIndexRef.current = null
         dispatch({
           type: 'network-error',
           id: assistantId,
@@ -492,6 +505,10 @@ export function useChat() {
       clearChatStream(controller)
       abortRef.current = null
       activeRunIdRef.current = null
+      // Natural terminal: clear resume cursor. Leave-page abort keeps the cursor.
+      if (!controller.signal.aborted) {
+        lastEventIndexRef.current = null
+      }
       // Refresh after success, cancel, or failure (partial/cancelled runs may be stored).
       void queryClient.invalidateQueries({ queryKey: chatKeys.history(activeSession) })
       void queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })

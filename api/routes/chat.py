@@ -32,8 +32,8 @@ from api.services.team_runtime import (
 )
 from api.services.security_run_runtime import (
     SecurityRunRequest,
+    acancel_security_run,
     attach_live_security_run,
-    cancel_security_run,
     has_live_security_run,
     stream_security_run,
 )
@@ -404,8 +404,8 @@ async def cancel_chat_run(
     run_id: str,
     user: User = Depends(require_scope("sessions:write")),
 ):
-    """Cancel a live Agno run owned by the current user."""
-    if not cancel_security_run(user_id=actor_id(user), run_id=run_id):
+    """Cancel a live Agno run owned by the current user (AgentOS-style acancel)."""
+    if not await acancel_security_run(user_id=actor_id(user), run_id=run_id):
         raise HTTPException(status_code=404, detail="运行不存在或已结束")
     await record_audit_event_async(
         user,
@@ -419,16 +419,20 @@ async def cancel_chat_run(
 @router.get("/chat/sessions/{session_id}/live")
 async def attach_live_chat_stream(
     session_id: str,
+    last_event_index: int | None = None,
     user: User = Depends(require_scope("sessions:write")),
 ):
     """Re-attach to an in-flight chat run after leaving the page.
 
     Returns catch-up buffered events then live deltas until the detached worker
-    completes. 404 when no live worker is registered for this session/owner.
+    completes. Optional ``last_event_index`` (AgentOS /resume style) skips events
+    already received. 404 when no live worker is registered for this session/owner.
     """
     session_id = (session_id or "").strip()
     if not session_id:
         raise HTTPException(status_code=422, detail="session_id is required")
+    if last_event_index is not None and last_event_index < -1:
+        raise HTTPException(status_code=422, detail="last_event_index must be >= -1")
     owner_user_id = await get_session_owner_async(session_id)
     if owner_user_id is not None:
         assert_owned_resource(
@@ -440,9 +444,13 @@ async def attach_live_chat_stream(
     if not has_live_security_run(user_id=user_id, session_id=session_id):
         raise HTTPException(status_code=404, detail="该会话没有进行中的生成")
 
+    resume_after = None if last_event_index is None else last_event_index
+
     async def _events():
         async for event in attach_live_security_run(
-            user_id=user_id, session_id=session_id
+            user_id=user_id,
+            session_id=session_id,
+            last_event_index=resume_after,
         ):
             yield {
                 "event": event.event,
