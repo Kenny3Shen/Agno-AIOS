@@ -250,25 +250,26 @@ export function IpBlacklistPage() {
             options={[{ value: 'firehol-level1', label: 'FireHOL level1' }]}
             style={{ minWidth: 160 }}
           />
-          {updating && canUpdate ? (
-            <Button
-              danger
-              icon={<StopOutlined />}
-              title={t('stopUpdateHint')}
-              onClick={() => updateAbortRef.current?.abort()}
-            >
-              {t('stopUpdate')}
-            </Button>
-          ) : (
-            <Button
-              icon={<ReloadOutlined />}
-              loading={updating}
-              disabled={!canUpdate || updating}
-              onClick={() => updateMutation.mutate()}
-            >
-              {t('updateDatabase')}
-            </Button>
-          )}
+          {canUpdate ? (
+            updating ? (
+              <Button
+                danger
+                icon={<StopOutlined />}
+                title={t('stopUpdateHint')}
+                onClick={() => updateAbortRef.current?.abort()}
+              >
+                {t('stopUpdate')}
+              </Button>
+            ) : (
+              <Button
+                icon={<ReloadOutlined />}
+                loading={updating}
+                onClick={() => updateMutation.mutate()}
+              >
+                {t('updateDatabase')}
+              </Button>
+            )
+          ) : null}
         </Space>
 
         {updateProgress ? (

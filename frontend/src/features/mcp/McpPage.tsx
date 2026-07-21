@@ -45,7 +45,7 @@ import {
   type McpToken,
 } from './api'
 import { currentUserQuery } from '@/features/auth'
-import { roleOf } from '@/shared/auth/permissions'
+import { hasScope, roleOf } from '@/shared/auth/permissions'
 import {
   listCapabilities,
   setCapabilityPreference,
@@ -85,6 +85,7 @@ export function McpPage() {
   const capabilitiesQuery = useQuery({ queryKey: ['capabilities'], queryFn: listCapabilities })
   const currentUser = useQuery(currentUserQuery())
   const isAdmin = roleOf(currentUser.data) === 'admin'
+  const canSubmit = hasScope(currentUser.data, 'mcp:submit')
   const components = useQuery({ queryKey: ['mcp', 'components', namespace], queryFn: () => listComponents(namespace) })
   const tokens = useQuery({ queryKey: ['mcp', 'tokens'], queryFn: listTokens })
   const capabilityByServerId = useMemo(() => {
@@ -186,9 +187,11 @@ export function McpPage() {
         description={t('description')}
         actions={
           <>
-            <Button icon={<PlusOutlined />} onClick={() => setServerOpen(true)}>
-              {t('addServerShort')}
-            </Button>
+            {canSubmit ? (
+              <Button icon={<PlusOutlined />} onClick={() => setServerOpen(true)}>
+                {t('addServerShort')}
+              </Button>
+            ) : null}
             <Button type="primary" icon={<KeyOutlined />} onClick={() => setIssueOpen(true)}>
               {t('issueTokenShort')}
             </Button>
@@ -234,12 +237,15 @@ export function McpPage() {
                               title: t('colEnabled'),
                               width: 90,
                               render: (_: unknown, row: McpServer) => {
+                                if (!row.can_manage) {
+                                  return <Tag>{row.enabled ? t('common:enabled') : t('common:disabled')}</Tag>
+                                }
                                 const pending = toggleServer.isPending && toggleServer.variables?.server.id === row.id
                                 return (
                                   <Switch
                                     checked={row.enabled}
                                     loading={pending}
-                                    disabled={!row.can_manage || pending}
+                                    disabled={pending}
                                     onClick={(_checked, event) => event.stopPropagation()}
                                     onChange={(enabled) => toggleServer.mutate({ server: row, enabled })}
                                   />
@@ -279,14 +285,16 @@ export function McpPage() {
                       {
                         title: t('colVisibility'),
                         width: 140,
-                        render: (_, row) => (
-                          <VisibilitySelect
-                            value={row.visibility}
-                            disabled={!row.can_manage}
-                            onClick={(event) => event.stopPropagation()}
-                            onChange={(value) => void updateServerVisibility(row.name, value)}
-                          />
-                        ),
+                        render: (_, row) =>
+                          row.can_manage ? (
+                            <VisibilitySelect
+                              value={row.visibility}
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={(value) => void updateServerVisibility(row.name, value)}
+                            />
+                          ) : (
+                            <Tag>{row.visibility === 'public' ? t('common:public') : t('common:private')}</Tag>
+                          ),
                       },
                       {
                         title: t('colActions'),
@@ -343,11 +351,18 @@ export function McpPage() {
                         render: (_, row) => {
                           const pending = toggleComponent.isPending && toggleComponent.variables?.item.key === row.key
                           const server = servers.find((item) => item.id === row.server_id)
+                          if (!server?.can_manage) {
+                            return (
+                              <Tag aria-label={`${row.name} enabled`}>
+                                {row.enabled ? t('common:enabled') : t('common:disabled')}
+                              </Tag>
+                            )
+                          }
                           return (
                             <Switch
                               aria-label={`${row.name} enabled`}
                               checked={row.enabled}
-                              disabled={!server?.can_manage || pending}
+                              disabled={pending}
                               loading={pending}
                               onClick={(_checked, event) => event.stopPropagation()}
                               onChange={(enabled) => toggleComponent.mutate({ item: row, enabled })}

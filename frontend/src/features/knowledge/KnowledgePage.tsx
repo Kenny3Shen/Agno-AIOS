@@ -15,6 +15,8 @@ import { UpdateDocumentDrawer } from './components/UpdateDocumentDrawer'
 import { effectiveKnowledgeIngestDefaults, resolveRetrievalContent, SEARCH_TYPE_OPTIONS } from './utils'
 import { useTranslation } from 'react-i18next'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
+import { currentUserQuery } from '@/features/auth'
+import { hasScope } from '@/shared/auth/permissions'
 
 function scoreKind(result: SearchResult): 'rerank' | 'similarity' | 'score' {
   const meta = result.metadata ?? {}
@@ -96,6 +98,8 @@ export function KnowledgePage() {
   const searchTypeOptions = SEARCH_TYPE_OPTIONS.map((value) => ({ value, label: value }))
   const { message } = App.useApp()
   const client = useQueryClient()
+  const currentUser = useQuery(currentUserQuery())
+  const canWrite = hasScope(currentUser.data, 'knowledge:write')
   const [filter, setFilter] = useState('')
   const debouncedFilter = useDebouncedValue(filter, 300)
   const [page, setPage] = useState(1)
@@ -181,9 +185,11 @@ export function KnowledgePage() {
             <Button icon={<ReloadOutlined />} onClick={() => void refresh()}>
               {t('common:refresh')}
             </Button>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-              {t('addDocShort')}
-            </Button>
+            {canWrite ? (
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+                {t('addDocShort')}
+              </Button>
+            ) : null}
           </>
         }
       />

@@ -62,14 +62,11 @@ describe('McpPage component permissions', () => {
     )
   })
 
-  it('disables a Component Enabled switch when the user cannot manage its Server', async () => {
+  it('hides the Component Enabled switch when the user cannot manage its Server', async () => {
     renderWithQuery(<McpPage />)
 
-    const componentSwitch = await screen.findByRole('switch', { name: 'shared.inspect enabled' })
-    expect((componentSwitch as HTMLButtonElement).disabled).toBe(true)
-
-    await user.click(componentSwitch)
-    expect(componentSwitch.getAttribute('aria-checked')).toBe('true')
+    expect(await screen.findByLabelText('shared.inspect enabled')).toBeTruthy()
+    expect(screen.queryByRole('switch', { name: 'shared.inspect enabled' })).toBeNull()
   })
 })
 

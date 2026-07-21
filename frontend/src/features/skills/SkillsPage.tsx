@@ -10,7 +10,7 @@ import { VisibilitySelect } from '@/shared/ui/VisibilitySelect'
 import { MetadataDescriptions } from '@/shared/ui/MetadataDescriptions'
 import { useTranslation } from 'react-i18next'
 import { currentUserQuery } from '@/features/auth'
-import { roleOf } from '@/shared/auth/permissions'
+import { hasScope, roleOf } from '@/shared/auth/permissions'
 import {
   listCapabilities,
   setCapabilityPreference,
@@ -28,6 +28,7 @@ export function SkillsPage() {
   const capabilitiesQuery = useQuery({ queryKey: ['capabilities'], queryFn: listCapabilities })
   const currentUser = useQuery(currentUserQuery())
   const isAdmin = roleOf(currentUser.data) === 'admin'
+  const canSubmit = hasScope(currentUser.data, 'skill:submit')
   const [selectedName, setSelectedName] = useState<string | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
   const detailQuery = useQuery({
@@ -103,9 +104,11 @@ export function SkillsPage() {
         title={t('title')}
         description={t('description')}
         actions={
-          <Button type="primary" icon={<UploadOutlined />} onClick={() => setUploadOpen(true)}>
-            {t('uploadSkill')}
-          </Button>
+          canSubmit ? (
+            <Button type="primary" icon={<UploadOutlined />} onClick={() => setUploadOpen(true)}>
+              {t('uploadSkill')}
+            </Button>
+          ) : null
         }
       />
       <Card className="workbench-card">
@@ -143,14 +146,16 @@ export function SkillsPage() {
               title: t('colVisibility'),
               dataIndex: 'visibility',
               width: 150,
-              render: (value, row) => (
-                <VisibilitySelect
-                  value={value}
-                  disabled={!row.can_manage}
-                  onClick={(event) => event.stopPropagation()}
-                  onChange={(visibility) => void updateVisibility(row.name, visibility)}
-                />
-              ),
+              render: (value, row) =>
+                row.can_manage ? (
+                  <VisibilitySelect
+                    value={value}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={(visibility) => void updateVisibility(row.name, visibility)}
+                  />
+                ) : (
+                  <Tag>{value === 'public' ? t('common:public') : t('common:private')}</Tag>
+                ),
             },
             ...(isAdmin
               ? [
@@ -159,12 +164,14 @@ export function SkillsPage() {
                     dataIndex: 'enabled' as const,
                     width: 100,
                     render: (value: boolean, row: Skill) => {
+                      if (!row.can_manage) {
+                        return <Tag>{value ? t('common:enabled') : t('common:disabled')}</Tag>
+                      }
                       const pending = toggle.isPending && toggle.variables?.skill.name === row.name
                       return (
                         <Switch
                           checked={value}
                           loading={pending}
-                          disabled={!row.can_manage}
                           onClick={(_checked, event) => event?.stopPropagation()}
                           onChange={(enabled) => toggle.mutate({ skill: row, enabled })}
                         />

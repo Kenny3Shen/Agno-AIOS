@@ -235,20 +235,17 @@ export function CvePage() {
               { value: 'exploit-db', label: 'Exploit-DB' },
             ]}
           />
-          {updating && canUpdateDatabase ? (
-            <Button danger icon={<StopOutlined />} title={t('updateStopHint')} onClick={stopUpdate}>
-              {t('updateStop')}
-            </Button>
-          ) : (
-            <Button
-              icon={<ReloadOutlined />}
-              loading={updating}
-              disabled={!canUpdateDatabase || updating}
-              onClick={() => update.mutate()}
-            >
-              {t('updateDb')}
-            </Button>
-          )}
+          {canUpdateDatabase ? (
+            updating ? (
+              <Button danger icon={<StopOutlined />} title={t('updateStopHint')} onClick={stopUpdate}>
+                {t('updateStop')}
+              </Button>
+            ) : (
+              <Button icon={<ReloadOutlined />} loading={updating} onClick={() => update.mutate()}>
+                {t('updateDb')}
+              </Button>
+            )
+          ) : null}
         </Space>
 
         {updateProgress ? (

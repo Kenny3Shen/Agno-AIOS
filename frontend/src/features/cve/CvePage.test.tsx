@@ -66,7 +66,7 @@ describe('CvePage', () => {
     expect(screen.getByDisplayValue('CVE-2021-44228')).toBeTruthy()
   })
 
-  it('disables database updates for non-admin users', async () => {
+  it('hides database updates for non-admin users', async () => {
     server.use(
       memberCurrentUserHandler(),
       http.post('/api/cve/search', () => HttpResponse.json(emptySearch)),
@@ -74,7 +74,9 @@ describe('CvePage', () => {
 
     renderWithQuery(<CvePage />)
 
-    expect((await screen.findByText('更新数据库')).closest('button')?.disabled).toBe(true)
+    await waitFor(() => {
+      expect(screen.queryByText('更新数据库')).toBeNull()
+    })
   })
 
   it('loads recent CVEs on mount and shows update counts for admin', async () => {

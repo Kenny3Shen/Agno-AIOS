@@ -157,15 +157,17 @@ export function DocumentsTable({
             title: t('columns.visibility'),
             dataIndex: 'visibility',
             width: 130,
-            render: (value, row) => (
-              <VisibilitySelect
-                size="small"
-                value={value ?? 'private'}
-                disabled={!row.can_manage}
-                onClick={(event) => event.stopPropagation()}
-                onChange={(visibility) => onVisibilityChange(row, visibility)}
-              />
-            ),
+            render: (value, row) =>
+              row.can_manage ? (
+                <VisibilitySelect
+                  size="small"
+                  value={value ?? 'private'}
+                  onClick={(event) => event.stopPropagation()}
+                  onChange={(visibility) => onVisibilityChange(row, visibility)}
+                />
+              ) : (
+                <Tag>{value === 'public' ? t('common:public') : t('common:private')}</Tag>
+              ),
           },
           {
             title: t('columns.actions'),

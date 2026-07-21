@@ -676,7 +676,8 @@ export function WorkflowPage() {
             className="workflow-studio__name"
             data-inspector-field="workflowName"
             value={workflow.state.name}
-            disabled={!canWrite || workflow.state.running}
+            readOnly={!canWrite}
+            disabled={canWrite && workflow.state.running}
             onChange={(e) => workflow.patch({ name: e.target.value })}
             placeholder={t('namePlaceholder')}
             variant="borderless"
@@ -692,6 +693,7 @@ export function WorkflowPage() {
             style={{ minWidth: 180 }}
             placeholder={t('modelPlaceholder')}
             value={workflow.state.modelId ?? undefined}
+            disabled={!canWrite || workflow.state.running}
             options={models
               .filter((model) => model.enabled)
               .map((model) => ({ value: model.id, label: model.name || model.model_id }))}
@@ -719,119 +721,122 @@ export function WorkflowPage() {
         </div>
         {/* Pure icon toolbar (tooltip labels); handlers unchanged. */}
         <div className="workflow-studio__actions workflow-studio__actions--drawio">
-          <section
-            className="workflow-studio__action-group"
-            aria-label={t('toolbarGroupFile')}
-          >
-            <Tooltip title={t('new')} getPopupContainer={studioPopupContainer}>
-              <Button
-                icon={<FileAddOutlined />}
-                aria-label={t('new')}
-                disabled={workflow.state.running}
-                onClick={workflow.reset}
-              />
-            </Tooltip>
-          </section>
-          <span className="workflow-studio__action-sep" aria-hidden />
-          <section
-            className="workflow-studio__action-group"
-            aria-label={t('toolbarGroupEdit')}
-          >
-            <Tooltip title={t('undoHint')} getPopupContainer={studioPopupContainer}>
-              <Button
-                icon={<UndoOutlined />}
-                aria-label={t('undoHint')}
-                disabled={!workflow.canUndo || workflow.state.running}
-                onClick={workflow.undo}
-              />
-            </Tooltip>
-            <Tooltip title={t('redoHint')} getPopupContainer={studioPopupContainer}>
-              <Button
-                icon={<RedoOutlined />}
-                aria-label={t('redoHint')}
-                disabled={!workflow.canRedo || workflow.state.running}
-                onClick={workflow.redo}
-              />
-            </Tooltip>
-          </section>
-          <span className="workflow-studio__action-sep" aria-hidden />
-          <section
-            className="workflow-studio__action-group"
-            aria-label={t('toolbarGroupLayout')}
-          >
-            <Tooltip title={t('organizeHint')} getPopupContainer={studioPopupContainer}>
-              <Button
-                icon={<ApartmentOutlined />}
-                disabled={workflow.state.running}
-                onClick={workflow.organizeLayout}
-                aria-label={t('organize')}
-              />
-            </Tooltip>
-            <Tooltip
-              title={t('keyboardHints')}
-              classNames={{ root: 'workflow-studio__kbd-tooltip' }}
-              styles={{
-                container: {
-                  maxWidth: 320,
-                  whiteSpace: 'pre-line',
-                  fontSize: 12,
-                  lineHeight: 1.55,
-                  textAlign: 'left',
-                },
-              }}
-              getPopupContainer={studioPopupContainer}
-            >
-              <Button type="text" icon={<QuestionCircleOutlined />} aria-label={t('keyboardHintsTitle')} />
-            </Tooltip>
-          </section>
-          <span className="workflow-studio__action-sep" aria-hidden />
-          <section
-            className="workflow-studio__action-group"
-            aria-label={t('toolbarGroupDeploy')}
-          >
-            <Tooltip
-              title={
-                workflow.state.dirty
-                  ? `${t('save')} *`
-                  : t('save')
-              }
-              getPopupContainer={studioPopupContainer}
-            >
-              <Button
-                icon={<SaveOutlined />}
-                type="primary"
-                loading={workflow.state.saving}
-                disabled={!canWrite}
-                aria-label={t('save')}
-                onClick={() => {
-                  void workflow.save().then((ok) => {
-                    if (ok) message.success(t('saveSuccess'))
-                  })
-                }}
-              />
-            </Tooltip>
-            <Tooltip title={t('publishHint')} getPopupContainer={studioPopupContainer}>
-              <Button
-                icon={<CloudUploadOutlined />}
-                type={
-                  Boolean(workflow.state.workflowId) &&
-                  !workflow.state.dirty &&
-                  !workflow.state.hasPublished
-                    ? 'primary'
-                    : 'default'
-                }
-                loading={workflow.state.saving}
-                disabled={!canWrite || !workflow.state.workflowId || workflow.state.dirty}
-                aria-label={t('publish')}
-                onClick={() => {
-                  void workflow.publish().then((ok) => {
-                    if (ok) message.success(t('publishSuccess'))
-                  })
-                }}
-              />
-            </Tooltip>
-          </section>
-          <span className="workflow-studio__action-sep" aria-hidden />
+          {canWrite ? (
+            <>
+              <section
+                className="workflow-studio__action-group"
+                aria-label={t('toolbarGroupFile')}
+              >
+                <Tooltip title={t('new')} getPopupContainer={studioPopupContainer}>
+                  <Button
+                    icon={<FileAddOutlined />}
+                    aria-label={t('new')}
+                    disabled={workflow.state.running}
+                    onClick={workflow.reset}
+                  />
+                </Tooltip>
+              </section>
+              <span className="workflow-studio__action-sep" aria-hidden />
+              <section
+                className="workflow-studio__action-group"
+                aria-label={t('toolbarGroupEdit')}
+              >
+                <Tooltip title={t('undoHint')} getPopupContainer={studioPopupContainer}>
+                  <Button
+                    icon={<UndoOutlined />}
+                    aria-label={t('undoHint')}
+                    disabled={!workflow.canUndo || workflow.state.running}
+                    onClick={workflow.undo}
+                  />
+                </Tooltip>
+                <Tooltip title={t('redoHint')} getPopupContainer={studioPopupContainer}>
+                  <Button
+                    icon={<RedoOutlined />}
+                    aria-label={t('redoHint')}
+                    disabled={!workflow.canRedo || workflow.state.running}
+                    onClick={workflow.redo}
+                  />
+                </Tooltip>
+              </section>
+              <span className="workflow-studio__action-sep" aria-hidden />
+              <section
+                className="workflow-studio__action-group"
+                aria-label={t('toolbarGroupLayout')}
+              >
+                <Tooltip title={t('organizeHint')} getPopupContainer={studioPopupContainer}>
+                  <Button
+                    icon={<ApartmentOutlined />}
+                    disabled={workflow.state.running}
+                    onClick={workflow.organizeLayout}
+                    aria-label={t('organize')}
+                  />
+                </Tooltip>
+                <Tooltip
+                  title={t('keyboardHints')}
+                  classNames={{ root: 'workflow-studio__kbd-tooltip' }}
+                  styles={{
+                    container: {
+                      maxWidth: 320,
+                      whiteSpace: 'pre-line',
+                      fontSize: 12,
+                      lineHeight: 1.55,
+                      textAlign: 'left',
+                    },
+                  }}
+                  getPopupContainer={studioPopupContainer}
+                >
+                  <Button type="text" icon={<QuestionCircleOutlined />} aria-label={t('keyboardHintsTitle')} />
+                </Tooltip>
+              </section>
+              <span className="workflow-studio__action-sep" aria-hidden />
+              <section
+                className="workflow-studio__action-group"
+                aria-label={t('toolbarGroupDeploy')}
+              >
+                <Tooltip
+                  title={
+                    workflow.state.dirty
+                      ? `${t('save')} *`
+                      : t('save')
+                  }
+                  getPopupContainer={studioPopupContainer}
+                >
+                  <Button
+                    icon={<SaveOutlined />}
+                    type="primary"
+                    loading={workflow.state.saving}
+                    aria-label={t('save')}
+                    onClick={() => {
+                      void workflow.save().then((ok) => {
+                        if (ok) message.success(t('saveSuccess'))
+                      })
+                    }}
+                  />
+                </Tooltip>
+                <Tooltip title={t('publishHint')} getPopupContainer={studioPopupContainer}>
+                  <Button
+                    icon={<CloudUploadOutlined />}
+                    type={
+                      Boolean(workflow.state.workflowId) &&
+                      !workflow.state.dirty &&
+                      !workflow.state.hasPublished
+                        ? 'primary'
+                        : 'default'
+                    }
+                    loading={workflow.state.saving}
+                    disabled={!workflow.state.workflowId || workflow.state.dirty}
+                    aria-label={t('publish')}
+                    onClick={() => {
+                      void workflow.publish().then((ok) => {
+                        if (ok) message.success(t('publishSuccess'))
+                      })
+                    }}
+                  />
+                </Tooltip>
+              </section>
+              <span className="workflow-studio__action-sep" aria-hidden />
+            </>
+          ) : null}
           <section
             className="workflow-studio__action-group"
             aria-label={t('toolbarGroupRun')}
@@ -1164,24 +1169,31 @@ export function WorkflowPage() {
                       <div className="workflow-templates">
               {(workflow.templatesQuery.data ?? []).map((tpl) => (
                 <div key={tpl.id} className="workflow-templates__item">
-                  <button
-                    type="button"
-                    className="workflow-templates__load"
-                    title={tpl.description || tpl.name}
-                    disabled={!canWrite}
-                    onClick={() => confirmLeaveStudio(() => workflow.applyTemplate(tpl.id))}
-                  >
-                    <strong>{tpl.name}</strong>
-                  </button>
-                  <Button
-                    type="link"
-                    size="small"
-                    className="workflow-templates__save"
-                    disabled={!canWrite || workflow.state.saving}
-                    onClick={() => confirmLeaveStudio(() => void workflow.applyTemplateAndSave(tpl.id))}
-                  >
-                    {t('templateSaveAndOpen')}
-                  </Button>
+                  {canWrite ? (
+                    <>
+                      <button
+                        type="button"
+                        className="workflow-templates__load"
+                        title={tpl.description || tpl.name}
+                        onClick={() => confirmLeaveStudio(() => workflow.applyTemplate(tpl.id))}
+                      >
+                        <strong>{tpl.name}</strong>
+                      </button>
+                      <Button
+                        type="link"
+                        size="small"
+                        className="workflow-templates__save"
+                        disabled={workflow.state.saving}
+                        onClick={() => confirmLeaveStudio(() => void workflow.applyTemplateAndSave(tpl.id))}
+                      >
+                        {t('templateSaveAndOpen')}
+                      </Button>
+                    </>
+                  ) : (
+                    <div className="workflow-templates__load" title={tpl.description || tpl.name}>
+                      <strong>{tpl.name}</strong>
+                    </div>
+                  )}
                 </div>
               ))}
               {!workflow.templatesQuery.data?.length && !workflow.templatesQuery.isLoading ? (
@@ -1270,7 +1282,7 @@ export function WorkflowPage() {
                 {t('startFromTemplate')}
               </Button>
             ) : null}
-            {workflow.state.workflowId ? (
+            {canWrite && workflow.state.workflowId ? (
               <Button
                 danger
                 type="link"
@@ -2469,17 +2481,23 @@ export function WorkflowPage() {
                               <>
                       <Input.TextArea
                         value={workflow.state.description}
+                        readOnly={!canWrite}
+                        disabled={canWrite && workflow.state.running}
                         onChange={(e) => workflow.patch({ description: e.target.value })}
                         placeholder={t('descriptionPlaceholder')}
                         rows={2}
                       />
                       <div className="workflow-inspector__switch" style={{ marginTop: 8 }}>
-                        <Switch
-                          size="small"
-                          checked={workflow.state.triggers.webhook.enabled}
-                          disabled={!canWrite || workflow.state.running}
-                          onChange={(enabled) => requestEnableTrigger('webhook', enabled)}
-                        />
+                        {canWrite ? (
+                          <Switch
+                            size="small"
+                            checked={workflow.state.triggers.webhook.enabled}
+                            disabled={workflow.state.running}
+                            onChange={(enabled) => requestEnableTrigger('webhook', enabled)}
+                          />
+                        ) : (
+                          <Tag>{workflow.state.triggers.webhook.enabled ? t('common:enabled') : t('common:disabled')}</Tag>
+                        )}
                         <span>{t('webhookTrigger')}</span>
                       </div>
                       {workflow.state.triggers.webhook.enabled && workflow.state.workflowId ? (
@@ -2518,6 +2536,7 @@ export function WorkflowPage() {
                           <Space.Compact style={{ width: '100%', marginTop: 4 }}>
                             <Input.Password
                               size="small"
+                              readOnly={!canWrite}
                               value={workflow.state.triggers.webhook.secret}
                               onChange={(e) =>
                                 workflow.patchTriggers({
@@ -2530,22 +2549,24 @@ export function WorkflowPage() {
                               }
                               placeholder={t('webhookSecret')}
                             />
-                            <Tooltip title={t('rotateSecret')}>
-                              <Button
-                                size="small"
-                                icon={<ReloadOutlined />}
-                                disabled={!canWrite || workflow.state.running}
-                                onClick={() =>
-                                  workflow.patchTriggers({
-                                    ...workflow.state.triggers,
-                                    webhook: {
-                                      ...workflow.state.triggers.webhook,
-                                      secret: rotateWebhookSecret(),
-                                    },
-                                  })
-                                }
-                              />
-                            </Tooltip>
+                            {canWrite ? (
+                              <Tooltip title={t('rotateSecret')}>
+                                <Button
+                                  size="small"
+                                  icon={<ReloadOutlined />}
+                                  disabled={workflow.state.running}
+                                  onClick={() =>
+                                    workflow.patchTriggers({
+                                      ...workflow.state.triggers,
+                                      webhook: {
+                                        ...workflow.state.triggers.webhook,
+                                        secret: rotateWebhookSecret(),
+                                      },
+                                    })
+                                  }
+                                />
+                              </Tooltip>
+                            ) : null}
                             <Tooltip title={t('copy')}>
                               <Button
                                 size="small"
@@ -2611,18 +2632,23 @@ export function WorkflowPage() {
                         </Typography.Paragraph>
                       ) : null}
                       <div className="workflow-inspector__switch" style={{ marginTop: 12 }}>
-                        <Switch
-                          size="small"
-                          checked={workflow.state.triggers.cron.enabled}
-                          disabled={!canWrite || workflow.state.running}
-                          onChange={(enabled) => requestEnableTrigger('cron', enabled)}
-                        />
+                        {canWrite ? (
+                          <Switch
+                            size="small"
+                            checked={workflow.state.triggers.cron.enabled}
+                            disabled={workflow.state.running}
+                            onChange={(enabled) => requestEnableTrigger('cron', enabled)}
+                          />
+                        ) : (
+                          <Tag>{workflow.state.triggers.cron.enabled ? t('common:enabled') : t('common:disabled')}</Tag>
+                        )}
                         <span>{t('cronTrigger')}</span>
                       </div>
                       {workflow.state.triggers.cron.enabled ? (
                         <div className="workflow-trigger-ops" style={{ marginTop: 4 }}>
                           <Input
                             size="small"
+                            readOnly={!canWrite}
                             value={workflow.state.triggers.cron.expression}
                             onChange={(e) =>
                               workflow.patchTriggers({

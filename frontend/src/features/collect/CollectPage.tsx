@@ -545,23 +545,25 @@ export function CollectPage() {
         ) : null}
 
 
-        <Space.Compact className="collect-toolbar" style={{ width: '100%', marginBottom: 12 }}>
-          <Input
-            value={url}
-            onChange={(event) => setUrl(event.target.value)}
-            onPressEnter={() => url && parseMutation.mutate()}
-            placeholder={t('urlPlaceholder')}
-          />
-          <Button
-            type="default"
-            icon={<CloudDownloadOutlined />}
-            disabled={!url}
-            loading={parseMutation.isPending}
-            onClick={() => parseMutation.mutate()}
-          >
-            {t('action')}
-          </Button>
-        </Space.Compact>
+        {canWrite ? (
+          <Space.Compact className="collect-toolbar" style={{ width: '100%', marginBottom: 12 }}>
+            <Input
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              onPressEnter={() => url && parseMutation.mutate()}
+              placeholder={t('urlPlaceholder')}
+            />
+            <Button
+              type="default"
+              icon={<CloudDownloadOutlined />}
+              disabled={!url}
+              loading={parseMutation.isPending}
+              onClick={() => parseMutation.mutate()}
+            >
+              {t('action')}
+            </Button>
+          </Space.Compact>
+        ) : null}
 
         <Splitter className="workbench-splitter collect-splitter" orientation="horizontal">
           <Splitter.Panel defaultSize="38%" min="28%">

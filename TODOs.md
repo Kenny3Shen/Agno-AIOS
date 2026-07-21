@@ -1,3 +1,10 @@
+## 已完成：README 瘦身、架构图与无权限隐藏操作
+
+- README 保留 onboarding；HITL / 工作流 / 运维 / Agents 等技术长文迁至 `docs/*.md`，索引见 `docs/README.md`。
+- README 架构节嵌入 `docs/assets/tais-architecture.png`；SVG 源同步更新（正交连线、缩小箭头、避免穿列）。
+- 前端：无 scope/权限时隐藏写操作（CVE/IP 更新库、Knowledge 添加与可见性编辑、Skills/MCP 管理控件、Collect 写操作、Workflow 写工具栏等），有权限但忙时仍可 disabled。
+- 结构回归：`api/tests/test_docs_readme.py`、`api/tests/test_architecture_diagram.py`。
+
 ## 已完成：代码质量清理（无新功能）
 
 - 飞书 Webhook HTTPS 校验统一到 `user_notification_settings_service.is_secure_feishu_webhook_url`（MCP basic 委托）。
