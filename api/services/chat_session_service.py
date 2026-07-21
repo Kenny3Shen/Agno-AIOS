@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
 
@@ -1025,3 +1026,44 @@ def _title_metadata(value: Any) -> str | None:
         return None
     title = metadata.get(TITLE_METADATA_KEY)
     return title.strip() if isinstance(title, str) and title.strip() else None
+
+
+def is_technical_session_label(value: object) -> bool:
+    """True for Agno engine labels like ``安全运营助手.arun`` (not user-facing)."""
+    text = str(value or "").strip()
+    if not text:
+        return True
+    lowered = text.casefold()
+    if lowered.endswith(".arun") or lowered.endswith(".run"):
+        return True
+    # Root span names often look like ``AgentName.arun`` / ``TeamName.run``.
+    if ".arun" in lowered or (".run" in lowered and " " not in text):
+        return True
+    return False
+
+
+def session_display_label_from_row(row: dict[str, Any] | Mapping[str, Any]) -> str:
+    """Best human label for a session row: title → preview → session_name → id."""
+    data = dict(row) if isinstance(row, Mapping) else {}
+    title = _title_metadata(data.get("metadata"))
+    if title:
+        return title
+
+    runs = coerce_json_value(data.get("runs"))
+    top_runs: list[dict[str, Any]] = []
+    if isinstance(runs, list):
+        for run in runs:
+            if isinstance(run, dict) and not _is_child_member_run(run):
+                top_runs.append(run)
+    preview = _preview_from_runs(top_runs or runs).strip()
+    if preview and preview not in {"新对话", "工作流运行"}:
+        return preview[:80]
+
+    session_data = coerce_json_value(data.get("session_data")) or {}
+    if isinstance(session_data, dict):
+        session_name = str(session_data.get("session_name") or "").strip()
+        if session_name and not is_technical_session_label(session_name):
+            return session_name[:80]
+
+    session_id = str(data.get("session_id") or "").strip()
+    return session_id

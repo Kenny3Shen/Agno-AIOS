@@ -95,7 +95,7 @@ describe('trace hierarchy', () => {
     const summaries: TraceSessionSummary[] = [
       {
         session_id: 's1',
-        name: 'run',
+        name: '安全运营助手.arun',
         latest_start_time: '2026-01-01T00:00:00Z',
         trace_count: 2,
         run_count: 1,
@@ -105,18 +105,21 @@ describe('trace hierarchy', () => {
       },
       {
         session_id: 'legacy',
-        name: 'legacy run',
+        name: '安全运营助手.arun',
         latest_start_time: '2026-01-02T00:00:00Z',
         trace_count: 1,
         run_count: 1,
         error_count: 0,
         status: 'OK',
         user_id: 'u1',
+        agent_id: 'security-operations',
       },
     ]
     const merged = mergeTraceSessions(chatSessions, summaries)
     expect(merged.map((session) => session.sessionId)).toEqual(['legacy', 's1'])
     expect(merged.find((session) => session.sessionId === 's1')).toMatchObject({ name: 'Renamed session', archived: false })
+    // Without chat metadata, strip technical .arun and fall back to agent_id.
+    expect(merged.find((session) => session.sessionId === 'legacy')?.name).toBe('security-operations')
     expect(merged.find((session) => session.sessionId === 's1')?.runCount).toBe(1)
   })
 

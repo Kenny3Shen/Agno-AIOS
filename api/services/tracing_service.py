@@ -737,6 +737,9 @@ async def _list_trace_sessions_sql(
         for item in reconciled_latest
     }
 
+    # Prefer Chat/user titles over Agno engine span names (``Agent.arun``).
+    labels_by_session = await _session_display_labels(page_session_ids)
+
     sessions: list[dict[str, Any]] = []
     for row in agg_rows:
         sid = str(row["session_id"])
@@ -745,10 +748,18 @@ async def _list_trace_sessions_sql(
         latest_status = reconciled_status_by_session.get(sid) or str(latest.get("status") or "UNSET")
         if str(latest_status).upper() in {"ERROR", "FAILED", "FAILURE"} and error_count == 0:
             error_count = 1
+        engine_name = str(latest.get("name") or "").strip()
+        display_name = labels_by_session.get(sid) or _fallback_trace_session_name(
+            engine_name=engine_name,
+            agent_id=latest.get("agent_id"),
+            team_id=latest.get("team_id"),
+            workflow_id=latest.get("workflow_id"),
+            session_id=sid,
+        )
         sessions.append(
             {
                 "session_id": sid,
-                "name": latest.get("name") or latest.get("agent_id") or sid,
+                "name": display_name,
                 "latest_trace_id": latest.get("trace_id"),
                 "latest_run_id": latest.get("run_id"),
                 "latest_start_time": latest.get("start_time") or row.get("latest_start_time"),
@@ -768,6 +779,67 @@ async def _list_trace_sessions_sql(
         "data": sessions,
         "meta": pagination_meta(page=page, limit=limit, total_count=total_count),
     }
+
+
+async def _session_display_labels(session_ids: list[str]) -> dict[str, str]:
+    """Map session_id → human label from Agno sessions (title / preview)."""
+    from api.services.chat_session_service import session_display_label_from_row
+
+    ids = [str(sid).strip() for sid in session_ids if str(sid).strip()]
+    if not ids:
+        return {}
+    try:
+        table = await _trace_db._get_table(table_type="sessions")
+        if table is None:
+            return {}
+        from sqlalchemy import select
+
+        async with _trace_db.async_session_factory() as session:
+            result = await session.execute(
+                select(table).where(table.c.session_id.in_(ids))
+            )
+            rows = [dict(row._mapping) for row in result.fetchall()]
+    except Exception:
+        logger.debug("trace session label lookup failed", exc_info=True)
+        return {}
+
+    labels: dict[str, str] = {}
+    for row in rows:
+        sid = str(row.get("session_id") or "").strip()
+        if not sid:
+            continue
+        label = session_display_label_from_row(row).strip()
+        if label and label != sid:
+            labels[sid] = label
+    return labels
+
+
+def _fallback_trace_session_name(
+    *,
+    engine_name: str,
+    agent_id: object,
+    team_id: object,
+    workflow_id: object,
+    session_id: str,
+) -> str:
+    """Avoid showing ``*.arun`` / ``*.run`` when no chat title/preview exists."""
+    from api.services.chat_session_service import is_technical_session_label
+
+    if engine_name and not is_technical_session_label(engine_name):
+        return engine_name
+    for candidate in (workflow_id, team_id, agent_id):
+        text = str(candidate or "").strip()
+        if text:
+            return text
+    if engine_name:
+        # Strip trailing ``.arun`` / ``.run`` so list shows agent display name.
+        for suffix in (".arun", ".run"):
+            if engine_name.endswith(suffix):
+                base = engine_name[: -len(suffix)].strip()
+                if base:
+                    return base
+        return engine_name
+    return session_id
 
 
 async def mark_trace_error(run_id: str) -> bool:

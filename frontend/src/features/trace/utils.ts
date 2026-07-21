@@ -46,14 +46,57 @@ export function filterSessionsByArchive(sessions: TraceSession[], filter: Sessio
   return sessions.filter((session) => (filter === 'archived' ? session.archived : !session.archived))
 }
 
+/** Agno engine labels like ``安全运营助手.arun`` are not useful as session titles. */
+export function isTechnicalTraceSessionName(value: string | null | undefined): boolean {
+  const text = String(value || '').trim()
+  if (!text) return true
+  const lower = text.toLowerCase()
+  if (lower.endsWith('.arun') || lower.endsWith('.run')) return true
+  if (lower.includes('.arun')) return true
+  if (lower.includes('.run') && !text.includes(' ')) return true
+  return false
+}
+
+export function humanizeTraceSessionName(
+  name: string | null | undefined,
+  fallbacks: Array<string | null | undefined> = [],
+): string {
+  const raw = String(name || '').trim()
+  if (raw && !isTechnicalTraceSessionName(raw)) return raw
+  for (const candidate of fallbacks) {
+    const text = String(candidate || '').trim()
+    if (text && !isTechnicalTraceSessionName(text)) return text
+  }
+  if (raw) {
+    for (const suffix of ['.arun', '.run'] as const) {
+      if (raw.toLowerCase().endsWith(suffix)) {
+        const base = raw.slice(0, -suffix.length).trim()
+        if (base) return base
+      }
+    }
+    return raw
+  }
+  return ''
+}
+
 export function mergeTraceSessions(chatSessions: ChatSession[], summaries: TraceSessionSummary[]): TraceSession[] {
   const chatSessionById = new Map(chatSessions.map((session) => [session.session_id, session]))
   return summaries
     .map((summary) => {
       const chatSession = chatSessionById.get(summary.session_id)
+      const name =
+        chatSession?.title ||
+        chatSession?.preview ||
+        humanizeTraceSessionName(summary.name, [
+          summary.workflow_id,
+          summary.team_id,
+          summary.agent_id,
+          summary.session_id,
+        ]) ||
+        summary.session_id
       return {
         sessionId: summary.session_id,
-        name: chatSession?.title || chatSession?.preview || summary.name || summary.session_id,
+        name,
         context: summary.workflow_id || summary.agent_id || summary.team_id || summary.user_id || chatSession?.user_id || '',
         archived: chatSession?.archived === true,
         traces: [],
