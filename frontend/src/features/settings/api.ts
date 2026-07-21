@@ -40,8 +40,6 @@ export interface ChatSettings {
   memory_inject_enabled: boolean
   /** Max memories injected per turn after scoring. */
   memory_inject_top_k: number
-  /** Total character budget for injected memory text. */
-  memory_inject_max_chars: number
   /** Only consider memories updated within N days (0 = no window). */
   memory_inject_window_days: number
   /** Keep one memory per topic (highest score) to reduce conflicts. */

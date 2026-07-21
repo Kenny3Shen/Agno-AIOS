@@ -59,7 +59,6 @@ DEFAULT_CHAT_SETTINGS: dict[str, Any] = {
     # Memory P1 inject: score + cap before Agno dumps memories into system prompt.
     "memory_inject_enabled": True,
     "memory_inject_top_k": 12,
-    "memory_inject_max_chars": 2000,
     "memory_inject_window_days": 90,
     "memory_inject_dedupe_topics": True,
 }
@@ -88,7 +87,6 @@ _INT_KEYS = frozenset(
         "memory_prune_retention_days",
         "memory_prune_top_k",
         "memory_inject_top_k",
-        "memory_inject_max_chars",
         "memory_inject_window_days",
     }
 )
@@ -198,12 +196,6 @@ def chat_settings_table(metadata: MetaData | None = None) -> Table:
             server_default="12",
         ),
         Column(
-            "memory_inject_max_chars",
-            Integer,
-            nullable=False,
-            server_default="2000",
-        ),
-        Column(
             "memory_inject_window_days",
             Integer,
             nullable=False,
@@ -254,7 +246,6 @@ def _project_row(row: Mapping[str, Any] | None) -> dict[str, Any]:
                     "memory_prune_retention_days",
                     "memory_prune_top_k",
                     "memory_inject_top_k",
-                    "memory_inject_max_chars",
                     "memory_inject_window_days",
                 }:
                     payload[key] = DEFAULT_CHAT_SETTINGS[key]
@@ -325,7 +316,6 @@ async def update_chat_settings_row(values: Mapping[str, Any]) -> dict[str, Any]:
                     "memory_prune_retention_days",
                     "memory_prune_top_k",
                     "memory_inject_top_k",
-                    "memory_inject_max_chars",
                     "memory_inject_window_days",
                 }:
                     updates[key] = current[key]

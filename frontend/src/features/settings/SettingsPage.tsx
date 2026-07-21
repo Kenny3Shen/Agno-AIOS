@@ -73,7 +73,6 @@ const CHAT_SETTINGS_DEFAULTS: ChatSettings = {
   memory_prune_top_k: 50,
   memory_inject_enabled: true,
   memory_inject_top_k: 12,
-  memory_inject_max_chars: 2000,
   memory_inject_window_days: 90,
   memory_inject_dedupe_topics: true,
 }
@@ -608,93 +607,6 @@ export function SettingsPage() {
       ],
     },
     {
-      key: 'memory',
-      label: t('chatGroupMemory'),
-      description: t('chatGroupMemoryDesc'),
-      rows: [
-        {
-          key: 'memory_mode',
-          field: 'memory_mode',
-          parameter: t('memoryModeLabel'),
-          description: t('memoryModeDesc'),
-          control: 'memory_mode',
-        },
-        {
-          key: 'memory_tool_content_enabled',
-          field: 'memory_tool_content_enabled',
-          parameter: t('memoryToolContentLabel'),
-          description: t('memoryToolContentDesc'),
-          control: 'switch',
-        },
-        {
-          key: 'memory_prune_enabled',
-          field: 'memory_prune_enabled',
-          parameter: t('memoryPruneEnabledLabel'),
-          description: t('memoryPruneEnabledDesc'),
-          control: 'switch',
-        },
-        {
-          key: 'memory_prune_retention_days',
-          field: 'memory_prune_retention_days',
-          parameter: t('memoryPruneRetentionLabel'),
-          description: t('memoryPruneRetentionDesc'),
-          control: 'number',
-          min: 1,
-          max: 3650,
-        },
-        {
-          key: 'memory_prune_top_k',
-          field: 'memory_prune_top_k',
-          parameter: t('memoryPruneTopKLabel'),
-          description: t('memoryPruneTopKDesc'),
-          control: 'number',
-          min: 1,
-          max: 500,
-        },
-        {
-          key: 'memory_inject_enabled',
-          field: 'memory_inject_enabled',
-          parameter: t('memoryInjectEnabledLabel'),
-          description: t('memoryInjectEnabledDesc'),
-          control: 'switch',
-        },
-        {
-          key: 'memory_inject_top_k',
-          field: 'memory_inject_top_k',
-          parameter: t('memoryInjectTopKLabel'),
-          description: t('memoryInjectTopKDesc'),
-          control: 'number',
-          min: 1,
-          max: 100,
-        },
-        {
-          key: 'memory_inject_max_chars',
-          field: 'memory_inject_max_chars',
-          parameter: t('memoryInjectMaxCharsLabel'),
-          description: t('memoryInjectMaxCharsDesc'),
-          control: 'number',
-          min: 200,
-          max: 20000,
-        },
-        {
-          key: 'memory_inject_window_days',
-          field: 'memory_inject_window_days',
-          parameter: t('memoryInjectWindowLabel'),
-          description: t('memoryInjectWindowDesc'),
-          control: 'number',
-          min: 0,
-          max: 3650,
-        },
-        {
-          key: 'memory_inject_dedupe_topics',
-          field: 'memory_inject_dedupe_topics',
-          parameter: t('memoryInjectDedupeLabel'),
-          description: t('memoryInjectDedupeDesc'),
-          control: 'switch',
-        },
-      ],
-    },
-    {
       key: 'context',
       label: t('chatGroupContext'),
       description: t('chatGroupContextDesc'),
@@ -758,23 +670,138 @@ export function SettingsPage() {
     },
   ]
 
+  /** Memory knobs live on their own Settings tab (not under Chat). */
+  const memorySettingGroups: ChatSettingGroup[] = [
+    {
+      key: 'mode',
+      label: t('memoryGroupMode'),
+      description: t('memoryGroupModeDesc'),
+      rows: [
+        {
+          key: 'memory_mode',
+          field: 'memory_mode',
+          parameter: t('memoryModeLabel'),
+          description: t('memoryModeDesc'),
+          control: 'memory_mode',
+        },
+        {
+          key: 'memory_tool_content_enabled',
+          field: 'memory_tool_content_enabled',
+          parameter: t('memoryToolContentLabel'),
+          description: t('memoryToolContentDesc'),
+          control: 'switch',
+        },
+      ],
+    },
+    {
+      key: 'inject',
+      label: t('memoryGroupInject'),
+      description: t('memoryGroupInjectDesc'),
+      rows: [
+        {
+          key: 'memory_inject_enabled',
+          field: 'memory_inject_enabled',
+          parameter: t('memoryInjectEnabledLabel'),
+          description: t('memoryInjectEnabledDesc'),
+          control: 'switch',
+        },
+        {
+          key: 'memory_inject_top_k',
+          field: 'memory_inject_top_k',
+          parameter: t('memoryInjectTopKLabel'),
+          description: t('memoryInjectTopKDesc'),
+          control: 'number',
+          min: 1,
+          max: 100,
+        },
+        {
+          key: 'memory_inject_window_days',
+          field: 'memory_inject_window_days',
+          parameter: t('memoryInjectWindowLabel'),
+          description: t('memoryInjectWindowDesc'),
+          control: 'number',
+          min: 0,
+          max: 3650,
+        },
+        {
+          key: 'memory_inject_dedupe_topics',
+          field: 'memory_inject_dedupe_topics',
+          parameter: t('memoryInjectDedupeLabel'),
+          description: t('memoryInjectDedupeDesc'),
+          control: 'switch',
+        },
+      ],
+    },
+    {
+      key: 'prune',
+      label: t('memoryGroupPrune'),
+      description: t('memoryGroupPruneDesc'),
+      rows: [
+        {
+          key: 'memory_prune_enabled',
+          field: 'memory_prune_enabled',
+          parameter: t('memoryPruneEnabledLabel'),
+          description: t('memoryPruneEnabledDesc'),
+          control: 'switch',
+        },
+        {
+          key: 'memory_prune_retention_days',
+          field: 'memory_prune_retention_days',
+          parameter: t('memoryPruneRetentionLabel'),
+          description: t('memoryPruneRetentionDesc'),
+          control: 'number',
+          min: 1,
+          max: 3650,
+        },
+        {
+          key: 'memory_prune_top_k',
+          field: 'memory_prune_top_k',
+          parameter: t('memoryPruneTopKLabel'),
+          description: t('memoryPruneTopKDesc'),
+          control: 'number',
+          min: 1,
+          max: 500,
+        },
+      ],
+    },
+  ]
+
+  const MEMORY_FIELDS = new Set<ChatField>([
+    'memory_mode',
+    'memory_enabled',
+    'enable_agentic_memory',
+    'memory_tool_content_enabled',
+    'memory_prune_enabled',
+    'memory_prune_retention_days',
+    'memory_prune_top_k',
+    'memory_inject_enabled',
+    'memory_inject_top_k',
+    'memory_inject_window_days',
+    'memory_inject_dedupe_topics',
+  ])
+
   const [chatForm] = Form.useForm<ChatSettings>()
+  const [memoryForm] = Form.useForm<ChatSettings>()
   const [chatSaving, setChatSaving] = useState(false)
+  const [memorySaving, setMemorySaving] = useState(false)
   useEffect(() => {
     if (chatSettings.data) {
-      chatForm.setFieldsValue(normalizeChatSettings(chatSettings.data))
+      const normalized = normalizeChatSettings(chatSettings.data)
+      chatForm.setFieldsValue(normalized)
+      memoryForm.setFieldsValue(normalized)
     }
-  }, [chatForm, chatSettings.data])
+  }, [chatForm, memoryForm, chatSettings.data])
 
   const saveChatRuntime = async (values: ChatSettings) => {
     setChatSaving(true)
     try {
-      const mode = (values.memory_mode ?? 'automatic') as MemoryMode
-      const flags = flagsFromMemoryMode(mode)
       const payload: Partial<ChatSettings> = {
-        ...values,
-        memory_mode: mode,
-        ...flags,
+        show_thought_chain: values.show_thought_chain,
+        show_raw_reasoning: values.show_raw_reasoning,
+        show_raw_tool_io: values.show_raw_tool_io,
+        session_summaries_enabled: values.session_summaries_enabled,
+        add_datetime_to_context: values.add_datetime_to_context,
+        markdown: values.markdown,
         max_tool_calls_from_history:
           values.max_tool_calls_from_history == null || Number(values.max_tool_calls_from_history) <= 0
             ? null
@@ -784,14 +811,11 @@ export function SettingsPage() {
             ? null
             : Number(values.default_tool_call_limit),
         num_history_runs: Number(values.num_history_runs ?? 5),
-        memory_prune_retention_days: Number(values.memory_prune_retention_days ?? 90),
-        memory_prune_top_k: Number(values.memory_prune_top_k ?? 50),
-        memory_inject_top_k: Number(values.memory_inject_top_k ?? 12),
-        memory_inject_max_chars: Number(values.memory_inject_max_chars ?? 2000),
-        memory_inject_window_days: Number(values.memory_inject_window_days ?? 90),
       }
       const next = await saveChatSettings(payload)
-      chatForm.setFieldsValue(normalizeChatSettings(next))
+      const normalized = normalizeChatSettings(next)
+      chatForm.setFieldsValue(normalized)
+      memoryForm.setFieldsValue(normalized)
       await client.invalidateQueries({ queryKey: ['settings', 'chat'] })
       message.success(t('chatSettingsSaved'))
     } catch (error) {
@@ -801,12 +825,80 @@ export function SettingsPage() {
     }
   }
 
+  const saveMemoryRuntime = async (values: ChatSettings) => {
+    setMemorySaving(true)
+    try {
+      const mode = (values.memory_mode ?? 'automatic') as MemoryMode
+      const flags = flagsFromMemoryMode(mode)
+      const payload: Partial<ChatSettings> = {
+        memory_mode: mode,
+        ...flags,
+        memory_tool_content_enabled: Boolean(values.memory_tool_content_enabled),
+        memory_prune_enabled: Boolean(values.memory_prune_enabled),
+        memory_prune_retention_days: Number(values.memory_prune_retention_days ?? 90),
+        memory_prune_top_k: Number(values.memory_prune_top_k ?? 50),
+        memory_inject_enabled: Boolean(values.memory_inject_enabled),
+        memory_inject_top_k: Number(values.memory_inject_top_k ?? 12),
+        memory_inject_window_days: Number(values.memory_inject_window_days ?? 90),
+        memory_inject_dedupe_topics: Boolean(values.memory_inject_dedupe_topics),
+      }
+      const next = await saveChatSettings(payload)
+      const normalized = normalizeChatSettings(next)
+      chatForm.setFieldsValue(normalized)
+      memoryForm.setFieldsValue(normalized)
+      await client.invalidateQueries({ queryKey: ['settings', 'chat'] })
+      message.success(t('memorySettingsSaved'))
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('memorySettingsSaveFailed'))
+    } finally {
+      setMemorySaving(false)
+    }
+  }
+
   const resetChatToDefaults = async () => {
-    chatForm.setFieldsValue(CHAT_SETTINGS_DEFAULTS)
-    await saveChatRuntime(CHAT_SETTINGS_DEFAULTS)
+    const chatOnly: Partial<ChatSettings> = {
+      show_thought_chain: CHAT_SETTINGS_DEFAULTS.show_thought_chain,
+      show_raw_reasoning: CHAT_SETTINGS_DEFAULTS.show_raw_reasoning,
+      show_raw_tool_io: CHAT_SETTINGS_DEFAULTS.show_raw_tool_io,
+      session_summaries_enabled: CHAT_SETTINGS_DEFAULTS.session_summaries_enabled,
+      add_datetime_to_context: CHAT_SETTINGS_DEFAULTS.add_datetime_to_context,
+      markdown: CHAT_SETTINGS_DEFAULTS.markdown,
+      num_history_runs: CHAT_SETTINGS_DEFAULTS.num_history_runs,
+      max_tool_calls_from_history: CHAT_SETTINGS_DEFAULTS.max_tool_calls_from_history,
+      default_tool_call_limit: CHAT_SETTINGS_DEFAULTS.default_tool_call_limit,
+    }
+    chatForm.setFieldsValue({ ...chatForm.getFieldsValue(true), ...chatOnly })
+    await saveChatRuntime({ ...chatForm.getFieldsValue(true), ...chatOnly } as ChatSettings)
+  }
+
+  const resetMemoryToDefaults = async () => {
+    const memoryOnly: Partial<ChatSettings> = {
+      memory_mode: CHAT_SETTINGS_DEFAULTS.memory_mode,
+      memory_enabled: CHAT_SETTINGS_DEFAULTS.memory_enabled,
+      enable_agentic_memory: CHAT_SETTINGS_DEFAULTS.enable_agentic_memory,
+      memory_tool_content_enabled: CHAT_SETTINGS_DEFAULTS.memory_tool_content_enabled,
+      memory_prune_enabled: CHAT_SETTINGS_DEFAULTS.memory_prune_enabled,
+      memory_prune_retention_days: CHAT_SETTINGS_DEFAULTS.memory_prune_retention_days,
+      memory_prune_top_k: CHAT_SETTINGS_DEFAULTS.memory_prune_top_k,
+      memory_inject_enabled: CHAT_SETTINGS_DEFAULTS.memory_inject_enabled,
+      memory_inject_top_k: CHAT_SETTINGS_DEFAULTS.memory_inject_top_k,
+      memory_inject_window_days: CHAT_SETTINGS_DEFAULTS.memory_inject_window_days,
+      memory_inject_dedupe_topics: CHAT_SETTINGS_DEFAULTS.memory_inject_dedupe_topics,
+    }
+    memoryForm.setFieldsValue({ ...memoryForm.getFieldsValue(true), ...memoryOnly })
+    await saveMemoryRuntime({ ...memoryForm.getFieldsValue(true), ...memoryOnly } as ChatSettings)
   }
 
   const resetChatFieldToDefault = async (field: ChatField) => {
+    if (MEMORY_FIELDS.has(field)) {
+      const value = CHAT_SETTINGS_DEFAULTS[field]
+      memoryForm.setFieldValue(field, value)
+      await saveMemoryRuntime({
+        ...memoryForm.getFieldsValue(true),
+        [field]: value,
+      } as ChatSettings)
+      return
+    }
     const value = CHAT_SETTINGS_DEFAULTS[field]
     chatForm.setFieldValue(field, value)
     await saveChatRuntime({
@@ -815,7 +907,12 @@ export function SettingsPage() {
     } as ChatSettings)
   }
 
-  const renderChatSettingTable = (rows: ChatSettingRow[]) => (
+  const renderChatSettingTable = (
+    rows: ChatSettingRow[],
+    options: { saving: boolean; onResetField: (field: ChatField) => void },
+  ) => {
+    const { saving, onResetField } = options
+    return (
     <Table<ChatSettingRow>
       rowKey="key"
       size="middle"
@@ -895,8 +992,8 @@ export function SettingsPage() {
                   size="small"
                   icon={<UndoOutlined />}
                   aria-label={t('resetFieldDefaultNamed', { name: row.parameter })}
-                  disabled={chatSettings.isLoading || chatSaving}
-                  onClick={() => void resetChatFieldToDefault(row.field)}
+                  disabled={chatSettings.isLoading || saving}
+                  onClick={() => onResetField(row.field)}
                 />
               </Tooltip>
             </div>
@@ -904,7 +1001,8 @@ export function SettingsPage() {
         },
       ]}
     />
-  )
+    )
+  }
 
   const chatControls = (
     <div className="settings-param-panel settings-chat-panel">
@@ -918,7 +1016,7 @@ export function SettingsPage() {
       >
         <Collapse
           className="settings-chat-groups"
-          defaultActiveKey={['privacy', 'memory']}
+          defaultActiveKey={['privacy', 'context']}
           items={chatSettingGroups.map((group) => ({
             key: group.key,
             label: (
@@ -934,7 +1032,10 @@ export function SettingsPage() {
                 <Typography.Paragraph type="secondary" className="settings-chat-group-desc">
                   {group.description}
                 </Typography.Paragraph>
-                {renderChatSettingTable(group.rows)}
+                {renderChatSettingTable(group.rows, {
+                  saving: chatSaving,
+                  onResetField: (field) => void resetChatFieldToDefault(field),
+                })}
               </div>
             ),
           }))}
@@ -967,6 +1068,65 @@ export function SettingsPage() {
           </Typography.Text>
         </Tooltip>
       </div>
+    </div>
+  )
+
+  const memoryControls = (
+    <div className="settings-param-panel settings-chat-panel settings-memory-panel">
+      <Typography.Paragraph type="secondary">{t('memorySettingsHint')}</Typography.Paragraph>
+      <Form
+        form={memoryForm}
+        layout="vertical"
+        initialValues={CHAT_SETTINGS_DEFAULTS}
+        onFinish={(values) => void saveMemoryRuntime(values)}
+        disabled={chatSettings.isLoading || memorySaving}
+      >
+        <Collapse
+          className="settings-chat-groups"
+          defaultActiveKey={['mode', 'inject']}
+          items={memorySettingGroups.map((group) => ({
+            key: group.key,
+            label: (
+              <div className="settings-chat-group-label">
+                <Typography.Text strong>{group.label}</Typography.Text>
+                <Typography.Text type="secondary" className="settings-chat-group-count">
+                  {t('chatGroupCount', { count: group.rows.length })}
+                </Typography.Text>
+              </div>
+            ),
+            children: (
+              <div className="settings-chat-group-body">
+                <Typography.Paragraph type="secondary" className="settings-chat-group-desc">
+                  {group.description}
+                </Typography.Paragraph>
+                {renderChatSettingTable(group.rows, {
+                  saving: memorySaving,
+                  onResetField: (field) => void resetChatFieldToDefault(field),
+                })}
+              </div>
+            ),
+          }))}
+        />
+        <div className="settings-param-actions">
+          <Space wrap>
+            <Button type="primary" htmlType="submit" loading={memorySaving}>
+              {t('memorySettingsSave')}
+            </Button>
+            <Popconfirm
+              title={t('resetDefaultsConfirm')}
+              description={t('resetDefaultsConfirmDesc')}
+              okText={t('resetDefaults')}
+              cancelText={t('common:cancel')}
+              onConfirm={() => void resetMemoryToDefaults()}
+              disabled={chatSettings.isLoading || memorySaving}
+            >
+              <Button icon={<UndoOutlined />} loading={memorySaving} disabled={chatSettings.isLoading}>
+                {t('resetDefaults')}
+              </Button>
+            </Popconfirm>
+          </Space>
+        </div>
+      </Form>
     </div>
   )
 
@@ -1440,6 +1600,7 @@ export function SettingsPage() {
             ...(isAdmin
               ? [
                   { key: 'chat', label: t('chatSettings'), children: chatControls },
+                  { key: 'memory', label: t('memorySettingsTab'), children: memoryControls },
                   { key: 'guardrails', label: t('guardrailsTab'), children: guardrailControls },
                   { key: 'knowledge', label: t('knowledgeRagTab'), children: knowledgeControls },
                   { key: 'users', label: t('usersTab'), children: usersPanel },

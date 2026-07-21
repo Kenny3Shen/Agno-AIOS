@@ -8,6 +8,15 @@
 - Chat / 模型护栏 / 知识库检索：保存旁增加「全部恢复默认」；每行增加单项恢复按钮（立即 PATCH）。
 - 知识库检索 Table 全宽铺满设置卡片（去掉 max-width 限制）。
 
+## 已完成：Memory 设置独立 Tab + 去掉注入字符预算
+
+- 删除 `memory_inject_max_chars`（Alembic `20260721_0011`）；注入只按时间窗 + 打分 + topic 去重 + Top-k。
+- Settings 新增 **记忆** Tab（模式/注入/prune）；Chat Tab 仅保留展示与历史/工具 knobs。
+
+相关：`SettingsPage` / `memory_inject_service.py`
+
+---
+
 ## 已完成：Memory P1 行为质量（capture / SOC / 三态 mode）
 
 - 全局 `memory_capture_instructions`：只记偏好、职责、长期事实；禁记一次性任务与临时 IP/告警。
@@ -20,8 +29,8 @@
 
 ## 已完成：Memory P1 注入侧筛选
 
-- 在 Agno `get_user_memories` 路径上拦截：时间窗 → 打分（0.4 新近度 + 0.35 关键词 + 0.15 topics + 0.1 质量）→ topic 去重 → Top-k → 字符预算。
-- Settings「记忆管理」：`memory_inject_enabled` / `top_k` / `max_chars` / `window_days` / `dedupe_topics`（Alembic `20260721_0009`）。
+- 在 Agno `get_user_memories` 路径上拦截：时间窗 → 打分（0.4 新近度 + 0.35 关键词 + 0.15 topics + 0.1 质量）→ topic 去重 → Top-k。
+- Settings「记忆」Tab：`memory_inject_enabled` / `top_k` / `window_days` / `dedupe_topics`（Alembic `20260721_0009`，后去掉 max_chars）。
 - Chat/Team 构建 `MemoryManager` 时传入本轮 `message` 作 keyword query。
 
 相关：`memory_inject_service.py` / `memory_manager_service.py` / Settings UI

@@ -84,13 +84,17 @@ describe('model settings editor', () => {
     fireEvent.click(chatTab!)
 
     await waitFor(() => expect(chatTab?.getAttribute('aria-selected')).toBe('true'))
-    // Grouped collapse panels (privacy + memory open by default).
+    // Chat tab: privacy / context / tools (memory moved to its own tab).
     expect(await screen.findByText('展示与隐私')).toBeTruthy()
-    expect(await screen.findByText('记忆管理')).toBeTruthy()
     expect(await screen.findByText('上下文与输出')).toBeTruthy()
     expect(await screen.findByText('工具调用')).toBeTruthy()
     expect(await screen.findByText('安全执行时间线')).toBeTruthy()
-    // Unified memory_mode radio replaces dual long-term / agentic switches.
+    expect(screen.queryByText('记忆模式 (memory_mode)')).toBeNull()
+
+    const memoryTab = (await screen.findByText('记忆')).closest('[role="tab"]')
+    expect(memoryTab).toBeTruthy()
+    fireEvent.click(memoryTab!)
+    await waitFor(() => expect(memoryTab?.getAttribute('aria-selected')).toBe('true'))
     expect(await screen.findByText('记忆模式 (memory_mode)')).toBeTruthy()
     expect(await screen.findByText('关闭')).toBeTruthy()
     expect(await screen.findByText('自动抽取')).toBeTruthy()

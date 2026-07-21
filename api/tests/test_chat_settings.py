@@ -41,7 +41,6 @@ async def test_read_chat_settings_returns_persisted_defaults() -> None:
         "memory_prune_top_k": 50,
         "memory_inject_enabled": True,
         "memory_inject_top_k": 12,
-        "memory_inject_max_chars": 2000,
         "memory_inject_window_days": 90,
         "memory_inject_dedupe_topics": True,
     }
@@ -71,7 +70,6 @@ async def test_patch_chat_settings_updates_only_submitted_values_and_audits() ->
         "memory_prune_top_k": 50,
         "memory_inject_enabled": True,
         "memory_inject_top_k": 12,
-        "memory_inject_max_chars": 2000,
         "memory_inject_window_days": 90,
         "memory_inject_dedupe_topics": True,
     }
@@ -115,7 +113,6 @@ async def test_chat_settings_service_applies_defaults_for_missing_columns() -> N
     assert result["memory_prune_top_k"] == 50
     assert result["memory_inject_enabled"] is True
     assert result["memory_inject_top_k"] == 12
-    assert result["memory_inject_max_chars"] == 2000
     assert result["memory_inject_window_days"] == 90
     assert result["memory_inject_dedupe_topics"] is True
 
@@ -157,7 +154,6 @@ async def test_update_memory_mode_sets_derived_bools() -> None:
                     "memory_prune_top_k": 50,
                     "memory_inject_enabled": True,
                     "memory_inject_top_k": 12,
-                    "memory_inject_max_chars": 2000,
                     "memory_inject_window_days": 90,
                     "memory_inject_dedupe_topics": True,
                 }

@@ -58,7 +58,6 @@ class ChatSettingsUpdate(BaseModel):
     # Memory P1: inject-side ranking before Agno system-prompt dump
     memory_inject_enabled: bool | None = None
     memory_inject_top_k: int | None = None
-    memory_inject_max_chars: int | None = None
     memory_inject_window_days: int | None = None
     memory_inject_dedupe_topics: bool | None = None
 

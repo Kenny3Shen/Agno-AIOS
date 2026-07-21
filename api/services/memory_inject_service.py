@@ -15,7 +15,6 @@ Then:
 1. Drop rows outside the time window (``window_days``; 0 = disabled).
 2. Optionally keep only the best row per topic key (conflict dedupe).
 3. Sort by score, take top-k.
-4. Enforce a total character budget (``max_chars``).
 
 No embeddings — keyword/topic matching is intentional for P1 cost/latency.
 """
@@ -48,7 +47,6 @@ class MemoryInjectConfig:
 
     enabled: bool = True
     top_k: int = 12
-    max_chars: int = 2000
     window_days: int = 90
     dedupe_topics: bool = True
 
@@ -66,7 +64,6 @@ def memory_inject_config_from_settings(settings: Any) -> MemoryInjectConfig:
     return MemoryInjectConfig(
         enabled=bool(_get("memory_inject_enabled", True)),
         top_k=max(1, min(100, int(_get("memory_inject_top_k", 12) or 12))),
-        max_chars=max(200, min(20_000, int(_get("memory_inject_max_chars", 2000) or 2000))),
         window_days=max(0, min(3650, int(_get("memory_inject_window_days", 90) or 0))),
         dedupe_topics=bool(_get("memory_inject_dedupe_topics", True)),
     )
@@ -260,7 +257,7 @@ def select_memories_for_inject(
     """Rank and cap memories for system-prompt injection.
 
     Returns the original memory objects (not copies) in **descending score**
-    order, already limited by top-k and max_chars.
+    order, already limited by top-k.
     """
     cfg = config or MemoryInjectConfig()
     if not cfg.enabled:
@@ -310,31 +307,14 @@ def select_memories_for_inject(
 
     # 4) Sort + top-k.
     scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
-    ranked = [item for _s, _id, item in scored[: max(1, cfg.top_k)]]
-
-    # 5) Character budget (always keep at least one if any).
-    selected: list[Any] = []
-    used = 0
-    for item in ranked:
-        text = _memory_text(item).strip()
-        cost = len(text) + 4  # bullet overhead
-        if selected and used + cost > cfg.max_chars:
-            continue
-        selected.append(item)
-        used += cost
-        if used >= cfg.max_chars:
-            break
-
-    if not selected and ranked:
-        selected = [ranked[0]]
+    selected = [item for _s, _id, item in scored[: max(1, cfg.top_k)]]
 
     logger.debug(
-        "memory inject selected={}/{} query_tokens={} top_k={} max_chars={}",
+        "memory inject selected={}/{} query_tokens={} top_k={}",
         len(selected),
         len(memories or []),
         len(query_tokens),
         cfg.top_k,
-        cfg.max_chars,
     )
     return selected
 

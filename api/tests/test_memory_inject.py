@@ -74,7 +74,6 @@ def test_select_respects_top_k_and_window() -> None:
         config=MemoryInjectConfig(
             enabled=True,
             top_k=2,
-            max_chars=5000,
             window_days=90,
             dedupe_topics=False,
         ),
@@ -116,7 +115,6 @@ def test_dedupe_topics_keeps_best() -> None:
         config=MemoryInjectConfig(
             enabled=True,
             top_k=10,
-            max_chars=5000,
             window_days=90,
             dedupe_topics=True,
         ),
@@ -125,30 +123,6 @@ def test_dedupe_topics_keeps_best() -> None:
     ids = [m.memory_id for m in selected]
     assert "new_lang" in ids
     assert "old_lang" not in ids
-
-
-def test_max_chars_budget() -> None:
-    now = datetime(2026, 7, 21, 12, 0, tzinfo=UTC)
-    long_a = "A" * 400
-    long_b = "B" * 400
-    rows = [
-        _mem("a", long_a, days_ago=1, now=now),
-        _mem("b", long_b, days_ago=1, now=now),
-    ]
-    selected = select_memories_for_inject(
-        rows,
-        query="",
-        config=MemoryInjectConfig(
-            enabled=True,
-            top_k=10,
-            max_chars=500,
-            window_days=0,
-            dedupe_topics=False,
-        ),
-        now=now,
-    )
-    # Budget should not fit both full texts.
-    assert len(selected) == 1
 
 
 def test_disabled_returns_all() -> None:
