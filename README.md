@@ -62,6 +62,8 @@ TAIS_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
 
 控制面表结构由 Alembic 管理：发布前执行 `uv run alembic upgrade head`。环境变量、Jobs Worker、模型策略与生产校验见 [配置与运维](./docs/operations.md)。
 
+CVE 库更新支持 GitHub Advisory、`0xMarcio/cve` 与 Exploit-DB 数据源；管理员可在设置页的「CVE 数据源」中分别启用或停用。停用源不会删除既有 CVE 数据或缓存。
+
 ## 架构
 
 React 工作台通过共享 API client 携带 JWT 请求 FastAPI；后端校验权限与资源归属后，按模型、MCP、Skills、Knowledge 与 Memory 创建 Agno 运行时。Chat 走 SSE；长期记忆使用廉价 MemoryManager，可配置是否记忆工具内容、注入侧打分截断，并由 durable job 按年龄 + Top-k 自动 prune。Workflow Studio 负责定义编译与流式运行；HITL 与上传审批汇入审批中心。

@@ -103,6 +103,49 @@ describe('model settings editor', () => {
     expect(screen.queryByText('添加模型')).toBeNull()
   })
 
+  it('saves CVE source enablement choices', async () => {
+    let saved: { sources: Record<string, boolean> } | undefined
+    const cveSources = {
+      sources: [
+        { source: 'github', enabled: true },
+        { source: 'marcio-cve', enabled: true },
+        { source: 'exploit-db', enabled: true },
+      ],
+    }
+    mockSettings()
+    server.use(
+      http.get('/api/settings/cve-sources', () => HttpResponse.json(cveSources)),
+      http.patch('/api/settings/cve-sources', async ({ request }) => {
+        saved = (await request.json()) as { sources: Record<string, boolean> }
+        return HttpResponse.json({
+          sources: cveSources.sources.map((item) => ({
+            ...item,
+            enabled: saved?.sources[item.source] ?? item.enabled,
+          })),
+        })
+      }),
+    )
+    renderWithQuery(<SettingsPage />)
+
+    const cveTab = (await screen.findByText('CVE 数据源')).closest('[role="tab"]')
+    expect(cveTab).toBeTruthy()
+    fireEvent.click(cveTab!)
+
+    const marcioSwitch = await screen.findByRole('switch', { name: '启用 0xMarcio/cve' })
+    fireEvent.click(marcioSwitch)
+    fireEvent.click(screen.getByRole('button', { name: '保存数据源设置' }))
+
+    await waitFor(() => {
+      expect(saved).toEqual({
+        sources: {
+          github: true,
+          'marcio-cve': false,
+          'exploit-db': true,
+        },
+      })
+    })
+  })
+
   it('loads the selected model after cancelling a previous edit', async () => {
     mockSettings()
     renderWithQuery(<SettingsPage />)

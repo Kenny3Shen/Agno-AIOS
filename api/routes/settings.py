@@ -20,6 +20,10 @@ from api.services.model_config_service import (
 from api.services.model_factory import build_agno_model
 from api.auth.claims import actor_id
 from api.services.chat_settings_service import get_chat_settings, update_chat_settings
+from api.services.cve_source_settings_service import (
+    get_cve_source_settings,
+    update_cve_source_settings,
+)
 from api.services.knowledge_rag_settings_service import (
     get_knowledge_rag_settings,
     update_knowledge_rag_settings,
@@ -32,6 +36,7 @@ from api.services.user_notification_settings_service import (
     read_user_notification_settings,
     update_user_feishu_webhook,
 )
+from api.tasks.cve_sources import DATA_SOURCES
 
 router = APIRouter(prefix="/api", tags=["Settings"])
 
@@ -84,6 +89,12 @@ class GuardrailSettingsUpdate(BaseModel):
     pii_check_email: bool | None = None
     pii_check_phone: bool | None = None
     prompt_injection_enabled: bool | None = None
+
+
+class CVESourceSettingsUpdate(BaseModel):
+    """Partial source-enable map keyed by registered CVE source name."""
+
+    sources: dict[str, bool]
 
 
 class UserNotificationSettingsUpdate(BaseModel):
@@ -283,6 +294,44 @@ async def patch_guardrail_settings(
         **audit_request_context(request),
     )
     return result
+
+
+@router.get("/settings/cve-sources")
+async def read_cve_source_settings(
+    _user: User = Depends(require_scope(ADMIN_SCOPE)),
+) -> dict[str, Any]:
+    """Read enabled/disabled state for every registered CVE source."""
+    return {"sources": await get_cve_source_settings(DATA_SOURCES)}
+
+
+@router.patch("/settings/cve-sources")
+async def patch_cve_source_settings(
+    request: Request,
+    body: CVESourceSettingsUpdate,
+    user: User = Depends(require_scope(ADMIN_SCOPE)),
+) -> dict[str, Any]:
+    """Persist source enablement; disabled sources are skipped by later CVE syncs."""
+    values = dict(body.sources)
+    if not values:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="至少提供一个 CVE 数据源设置",
+        )
+    try:
+        sources = await update_cve_source_settings(values, DATA_SOURCES)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    await record_audit_event_async(
+        user,
+        action="settings.cve_sources.update",
+        resource_type="cve_source_settings",
+        metadata={"sources": values},
+        **audit_request_context(request),
+    )
+    return {"sources": sources}
 
 
 @router.get("/models")

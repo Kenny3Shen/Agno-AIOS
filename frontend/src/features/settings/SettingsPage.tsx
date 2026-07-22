@@ -16,6 +16,7 @@ import { currentUserQuery } from '@/features/auth'
 import { roleOf } from '@/shared/auth/permissions'
 import {
   getChatSettings,
+  getCveSourceSettings,
   getGuardrailSettings,
   getKnowledgeRagSettings,
   getModels,
@@ -23,6 +24,7 @@ import {
   listAdminUsers,
   listRolePresets,
   saveChatSettings,
+  saveCveSourceSettings,
   saveGuardrailSettings,
   saveKnowledgeRagSettings,
   saveModels,
@@ -31,6 +33,7 @@ import {
   setUserRole,
   testModel,
   type ChatSettings,
+  type CveSourceSetting,
   type GuardrailSettings,
   type KnowledgeRagSettings,
   type MemoryMode,
@@ -167,6 +170,18 @@ export function SettingsPage() {
       guardrailForm.setFieldsValue(guardrailSettings.data)
     }
   }, [guardrailForm, guardrailSettings.data])
+  const cveSourceSettings = useQuery({
+    queryKey: ['settings', 'cve-sources'],
+    queryFn: getCveSourceSettings,
+    enabled: isAdmin && activeTab === 'cve-sources',
+  })
+  const [cveSourceEnabled, setCveSourceEnabled] = useState<Record<string, boolean>>({})
+  const [cveSourceSaving, setCveSourceSaving] = useState(false)
+  useEffect(() => {
+    const sources = cveSourceSettings.data?.sources
+    if (!sources) return
+    setCveSourceEnabled(Object.fromEntries(sources.map(({ source, enabled }) => [source, enabled])))
+  }, [cveSourceSettings.data])
   const usersQuery = useQuery({
     queryKey: ['settings', 'admin-users'],
     queryFn: () => listAdminUsers(1, 100),
@@ -190,6 +205,24 @@ export function SettingsPage() {
     const key = `role_${role}` as const
     const translated = t(key)
     return translated === key ? role : translated
+  }
+
+  const cveSourceLabel = (source: string) => {
+    const labels: Record<string, string> = {
+      github: t('cveSourceGithub'),
+      'marcio-cve': t('cveSourceMarcio'),
+      'exploit-db': t('cveSourceExploitDb'),
+    }
+    return labels[source] ?? source
+  }
+
+  const cveSourceDescription = (source: string) => {
+    const descriptions: Record<string, string> = {
+      github: t('cveSourceGithubDesc'),
+      'marcio-cve': t('cveSourceMarcioDesc'),
+      'exploit-db': t('cveSourceExploitDbDesc'),
+    }
+    return descriptions[source] ?? t('cveSourceCustomDesc')
   }
 
   const roleOptions = (rolePresetsQuery.data ?? []).map((preset) => ({
@@ -239,6 +272,30 @@ export function SettingsPage() {
       message.error(error instanceof Error ? error.message : t('notificationSaveFailed'))
     } finally {
       setNotificationSaving(false)
+    }
+  }
+
+  const saveCveSources = async () => {
+    const sources = Object.fromEntries(
+      (cveSourceSettings.data?.sources ?? []).map(({ source, enabled }) => [
+        source,
+        cveSourceEnabled[source] ?? enabled,
+      ]),
+    )
+    if (!Object.keys(sources).length) return
+
+    setCveSourceSaving(true)
+    try {
+      const next = await saveCveSourceSettings(sources)
+      setCveSourceEnabled(
+        Object.fromEntries(next.sources.map(({ source, enabled }) => [source, enabled])),
+      )
+      await client.invalidateQueries({ queryKey: ['settings', 'cve-sources'] })
+      message.success(t('cveSourcesSaved'))
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('cveSourcesSaveFailed'))
+    } finally {
+      setCveSourceSaving(false)
     }
   }
 
@@ -1611,6 +1668,68 @@ export function SettingsPage() {
     </div>
   )
 
+  const cveSourceControls = (
+    <div className="settings-param-panel settings-cve-sources-panel">
+      <Typography.Paragraph type="secondary">{t('cveSourcesHint')}</Typography.Paragraph>
+      <Table<CveSourceSetting>
+        rowKey="source"
+        size="middle"
+        loading={cveSourceSettings.isLoading}
+        pagination={false}
+        tableLayout="auto"
+        style={{ width: '100%' }}
+        dataSource={cveSourceSettings.data?.sources ?? []}
+        columns={[
+          {
+            title: t('colName'),
+            dataIndex: 'source',
+            width: '28%',
+            render: (source: string) => (
+              <Flex vertical gap={0}>
+                <Typography.Text strong>{cveSourceLabel(source)}</Typography.Text>
+                <Typography.Text type="secondary">{source}</Typography.Text>
+              </Flex>
+            ),
+          },
+          {
+            title: t('colDescription'),
+            dataIndex: 'source',
+            render: (source: string) => (
+              <Typography.Text type="secondary" className="settings-param-description">
+                {cveSourceDescription(source)}
+              </Typography.Text>
+            ),
+          },
+          {
+            title: t('colEnabled'),
+            dataIndex: 'enabled',
+            width: 140,
+            render: (enabled: boolean, row) => (
+              <Switch
+                checked={cveSourceEnabled[row.source] ?? enabled}
+                disabled={cveSourceSettings.isLoading || cveSourceSaving}
+                aria-label={t('cveSourceEnabledNamed', { name: cveSourceLabel(row.source) })}
+                onChange={(checked) =>
+                  setCveSourceEnabled((current) => ({ ...current, [row.source]: checked }))
+                }
+              />
+            ),
+          },
+        ]}
+      />
+      <div className="settings-param-actions">
+        <Button
+          type="primary"
+          loading={cveSourceSaving}
+          disabled={cveSourceSettings.isLoading || !cveSourceSettings.data?.sources.length}
+          onClick={() => void saveCveSources()}
+        >
+          {t('cveSourcesSave')}
+        </Button>
+      </div>
+    </div>
+  )
+
   const notificationControls = (
     <div className="settings-param-block">
       <Typography.Paragraph type="secondary">{t('notificationIntro')}</Typography.Paragraph>
@@ -1674,6 +1793,7 @@ export function SettingsPage() {
                   { key: 'memory', label: t('memorySettingsTab'), children: memoryControls },
                   { key: 'guardrails', label: t('guardrailsTab'), children: guardrailControls },
                   { key: 'knowledge', label: t('knowledgeRagTab'), children: knowledgeControls },
+                  { key: 'cve-sources', label: t('cveSourcesTab'), children: cveSourceControls },
                   { key: 'users', label: t('usersTab'), children: usersPanel },
                 ]
               : []),

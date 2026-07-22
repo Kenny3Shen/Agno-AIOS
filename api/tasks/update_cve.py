@@ -9,6 +9,7 @@ CVE数据库更新脚本
 
 数据源:
     - github
+    - marcio-cve
     - exploit-db
 """
 
@@ -34,6 +35,7 @@ from api.persistence.cves import (
     find_missing_cve_source_keys,
     insert_new_cve_rows,
 )
+from api.services.cve_source_settings_service import get_enabled_cve_source_names
 from api.tasks.cve_sources import (
     DATA_SOURCES,
     load_cve_source_config,
@@ -161,7 +163,15 @@ async def _read_csv_if_exists(path: str) -> pl.DataFrame:
 
 
 def _parse_source_data(source: Any, raw_data: Any, source_name: str) -> pl.DataFrame:
-    df_remote = normalize_cve_dataframe(source.parse_data(raw_data))
+    parsed_data = source.parse_data(raw_data)
+    # Built-in sources return a fully normalized frame. Keep the fallback
+    # normalization for third-party/test sources, but avoid a second complete
+    # materialization on the high-volume production feeds.
+    df_remote = (
+        parsed_data
+        if getattr(source, "returns_normalized_dataframe", False)
+        else normalize_cve_dataframe(parsed_data)
+    )
     if not df_remote.is_empty():
         df_remote = df_remote.with_columns(pl.lit(source_name).alias("source"))
     return df_remote
@@ -469,7 +479,15 @@ async def main(
             need_upsert_data: list[dict[str, Any]] = []
             need_del_data: list[dict[str, Any]] = []
             source_config = await load_cve_source_config()
-            source_names = list(DATA_SOURCES.keys())
+            configured_source_names = list(DATA_SOURCES.keys())
+            source_names = await get_enabled_cve_source_names(configured_source_names)
+            disabled_source_names = [
+                source_name
+                for source_name in configured_source_names
+                if source_name not in source_names
+            ]
+            if disabled_source_names:
+                logger.info("已跳过禁用的 CVE 数据源: {}", disabled_source_names)
             deltas: list[CVESourceDelta] = []
 
             for index, source_name in enumerate(source_names, start=1):

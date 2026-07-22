@@ -22,6 +22,7 @@ from api.persistence.audit_logs import audit_logs_table
 from api.persistence.capability_preferences import capability_preferences_table
 from api.persistence.chat_settings import chat_settings_table
 from api.persistence.collect_articles import collect_articles_table
+from api.persistence.cve_source_settings import cve_source_settings_table
 from api.persistence.cves import cves_table
 from api.persistence.durable_jobs import durable_jobs_table
 from api.persistence.ip_blacklist import ip_blacklist_table
@@ -71,6 +72,7 @@ def control_plane_metadata() -> MetaData:
         capability_preferences_table(),
         chat_settings_table(),
         collect_articles_table(),
+        cve_source_settings_table(),
         cves_table(),
         ip_blacklist_table(),
         durable_jobs_table(),

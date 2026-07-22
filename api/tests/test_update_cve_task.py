@@ -7,7 +7,7 @@ import polars as pl
 import pytest
 
 from api.tasks import update_cve
-from api.tasks.cve_sources import ExploitDBSource, normalize_cve_id
+from api.tasks.cve_sources import ExploitDBSource, MarcioCVESource, normalize_cve_id
 
 
 class _ChangingSource:
@@ -102,6 +102,59 @@ def test_exploitdb_source_excludes_non_cve_codes_and_paths() -> None:
     assert normalize_cve_id("osvdb-12345") is None
 
 
+def test_marcio_source_parses_markdown_tables_and_deduplicates_repository_pairs() -> None:
+    raw_markdown = "\n".join(
+        [
+            "| Stars | Updated | Name | Description |",
+            "| --- | --- | --- | --- |",
+            "| 10 | now | [cve_2026_31431](https://github.com/Example/Copy-Fail/) | First PoC for CVE-2026-31431 |",
+            "| 9 | now | [CVE-2026-31431](https://github.com/example/copy-fail) | Duplicate repository |",
+            "| 8 | now | [CVE-2025-1111-CVE-2025-2222](https://github.com/example/two-cves) | Covers both CVEs |",
+            "| 7 | now | [scanner](https://github.com/example/description-only) | Scanner for CVE-2024-9999 |",
+            "| 6 | now | [CVE-2025-123](https://github.com/example/invalid) | Invalid short sequence |",
+            "| 6 | now | [CVE-2025-1234oops](https://github.com/example/invalid-suffix) | Invalid suffix |",
+            "| 5 | now | [CVE-2023-4567](https://github.com/example/title-only) |  |",
+            "| 4 | now | [CVE-2022-1234](https://github.com/example/canonical.git/?ref=main) | Git URL |",
+            "| 3 | now | [CVE-2021-1234](https://github.com/example/not-a-repository/tree/main) | Nested path |",
+        ]
+    )
+
+    parsed = MarcioCVESource().parse_data(raw_markdown)
+
+    assert parsed.to_dicts() == [
+        {
+            "cve_id": "CVE-2026-31431",
+            "description": "First PoC for CVE-2026-31431",
+            "github_url": "https://github.com/Example/Copy-Fail",
+        },
+        {
+            "cve_id": "CVE-2025-1111",
+            "description": "Covers both CVEs",
+            "github_url": "https://github.com/example/two-cves",
+        },
+        {
+            "cve_id": "CVE-2025-2222",
+            "description": "Covers both CVEs",
+            "github_url": "https://github.com/example/two-cves",
+        },
+        {
+            "cve_id": "CVE-2024-9999",
+            "description": "Scanner for CVE-2024-9999",
+            "github_url": "https://github.com/example/description-only",
+        },
+        {
+            "cve_id": "CVE-2023-4567",
+            "description": "CVE-2023-4567",
+            "github_url": "https://github.com/example/title-only",
+        },
+        {
+            "cve_id": "CVE-2022-1234",
+            "description": "Git URL",
+            "github_url": "https://github.com/example/canonical",
+        },
+    ]
+
+
 def test_description_delta_refreshes_existing_source_row() -> None:
     remote = pl.DataFrame(
         {
@@ -116,6 +169,43 @@ def test_description_delta_refreshes_existing_source_row() -> None:
     updates = update_cve._description_updates(remote, local)
 
     assert updates.to_dicts() == remote.to_dicts()
+
+
+def test_compare_with_local_uses_cve_url_identity_for_lazy_anti_joins() -> None:
+    source = ExploitDBSource()
+    remote = pl.DataFrame(
+        [
+            {
+                "cve_id": "CVE-2026-0001",
+                "description": "Updated description",
+                "github_url": "https://github.com/example/existing",
+            },
+            {
+                "cve_id": "CVE-2026-0002",
+                "description": "Added",
+                "github_url": "https://github.com/example/new",
+            },
+        ]
+    )
+    local = pl.DataFrame(
+        [
+            {
+                "cve_id": "CVE-2026-0001",
+                "description": "Old description",
+                "github_url": "https://github.com/example/existing",
+            },
+            {
+                "cve_id": "CVE-2026-0003",
+                "description": "Removed",
+                "github_url": "https://github.com/example/removed",
+            },
+        ]
+    )
+
+    additions, deletions = source.compare_with_local(remote, local)
+
+    assert additions.to_dicts() == [remote.row(1, named=True)]
+    assert deletions.to_dicts() == [local.row(1, named=True)]
 
 
 @pytest.mark.asyncio
@@ -170,6 +260,11 @@ async def test_main_does_not_advance_cache_or_commit_when_database_update_fails(
         patch.object(update_cve, "load_cve_source_config", new=AsyncMock(return_value=config)),
         patch.object(
             update_cve,
+            "get_enabled_cve_source_names",
+            new=AsyncMock(return_value=["fake"]),
+        ),
+        patch.object(
+            update_cve,
             "update_cve_database",
             new=AsyncMock(side_effect=RuntimeError("db unavailable")),
         ),
@@ -179,6 +274,57 @@ async def test_main_does_not_advance_cache_or_commit_when_database_update_fails(
 
     assert not cache_path.exists()
     assert not commit_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_main_skips_disabled_cve_sources() -> None:
+    delta = update_cve.CVESourceDelta(
+        source_name="enabled",
+        upsert_data=[],
+        deleted_data=[],
+        local_cache_path="/tmp/enabled.csv",
+        remote_dataframe=pl.DataFrame(),
+        remote_commit=None,
+        local_commit_path="/tmp/enabled.commit",
+        should_update_cache=False,
+        should_update_commit=False,
+    )
+
+    with (
+        patch.dict(
+            update_cve.DATA_SOURCES,
+            {"enabled": _ChangingSource, "disabled": _ChangingSource},
+            clear=True,
+        ),
+        patch.object(
+            update_cve,
+            "load_cve_source_config",
+            new=AsyncMock(return_value={}),
+        ),
+        patch.object(
+            update_cve,
+            "get_enabled_cve_source_names",
+            new=AsyncMock(return_value=["enabled"]),
+        ) as enabled_sources,
+        patch.object(
+            update_cve,
+            "get_add_del_data",
+            new=AsyncMock(return_value=delta),
+        ) as get_delta,
+        patch.object(
+            update_cve,
+            "update_cve_database",
+            new=AsyncMock(return_value=(0, 0)),
+        ),
+        patch.object(update_cve, "_commit_source_state", new=AsyncMock()),
+        patch.object(update_cve, "_configure_file_logging_async", new=AsyncMock()),
+        patch.dict(update_cve.environ, {"TAIS_CVE_UPDATE_LOCK_HELD": "1"}),
+    ):
+        result = await update_cve.main()
+
+    assert result == (0, 0)
+    enabled_sources.assert_awaited_once_with(["enabled", "disabled"])
+    get_delta.assert_awaited_once_with("enabled", {})
 
 
 @pytest.mark.asyncio

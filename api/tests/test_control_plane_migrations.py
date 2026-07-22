@@ -46,6 +46,9 @@ class _RevisionEngine:
 def test_control_plane_metadata_contains_capability_and_owned_token_schema() -> None:
     settings = get_settings()
     metadata = control_plane_metadata()
+    cve_source_settings = metadata.tables[
+        f"{settings.agno_app_schema}.cve_source_settings"
+    ]
     preferences = metadata.tables[
         f"{settings.agno_app_schema}.user_capability_preferences"
     ]
@@ -65,6 +68,8 @@ def test_control_plane_metadata_contains_capability_and_owned_token_schema() -> 
     assert {"user_id", "name", "definition"}.issubset(custom_nodes.c.keys())
     assert {"token_hash", "owner_user_id", "token_kind"}.issubset(tokens.c.keys())
     assert "token" not in tokens.c
+    assert list(cve_source_settings.primary_key.columns.keys()) == ["source"]
+    assert {"enabled", "updated_at"}.issubset(cve_source_settings.c.keys())
 
 
 @pytest.mark.asyncio

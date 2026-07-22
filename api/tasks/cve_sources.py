@@ -8,6 +8,7 @@ CVE更新工具和数据源类
 import re
 import tomllib
 from abc import ABC, abstractmethod
+from html import unescape
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -31,6 +32,25 @@ _CVE_ID_EXTRACT_PATTERN = rf"(?i)\b({CVE_ID_PATTERN})\b"
 _CVE_ID_POLARS_PATTERN = rf"(?i)^{CVE_ID_PATTERN}$"
 _CVE_REQUIRED_COLUMNS = {"cve_id", "description", "github_url"}
 
+# 0xMarcio/cve is a Markdown table of GitHub repositories. Its repository
+# names occasionally use underscores (for example ``CVE_2026_31431``), so its
+# parser accepts that presentation and emits the canonical dashed CVE ID.
+_MARCIO_CVE_TABLE_ROW_PATTERN = (
+    r"(?i)^\s*\|[^|]*\|[^|]*\|\s*"
+    r"\[(?P<repository_name>[^\]]+)\]"
+    r"\((?P<github_url>https://github\.com/[^\s)]+)\)"
+    r"\s*\|(?P<description>.*)\|\s*$"
+)
+_MARCIO_GITHUB_REPOSITORY_URL_PATTERN = (
+    r"(?i)^https://github\.com/[^/?#]+/[^/?#]+/?(?:[?#].*)?$"
+)
+_MARCIO_CVE_ID_EXTRACT_PATTERN = r"(?i)CVE[-_]\d{4}[-_]\d{4,}"
+# Polars' Rust regex engine deliberately has no lookarounds. Remove malformed
+# word-boundary candidates before extracting IDs, which preserves the strict
+# semantics of the former Python regex without a Python row UDF.
+_MARCIO_CVE_INVALID_PREFIX_PATTERN = r"(?i)[a-z0-9]CVE[-_]\d{4}[-_]\d{4,}"
+_MARCIO_CVE_INVALID_SUFFIX_PATTERN = r"(?i)CVE[-_]\d{4}[-_]\d{4,}[a-z][a-z0-9]*"
+
 
 def normalize_cve_id(value: Any) -> str | None:
     """Return an uppercase CVE ID only when *value* has the canonical form."""
@@ -38,26 +58,28 @@ def normalize_cve_id(value: Any) -> str | None:
     return cve_id if _CVE_ID_FULL_RE.fullmatch(cve_id) else None
 
 
-def normalize_cve_dataframe(dataframe: pl.DataFrame) -> pl.DataFrame:
-    """Normalize and strictly filter a source dataframe to valid CVE rows."""
-    if dataframe.is_empty():
-        return dataframe
-    missing = _CVE_REQUIRED_COLUMNS.difference(dataframe.columns)
+def _empty_cve_dataframe() -> pl.DataFrame:
+    return pl.DataFrame(
+        schema={
+            "cve_id": pl.String,
+            "description": pl.String,
+            "github_url": pl.String,
+        }
+    )
+
+
+def _normalized_cve_query(dataframe: pl.LazyFrame) -> pl.LazyFrame | None:
+    """Build a validated CVE query without materializing an intermediate frame."""
+    source_schema = dataframe.collect_schema()
+    missing = _CVE_REQUIRED_COLUMNS.difference(source_schema.names())
     if missing:
         logger.warning("CVE source data is missing required columns: {}", sorted(missing))
-        return pl.DataFrame(
-            schema={
-                "cve_id": pl.String,
-                "description": pl.String,
-                "github_url": pl.String,
-            }
-        )
+        return None
 
-    initial_height = dataframe.height
     identity_columns = ["cve_id", "github_url"]
-    if "source" in dataframe.columns:
+    if "source" in source_schema:
         identity_columns.append("source")
-    normalized = (
+    normalized_query = (
         dataframe.with_columns(
             pl.col("cve_id")
             .cast(pl.String)
@@ -73,8 +95,22 @@ def normalize_cve_dataframe(dataframe: pl.DataFrame) -> pl.DataFrame:
         )
         .filter(pl.col("cve_id").str.contains(_CVE_ID_POLARS_PATTERN))
         .filter(pl.col("github_url") != "")
-        .unique(subset=identity_columns, keep="first")
+        .unique(subset=identity_columns, keep="first", maintain_order=True)
     )
+    normalized_query.collect_schema()
+    return normalized_query
+
+
+def normalize_cve_dataframe(dataframe: pl.DataFrame) -> pl.DataFrame:
+    """Normalize and strictly filter a source dataframe to valid CVE rows."""
+    if dataframe.is_empty():
+        return dataframe
+
+    initial_height = dataframe.height
+    normalized_query = _normalized_cve_query(dataframe.lazy())
+    if normalized_query is None:
+        return _empty_cve_dataframe()
+    normalized = normalized_query.collect(engine="streaming")
     rejected = initial_height - normalized.height
     if rejected:
         logger.warning("Filtered {} non-CVE or invalid reference row(s)", rejected)
@@ -98,7 +134,7 @@ class CVEDataSource(ABC):
         """解析数据为标准格式，返回 DataFrame
 
         返回格式:
-        DataFrame with columns: cve_id, description, github_url
+        已规范化的 DataFrame with columns: cve_id, description, github_url
         """
         pass
 
@@ -130,18 +166,27 @@ class CVEDataSource(ABC):
         if df_old.is_empty():
             return df_new, pl.DataFrame()
 
-        # 使用anti_join找出增量数据（在new中但不在old中）
-        df_increment = df_new.join(
-            df_old.select(["cve_id", "github_url"]),
+        # Build both anti joins as LazyFrames and execute them together. The
+        # optimizer can share their in-memory input scans while preserving the
+        # existing source-row semantics.
+        new_frame = df_new.lazy()
+        old_frame = df_old.lazy()
+        increment_query = new_frame.join(
+            old_frame.select(["cve_id", "github_url"]),
             on=["cve_id", "github_url"],
             how="anti",
         )
 
-        # 使用anti_join找出删除数据（在old中但不在new中）
-        df_deleted = df_old.join(
-            df_new.select(["cve_id", "github_url"]),
+        deleted_query = old_frame.join(
+            new_frame.select(["cve_id", "github_url"]),
             on=["cve_id", "github_url"],
             how="anti",
+        )
+        increment_query.collect_schema()
+        deleted_query.collect_schema()
+        df_increment, df_deleted = pl.collect_all(
+            [increment_query, deleted_query],
+            engine="streaming",
         )
 
         logger.info(
@@ -172,6 +217,8 @@ async def load_cve_source_config() -> dict[str, Any]:
 
 class GitHubPocExpSource(CVEDataSource):
     """从GitHub PocOrExp仓库获取CVE数据"""
+
+    returns_normalized_dataframe = True
 
     def __init__(self, config: dict[str, Any] | None = None):
         cfg = (config or {}).get("github", {})
@@ -249,12 +296,9 @@ class GitHubPocExpSource(CVEDataSource):
                     }
                 )
 
-        # 5. 使用 Polars 高效去重
-        df_remote_cve = (
-            pl.DataFrame(cve_data).unique(subset=["cve_id", "github_url"])
-            if cve_data
-            else pl.DataFrame()
-        )
+        # ``normalize_cve_dataframe`` performs the single lazy de-duplication
+        # pass for every source, so avoid materializing an eager duplicate one.
+        df_remote_cve = pl.DataFrame(cve_data) if cve_data else pl.DataFrame()
 
         normalized = normalize_cve_dataframe(df_remote_cve)
         logger.info("从数据中解析了 {} 条有效的 CVE 记录", normalized.height)
@@ -279,8 +323,146 @@ class GitHubPocExpSource(CVEDataSource):
             return resp.json()[0]["sha"]
 
 
+class MarcioCVESource(CVEDataSource):
+    """Read recently updated GitHub PoCs from 0xMarcio/cve's README table."""
+
+    returns_normalized_dataframe = True
+
+    def __init__(self, config: dict[str, Any] | None = None):
+        cfg = (config or {}).get("marcio_cve", {})
+        self.remote_url = cfg.get(
+            "remote_url",
+            "https://raw.githubusercontent.com/0xMarcio/cve/refs/heads/main/README.md",
+        )
+        self.local_path = cfg.get("local_cache", _cve_cache_file("marcio_cve.csv"))
+        self.commit_cache = cfg.get(
+            "commit_cache", _cve_cache_file("marcio_cve_commit.txt")
+        )
+        self.repo_api = cfg.get(
+            "repo_api", "https://api.github.com/repos/0xMarcio/cve/commits"
+        )
+        self.default_branch = cfg.get("default_branch", "main")
+
+    async def fetch_data(self) -> str:
+        """Fetch the upstream Markdown index."""
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(self.remote_url)
+            resp.raise_for_status()
+            logger.info("成功从 {} 获取数据", self.remote_url)
+            return resp.text
+
+    def parse_data(self, raw_data: Any) -> pl.DataFrame:
+        """Parse table rows into one canonical record per CVE/repository pair.
+
+        A repository can legitimately carry PoCs for multiple CVEs, so only
+        duplicate CVE ID and repository URL pairs are removed. Distinct PoC
+        repositories for the same CVE are retained.
+        """
+        if not isinstance(raw_data, str) or not raw_data:
+            return pl.DataFrame()
+
+        # Keep Markdown tokenization at the input boundary, then let Polars
+        # extract cells, fan out multiple CVEs, and de-duplicate in one lazy
+        # plan. This avoids serial Python work for every repository row.
+        source_lines = pl.DataFrame(
+            {"line": unescape(raw_data).splitlines()},
+            schema={"line": pl.String},
+        )
+        dataframe_query = (
+            source_lines.lazy()
+            # A literal pre-filter is cheaper than matching the full table
+            # expression twice. The full expression below still validates the
+            # complete Markdown row before any field is used.
+            .filter(pl.col("line").str.contains("github.com", literal=True))
+            .select(
+                pl.col("line")
+                .str.extract_groups(_MARCIO_CVE_TABLE_ROW_PATTERN)
+                .alias("_parts")
+            )
+            .unnest("_parts")
+            .filter(
+                pl.col("github_url").is_not_null()
+                & pl.col("github_url").str.contains(_MARCIO_GITHUB_REPOSITORY_URL_PATTERN)
+            )
+            .with_columns(
+                pl.col("repository_name")
+                .str.replace_all(r"\s+", " ")
+                .str.strip_chars(),
+                pl.col("description").str.replace_all(r"\s+", " ").str.strip_chars(),
+                pl.col("github_url")
+                .str.replace(r"[?#].*$", "")
+                .str.strip_chars_end("/")
+                .str.replace(r"(?i)\.git$", "")
+                .alias("github_url"),
+            )
+            .with_columns(
+                pl.when(pl.col("description") == "")
+                .then(pl.col("repository_name"))
+                .otherwise(pl.col("description"))
+                .alias("description")
+            )
+            .with_columns(
+                pl.concat_str(
+                    ["repository_name", "description", "github_url"],
+                    separator=" ",
+                    ignore_nulls=True,
+                )
+                .str.replace_all(_MARCIO_CVE_INVALID_PREFIX_PATTERN, "")
+                .str.replace_all(_MARCIO_CVE_INVALID_SUFFIX_PATTERN, "")
+                .str.extract_all(_MARCIO_CVE_ID_EXTRACT_PATTERN)
+                .list.eval(pl.element().str.replace_all("_", "-").str.to_uppercase())
+                .alias("_cve_ids")
+            )
+            .filter(pl.col("_cve_ids").list.len() > 0)
+            .explode("_cve_ids", empty_as_null=True)
+            .with_columns(
+                pl.col("_cve_ids").alias("cve_id"),
+                pl.col("github_url").str.to_lowercase().alias("_github_url_key"),
+            )
+            .unique(
+                subset=["cve_id", "_github_url_key"],
+                keep="first",
+                maintain_order=True,
+            )
+            .select("cve_id", "description", "github_url")
+        )
+        try:
+            normalized_query = _normalized_cve_query(dataframe_query)
+            if normalized_query is None:
+                return _empty_cve_dataframe()
+            normalized = normalized_query.collect(engine="streaming")
+        except pl.exceptions.PolarsError as exc:
+            logger.warning("无法解析 0xMarcio/cve Markdown: {}", exc)
+            return pl.DataFrame()
+
+        logger.info(
+            "从 0xMarcio/cve 解析并去重了 {} 条有效的 CVE 记录",
+            normalized.height,
+        )
+        return normalized
+
+    def get_local_cache_path(self) -> str:
+        return self.local_path
+
+    async def get_remote_commit(self) -> str:
+        """Return the latest README repository commit SHA."""
+        await load_runtime_env_async()
+        github_token = get_settings().github_token.get_secret_value()
+        headers = {"Authorization": f"token {github_token}"} if github_token else {}
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                self.repo_api,
+                params={"sha": self.default_branch, "per_page": 1},
+                headers=headers,
+            )
+            resp.raise_for_status()
+            return resp.json()[0]["sha"]
+
+
 class ExploitDBSource(CVEDataSource):
     """从Exploit-DB获取CVE数据"""
+
+    returns_normalized_dataframe = True
 
     def __init__(self, config: dict[str, Any] | None = None):
         cfg = (config or {}).get("exploit_db", {})
@@ -321,21 +503,24 @@ class ExploitDBSource(CVEDataSource):
             return pl.DataFrame()
 
         try:
-            source_frame = pl.read_csv(StringIO(raw_data))
+            source_frame = pl.scan_csv(StringIO(raw_data))
+            source_schema = source_frame.collect_schema()
         except pl.exceptions.PolarsError as exc:
             logger.warning("无法解析 ExploitDB CSV: {}", exc)
             return pl.DataFrame()
 
         required = {"file", "codes", "description"}
-        missing = required.difference(source_frame.columns)
+        missing = required.difference(source_schema.names())
         if missing:
             logger.warning("ExploitDB CSV is missing required columns: {}", sorted(missing))
             return pl.DataFrame()
 
         # ExploitDB includes many rows without CVEs. Do not fall back to file
         # paths, OSVDB IDs, or arbitrary ``codes`` values: this is a CVE table.
-        df_remote_cve = (
-            source_frame.lazy()
+        dataframe_query = (
+            source_frame.filter(
+                pl.col("codes").cast(pl.String).str.contains(_CVE_ID_EXTRACT_PATTERN)
+            )
             .select(
                 pl.col("codes")
                 .cast(pl.String)
@@ -348,8 +533,10 @@ class ExploitDBSource(CVEDataSource):
                 .str.extract(r"/(\d+)\.", 1)
                 .alias("_exploit_id"),
             )
-            .filter(pl.col("cve_id").is_not_null())
-            .filter(pl.col("_exploit_id").str.contains(r"^\d+$"))
+            .filter(
+                pl.col("cve_id").is_not_null()
+                & pl.col("_exploit_id").str.contains(r"^\d+$")
+            )
             .with_columns(
                 pl.format(
                     "https://www.exploit-db.com/exploits/{}",
@@ -357,9 +544,15 @@ class ExploitDBSource(CVEDataSource):
                 ).alias("github_url")
             )
             .select("cve_id", "description", "github_url")
-            .collect()
         )
-        normalized = normalize_cve_dataframe(df_remote_cve)
+        try:
+            normalized_query = _normalized_cve_query(dataframe_query)
+            if normalized_query is None:
+                return _empty_cve_dataframe()
+            normalized = normalized_query.collect(engine="streaming")
+        except pl.exceptions.PolarsError as exc:
+            logger.warning("无法解析 ExploitDB CSV: {}", exc)
+            return pl.DataFrame()
 
         logger.info("去重后: {} 条唯一 CVE 记录", normalized.height)
         return normalized
@@ -382,12 +575,14 @@ class ExploitDBSource(CVEDataSource):
 # 数据源注册表
 DATA_SOURCES = {
     "github": GitHubPocExpSource,
+    "marcio-cve": MarcioCVESource,
     "exploit-db": ExploitDBSource,
 }
 
 __all__ = [
     "CVEDataSource",
     "GitHubPocExpSource",
+    "MarcioCVESource",
     "ExploitDBSource",
     "CVE_ID_PATTERN",
     "DATA_SOURCES",

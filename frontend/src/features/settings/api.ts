@@ -141,6 +141,23 @@ export const getGuardrailSettings = () =>
 export const saveGuardrailSettings = (payload: Partial<GuardrailSettings>) =>
   requestJson<GuardrailSettings>('/settings/guardrails', jsonInit('PATCH', payload))
 
+export interface CveSourceSetting {
+  source: string
+  enabled: boolean
+}
+
+export interface CveSourceSettingsResponse {
+  sources: CveSourceSetting[]
+}
+
+export const getCveSourceSettings = () =>
+  requestJson<CveSourceSettingsResponse>('/settings/cve-sources')
+export const saveCveSourceSettings = (sources: Record<string, boolean>) =>
+  requestJson<CveSourceSettingsResponse>(
+    '/settings/cve-sources',
+    jsonInit('PATCH', { sources }),
+  )
+
 export const listRolePresets = async () => (await requestJson<{ data: RolePreset[] }>('/auth/roles')).data
 
 export const listAdminUsers = async (page = 1, limit = 50): Promise<AdminUserListResult> => {
