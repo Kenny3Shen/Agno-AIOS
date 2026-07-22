@@ -6,14 +6,6 @@ commit_cache = "./.config/cve/github_commit.txt"
 repo_api = "https://api.github.com/repos/ycdxsb/PocOrExp_in_Github/commits"
 default_branch = "main"
 
-[marcio_cve]
-source = "marcio-cve"
-remote_url = "https://raw.githubusercontent.com/0xMarcio/cve/refs/heads/main/README.md"
-local_cache = "./.config/cve/marcio_cve.csv"
-commit_cache = "./.config/cve/marcio_cve_commit.txt"
-repo_api = "https://api.github.com/repos/0xMarcio/cve/commits"
-default_branch = "main"
-
 [exploit_db]
 source = "exploit-db"
 remote_url = "https://gitlab.com/exploit-database/exploitdb/-/raw/main/files_exploits.csv?ref_type=heads"

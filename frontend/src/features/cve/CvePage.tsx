@@ -232,7 +232,6 @@ export function CvePage() {
             placeholder={t('allSources')}
             options={[
               { value: 'github', label: 'GitHub' },
-              { value: 'marcio-cve', label: '0xMarcio/cve' },
               { value: 'exploit-db', label: 'Exploit-DB' },
             ]}
           />

@@ -108,7 +108,6 @@ describe('model settings editor', () => {
     const cveSources = {
       sources: [
         { source: 'github', enabled: true },
-        { source: 'marcio-cve', enabled: true },
         { source: 'exploit-db', enabled: true },
       ],
     }
@@ -131,16 +130,15 @@ describe('model settings editor', () => {
     expect(cveTab).toBeTruthy()
     fireEvent.click(cveTab!)
 
-    const marcioSwitch = await screen.findByRole('switch', { name: '启用 0xMarcio/cve' })
-    fireEvent.click(marcioSwitch)
+    const exploitDbSwitch = await screen.findByRole('switch', { name: '启用 Exploit-DB' })
+    fireEvent.click(exploitDbSwitch)
     fireEvent.click(screen.getByRole('button', { name: '保存数据源设置' }))
 
     await waitFor(() => {
       expect(saved).toEqual({
         sources: {
           github: true,
-          'marcio-cve': false,
-          'exploit-db': true,
+          'exploit-db': false,
         },
       })
     })

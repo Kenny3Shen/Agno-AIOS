@@ -62,7 +62,7 @@ TAIS_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
 
 控制面表结构由 Alembic 管理：发布前执行 `uv run alembic upgrade head`。环境变量、Jobs Worker、模型策略与生产校验见 [配置与运维](./docs/operations.md)。
 
-CVE 库更新支持 GitHub Advisory、`0xMarcio/cve` 与 Exploit-DB 数据源；管理员可在设置页的「CVE 数据源」中分别启用或停用。停用源不会删除既有 CVE 数据或缓存。
+CVE 库更新支持 GitHub PoC/Exp 与 Exploit-DB 数据源；管理员可在设置页的「CVE 数据源」中分别启用或停用。停用源不会删除既有 CVE 数据或缓存。
 
 ## 架构
 

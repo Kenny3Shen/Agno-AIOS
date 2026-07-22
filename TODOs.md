@@ -319,10 +319,10 @@
 
 # 下一步工作
 
-## 已完成：CVE 数据源扩展与可配置开关
+## 已完成：CVE 数据源去重与可配置开关
 
-- 新增 `0xMarcio/cve` 数据源，解析通过 Polars LazyFrame 完成结构化、去重与入库差集计算。
-- Settings 新增「CVE 数据源」配置，管理员可分别启用或停用 GitHub Advisory、`0xMarcio/cve`、Exploit-DB；更新任务会跳过停用源并保留既有数据与缓存。
+- 对 `0xMarcio/cve` 与 GitHub PoC/Exp 的规范化 `(CVE, URL)` 快照做 Polars LazyFrame 对比后确认全量重合，已移除该冗余源及其缓存/数据库记录。
+- Settings 新增「CVE 数据源」配置，管理员可分别启用或停用 GitHub PoC/Exp、Exploit-DB；更新任务会跳过停用源并保留既有数据与缓存。
 - 控制面配置持久化、审计记录、Alembic 迁移与前后端回归测试已覆盖。
 
 ## 已完成：Workflow Studio 布局精简与文案收口

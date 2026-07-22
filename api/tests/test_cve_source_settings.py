@@ -37,11 +37,10 @@ def test_cve_source_settings_write_requires_admin_scope() -> None:
 @pytest.mark.asyncio
 async def test_patch_cve_source_settings_persists_and_audits() -> None:
     actor = SimpleNamespace(id="admin-1", role="admin", is_superuser=False)
-    body = settings.CVESourceSettingsUpdate(sources={"marcio-cve": False})
+    body = settings.CVESourceSettingsUpdate(sources={"exploit-db": False})
     saved_sources = [
         {"source": "github", "enabled": True},
-        {"source": "marcio-cve", "enabled": False},
-        {"source": "exploit-db", "enabled": True},
+        {"source": "exploit-db", "enabled": False},
     ]
 
     with (
@@ -59,11 +58,11 @@ async def test_patch_cve_source_settings_persists_and_audits() -> None:
         )
 
     assert result == {"sources": saved_sources}
-    save_mock.assert_awaited_once_with({"marcio-cve": False}, settings.DATA_SOURCES)
+    save_mock.assert_awaited_once_with({"exploit-db": False}, settings.DATA_SOURCES)
     audit_call = audit_mock.await_args
     assert audit_call is not None
     assert audit_call.kwargs["action"] == "settings.cve_sources.update"
-    assert audit_call.kwargs["metadata"] == {"sources": {"marcio-cve": False}}
+    assert audit_call.kwargs["metadata"] == {"sources": {"exploit-db": False}}
 
 
 @pytest.mark.asyncio
@@ -91,18 +90,17 @@ async def test_service_preserves_order_and_defaults_unknown_rows_to_enabled() ->
     with patch.object(
         cve_source_settings_service,
         "get_cve_source_enabled_map",
-        new=AsyncMock(return_value={"github": False, "marcio-cve": True}),
+        new=AsyncMock(return_value={"github": False, "exploit-db": True}),
     ):
         sources = await cve_source_settings_service.get_cve_source_settings(
-            ["github", "marcio-cve", "exploit-db"]
+            ["github", "exploit-db"]
         )
         enabled = await cve_source_settings_service.get_enabled_cve_source_names(
-            ["github", "marcio-cve", "exploit-db"]
+            ["github", "exploit-db"]
         )
 
     assert sources == [
         {"source": "github", "enabled": False},
-        {"source": "marcio-cve", "enabled": True},
         {"source": "exploit-db", "enabled": True},
     ]
-    assert enabled == ["marcio-cve", "exploit-db"]
+    assert enabled == ["exploit-db"]

@@ -9,7 +9,6 @@ CVE数据库更新脚本
 
 数据源:
     - github
-    - marcio-cve
     - exploit-db
 """
 

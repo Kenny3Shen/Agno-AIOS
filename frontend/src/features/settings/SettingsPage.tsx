@@ -210,7 +210,6 @@ export function SettingsPage() {
   const cveSourceLabel = (source: string) => {
     const labels: Record<string, string> = {
       github: t('cveSourceGithub'),
-      'marcio-cve': t('cveSourceMarcio'),
       'exploit-db': t('cveSourceExploitDb'),
     }
     return labels[source] ?? source
@@ -219,7 +218,6 @@ export function SettingsPage() {
   const cveSourceDescription = (source: string) => {
     const descriptions: Record<string, string> = {
       github: t('cveSourceGithubDesc'),
-      'marcio-cve': t('cveSourceMarcioDesc'),
       'exploit-db': t('cveSourceExploitDbDesc'),
     }
     return descriptions[source] ?? t('cveSourceCustomDesc')

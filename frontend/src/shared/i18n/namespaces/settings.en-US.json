@@ -196,8 +196,6 @@
   "cveSourceEnabledNamed": "Enable {{name}}",
   "cveSourceGithub": "GitHub PoC/Exp",
   "cveSourceGithubDesc": "The public PoC index from ycdxsb/PocOrExp_in_Github.",
-  "cveSourceMarcio": "0xMarcio/cve",
-  "cveSourceMarcioDesc": "The GitHub CVE/PoC repository index maintained in the 0xMarcio/cve README.",
   "cveSourceExploitDb": "Exploit-DB",
   "cveSourceExploitDbDesc": "Exploit records with CVE IDs from Exploit-DB files_exploits.csv.",
   "cveSourceCustomDesc": "A registered CVE source.",

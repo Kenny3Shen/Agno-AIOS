@@ -196,8 +196,6 @@
   "cveSourceEnabledNamed": "启用 {{name}}",
   "cveSourceGithub": "GitHub PoC/Exp",
   "cveSourceGithubDesc": "ycdxsb/PocOrExp_in_Github 的公开 PoC 索引。",
-  "cveSourceMarcio": "0xMarcio/cve",
-  "cveSourceMarcioDesc": "0xMarcio/cve README 中维护的 GitHub CVE/PoC 仓库索引。",
   "cveSourceExploitDb": "Exploit-DB",
   "cveSourceExploitDbDesc": "Exploit-DB files_exploits.csv 中带 CVE 编号的漏洞记录。",
   "cveSourceCustomDesc": "已注册的 CVE 数据源。",
