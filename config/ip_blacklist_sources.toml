@@ -1,5 +1,5 @@
 # IP blacklist threat-intel feeds (FireHOL level1: Spamhaus DROP/EDROP, DShield, Feodo, etc.)
-# Override path with TAIS_IP_BLACKLIST_SOURCE_CONFIG_PATH.
+# Default path: config/ip_blacklist_sources.toml (override with TAIS_IP_BLACKLIST_SOURCE_CONFIG_PATH).
 
 [firehol_level1]
 source = "firehol-level1"

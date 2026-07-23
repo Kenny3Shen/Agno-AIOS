@@ -1,3 +1,10 @@
+## 已完成：CVE / IP 黑名单源配置迁出仓库根
+
+- 默认源配置：`config/cve_sources.toml`、`config/ip_blacklist_sources.toml`（不再放在项目根）。
+- Settings 默认 `TAIS_CVE_SOURCE_CONFIG_PATH` / `TAIS_IP_BLACKLIST_SOURCE_CONFIG_PATH` 对齐；加载经 `resolve_project_path`。
+- 文档：`docs/operations.md`、`.env.example`；运行时缓存仍在 `.config/cve` / `.config/ip_blacklist`。
+
+
 ## 已完成：技术文档 Mermaid 图例
 
 - 为 `docs/` 核心技术页补充可 diff 的 Mermaid 图：架构运行时 flowchart（既有）、Agents Catalog、HITL Run 状态机、Workflow E2E、运维拓扑、安全授权边界、Safety Eval 被测链路 / L1–L3 / 单 case 判定、开发门禁流水线。

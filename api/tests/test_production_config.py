@@ -40,6 +40,15 @@ def test_development_keeps_existing_convenient_defaults() -> None:
     assert settings.auth_cookie_secure is False
 
 
+def test_threat_intel_source_configs_default_under_config_dir() -> None:
+    """CVE / IP blacklist feed TOML defaults live under config/, not repo root."""
+    settings = Settings.model_validate({"environment": "development"})
+    assert settings.cve_source_config_path == "config/cve_sources.toml"
+    assert settings.ip_blacklist_source_config_path == "config/ip_blacklist_sources.toml"
+    assert not settings.cve_source_config_path.startswith("cve_")
+    assert not settings.ip_blacklist_source_config_path.startswith("ip_")
+
+
 @pytest.mark.parametrize(
     ("field_name", "insecure_value", "expected_name"),
     [

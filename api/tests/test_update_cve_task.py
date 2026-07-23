@@ -298,3 +298,25 @@ async def test_empty_remote_parse_does_not_delete_local_cache_or_advance_commit(
 
     assert "CVE-2025-0001" in cache_path.read_text(encoding="utf-8")
     assert not commit_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_load_cve_source_config_reads_repo_config_dir(monkeypatch) -> None:
+    """Default feed TOML lives under config/, not the project root."""
+    from api.services.runtime_paths import PROJECT_ROOT
+    from api.tasks import cve_sources as sources
+
+    expected = PROJECT_ROOT / "config" / "cve_sources.toml"
+    assert expected.is_file(), f"missing shipped feed config {expected}"
+
+    monkeypatch.setattr(
+        sources,
+        "get_settings",
+        lambda: type("S", (), {"cve_source_config_path": "config/cve_sources.toml"})(),
+    )
+    monkeypatch.setattr(sources, "load_runtime_env_async", AsyncMock())
+
+    data = await sources.load_cve_source_config()
+    assert isinstance(data, dict)
+    assert "github" in data
+    assert data["github"].get("source") == "github"

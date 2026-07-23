@@ -16,6 +16,7 @@ from loguru import logger
 
 from api.config import get_settings
 from api.services.runtime_env import load_runtime_env_async
+from api.services.runtime_paths import resolve_project_path
 
 _IP_OR_CIDR_RE = re.compile(
     r"^(?:"
@@ -112,7 +113,9 @@ class IpBlacklistSource(ABC):
 
 async def load_ip_blacklist_source_config() -> dict[str, Any]:
     await load_runtime_env_async()
-    config_path = AsyncPath(get_settings().ip_blacklist_source_config_path)
+    config_path = AsyncPath(
+        resolve_project_path(get_settings().ip_blacklist_source_config_path)
+    )
     try:
         content = await config_path.read_text(encoding="utf-8")
     except OSError:

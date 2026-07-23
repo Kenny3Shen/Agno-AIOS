@@ -120,3 +120,29 @@ async def test_search_ip_blacklist_rows_filters_by_query(monkeypatch):
     rows, total = await store.search_ip_blacklist_rows(query="1.2.3", page=1, size=10)
     assert total == 1
     assert rows[0]["indicator"] == "1.2.3.4"
+
+
+@pytest.mark.asyncio
+async def test_load_ip_blacklist_source_config_reads_repo_config_dir(monkeypatch):
+    """Default feed TOML lives under config/, not the project root."""
+    from unittest.mock import AsyncMock
+
+    from api.services.runtime_paths import PROJECT_ROOT
+    from api.tasks import ip_blacklist_sources as sources
+
+    expected = PROJECT_ROOT / "config" / "ip_blacklist_sources.toml"
+    assert expected.is_file(), f"missing shipped feed config {expected}"
+
+    monkeypatch.setattr(
+        sources,
+        "get_settings",
+        lambda: type(
+            "S", (), {"ip_blacklist_source_config_path": "config/ip_blacklist_sources.toml"}
+        )(),
+    )
+    monkeypatch.setattr(sources, "load_runtime_env_async", AsyncMock())
+
+    data = await sources.load_ip_blacklist_source_config()
+    assert isinstance(data, dict)
+    assert "firehol_level1" in data
+    assert data["firehol_level1"].get("source") == "firehol-level1"

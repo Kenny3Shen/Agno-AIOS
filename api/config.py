@@ -244,8 +244,9 @@ class Settings(BaseSettings):
     )
 
     cve_source_config_path: str = Field(
-        default="cve_sources.toml",
+        default="config/cve_sources.toml",
         validation_alias="TAIS_CVE_SOURCE_CONFIG_PATH",
+        description="Repo-relative path to CVE feed TOML (not project root).",
     )
     cve_data_dir: Path = Field(
         default=Path(".config/cve"),
@@ -256,8 +257,9 @@ class Settings(BaseSettings):
         validation_alias="TAIS_CVE_UPDATE_LOCK_PATH",
     )
     ip_blacklist_source_config_path: str = Field(
-        default="ip_blacklist_sources.toml",
+        default="config/ip_blacklist_sources.toml",
         validation_alias="TAIS_IP_BLACKLIST_SOURCE_CONFIG_PATH",
+        description="Repo-relative path to IP blacklist feed TOML (not project root).",
     )
     ip_blacklist_data_dir: Path = Field(
         default=Path(".config/ip_blacklist"),

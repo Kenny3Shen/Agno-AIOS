@@ -19,6 +19,7 @@ from loguru import logger
 
 from api.config import get_settings
 from api.services.runtime_env import load_runtime_env_async
+from api.services.runtime_paths import resolve_project_path
 
 
 # CVE Program IDs have a four-digit year and at least a four-digit sequence.
@@ -182,7 +183,9 @@ class CVEDataSource(ABC):
 
 async def load_cve_source_config() -> dict[str, Any]:
     await load_runtime_env_async()
-    config_path = AsyncPath(get_settings().cve_source_config_path)
+    config_path = AsyncPath(
+        resolve_project_path(get_settings().cve_source_config_path)
+    )
     try:
         content = await config_path.read_text(encoding="utf-8")
     except OSError:
