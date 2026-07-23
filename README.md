@@ -6,7 +6,7 @@ T.A.I.S（Trinity AI Security）是一个面向安全运营的 AI 工作台。�
 
 本地 GPU：默认从 PyTorch **cu124** 索引安装 `torch`/`torchvision`（适配 GTX 1070 Ti 等 Pascal，驱动 CUDA ≥12.x）。Knowledge/Chat 的 Docling 依赖该栈。
 
-更细的技术文档见 [`docs/`](./docs/README.md)（架构、HITL、工作流、运维、开发门禁等）。
+更细的技术文档见 [`docs/`](./docs/README.md)（架构、HITL、工作流、运维、开发门禁等；关键链路附 **Mermaid** 图例）。
 
 ## 内置 Agents
 

@@ -11,6 +11,39 @@ Chat 与 Workflow 共用稳定 `agent_id` / executor `ref`（见 `api/services/a
 | `deep-research` | 深度研究助手 | Reasoning + Website + Web Search（`ddgs`，优先 api/html backend）；Knowledge / Live Search；可审计 Markdown 备忘录 |
 | `safe-fallback` | 轻量分析助手 | 无工具（Workflow 兜底） |
 
+Catalog 与工作台入口的关系：
+
+```mermaid
+flowchart TB
+    Catalog["agent_catalog<br/>稳定 agent_id / executor.ref"]
+
+    subgraph Surfaces["产品入口"]
+        Chat["Chat<br/>GET /api/chat/agents"]
+        Studio["Workflow Studio<br/>步骤 executor"]
+        Team["Agno Team beta<br/>TAIS_ENABLE_AGNO_TEAM"]
+    end
+
+    subgraph Agents["内置 Agents"]
+        Sec["security-operations"]
+        Data["data-analysis"]
+        Research["deep-research"]
+        Fallback["safe-fallback"]
+    end
+
+    Catalog --> Chat
+    Catalog --> Studio
+    Catalog --> Team
+    Chat --> Sec
+    Chat --> Data
+    Chat --> Research
+    Studio --> Sec
+    Studio --> Fallback
+    Studio --> Data
+    Studio --> Research
+    Team --> Research
+    Team --> Data
+```
+
 ## 工作台集成
 
 - Chat：`GET /api/chat/agents`，发消息可带 `agent_id`（multipart/JSON）。

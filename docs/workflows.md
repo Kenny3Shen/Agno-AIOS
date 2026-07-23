@@ -15,17 +15,26 @@
 
 ## 端到端数据流
 
-```text
-[Workflow UI] --CRUD--> /api/workflows  --JSON DSL-->  app.workflows 表
-       |                      |
-       | POST .../runs        v
-       +--------SSE----> compile_workflow() -> agno.workflow.Workflow
-                                  |
-                                  | arun(stream=True, stream_events=True)
-                                  v
-                         workflow.* / step.* SSE
-                                  |
-                    Trace(session_id, workflow_id) + audit workflow.run
+工作台把 **可持久化 DSL → 编译 → 流式运行 → Trace / 审计** 串成闭环：
+
+```mermaid
+flowchart LR
+    UI["Workflow Studio"]
+    API["/api/workflows"]
+    DB[("app.workflows<br/>JSON DSL")]
+    Compile["compile_workflow()"]
+    Agno["agno.workflow.Workflow"]
+    SSE["workflow.* / step.* SSE"]
+    Trace["Trace + audit<br/>workflow.run"]
+
+    UI -->|"CRUD"| API
+    API --> DB
+    UI -->|"POST .../runs"| Compile
+    DB --> Compile
+    Compile --> Agno
+    Agno -->|"arun stream_events"| SSE
+    SSE --> UI
+    Agno --> Trace
 ```
 
 ## PR1 契约（当前实现）

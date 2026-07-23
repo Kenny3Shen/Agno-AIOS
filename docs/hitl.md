@@ -147,9 +147,15 @@ Rejected by administrator: <管理员填写的理由>
 
 **Run / 工具状态（概念）**
 
-```text
-RUNNING ──hitl tool──► PAUSED ──resolve──► RUNNING ──acontinue_run──► COMPLETED
-                                      └──continuation error──► ERROR ──manual retry──► RUNNING
+```mermaid
+stateDiagram-v2
+    [*] --> RUNNING: arun()
+    RUNNING --> PAUSED: hitl tool / approval pending
+    PAUSED --> RUNNING: resolve approved|rejected
+    RUNNING --> COMPLETED: acontinue_run 成功
+    RUNNING --> ERROR: continuation error
+    ERROR --> RUNNING: manual resume/retry
+    COMPLETED --> [*]
 ```
 
 ## 7. 前端体验

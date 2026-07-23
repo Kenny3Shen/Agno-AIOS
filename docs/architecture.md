@@ -4,9 +4,13 @@ React 工作台通过 JWT 调用 FastAPI；后端按模型、MCP、Skills、Know
 
 ## 架构图
 
+产品级分层总览（PNG/SVG 便于对外演示）：
+
 ![T.A.I.S 系统架构](./assets/tais-architecture.png)
 
 源文件：[tais-architecture.svg](./assets/tais-architecture.svg)
+
+同内容的 **可编辑 Mermaid 版**见下方「运行时与数据流」流程图（与 README 栈描述一致，便于 PR  diff 与在线渲染）。
 
 ## 运行时与数据流
 

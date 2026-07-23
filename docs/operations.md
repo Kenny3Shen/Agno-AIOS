@@ -1,5 +1,38 @@
 # 配置与运维
 
+## 运行拓扑（概览）
+
+控制面配置落在 PostgreSQL；API 与 Job Worker 共用库与（可选）共享卷；前端经 JWT 访问业务路由。
+
+```mermaid
+flowchart TB
+    subgraph Clients["客户端"]
+        FE["React 工作台<br/>frontend/dist"]
+        Ops["运维 CLI / 脚本"]
+    end
+
+    subgraph Process["应用进程"]
+        API["FastAPI API<br/>/api · /mcp"]
+        Worker["job-worker<br/>Knowledge · HITL · cron · Memory prune"]
+    end
+
+    PG[("PostgreSQL<br/>Alembic 控制面 + Agno 引擎库")]
+    PV[("共享卷 / 对象存储<br/>Knowledge 上传文件")]
+    Models["模型供应商<br/>DeepSeek · OpenAI · xAI · compatible"]
+
+    FE -->|"JWT + SSE"| API
+    Ops --> API
+    Ops --> Worker
+    API --> PG
+    Worker --> PG
+    API --> PV
+    Worker --> PV
+    API --> Models
+    Worker --> Models
+    API -.->|"启动前 alembic revision 校验"| PG
+    Worker -.->|"启动前 alembic revision 校验"| PG
+```
+
 - 版本号以 `pyproject.toml` 的 `[project].version` 为唯一来源；API `app_version` / OpenAPI `version` 默认从已安装包元数据读取，可用 `APP_VERSION` 覆盖。发版时同步 `frontend/package.json` 的 `version`。
 - 前端 i18n：侧栏语言按钮切换 `zh-CN`/`en-US`（`localStorage.locale`），页面/通知中心/Knowledge 入库文案走 feature 命名空间；日期与相对时间跟随当前语言。
 - 环境变量：应用配置使用 `TAIS_*` / 领域名（`POSTGRES_*`、`AUTH_*`、`MCP_*`）；`AGNO_*` 仅用于引擎耦合（如 `AGNO_DB_SCHEMA`）。

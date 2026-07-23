@@ -1,3 +1,10 @@
+## 已完成：技术文档 Mermaid 图例
+
+- 为 `docs/` 核心技术页补充可 diff 的 Mermaid 图：架构运行时 flowchart（既有）、Agents Catalog、HITL Run 状态机、Workflow E2E、运维拓扑、安全授权边界、Safety Eval 被测链路 / L1–L3 / 单 case 判定、开发门禁流水线。
+- `docs/README.md` 索引表增加「图例」列；根 README 指向文档内 Mermaid。
+- 产品级 PNG/SVG 架构图仍保留于 `docs/assets/`（演示用）。
+
+
 ## 已完成：T.A.I.S 项目介绍 PPT
 
 - `docs/T.A.I.S-项目介绍.pptx`（10 页）：定位、架构、Agents、Workflow/HITL、情报、治理、技术栈。

@@ -1,5 +1,28 @@
 # 开发与验证
 
+## 门禁流水线
+
+```mermaid
+flowchart LR
+    subgraph Frontend["前端 frontend/"]
+        FE1["bun run lint"]
+        FE2["bun run typecheck"]
+        FE3["bun run test"]
+        FE4["bun run test:e2e"]
+        FE5["bun run build"]
+        FE1 --> FE2 --> FE3
+        FE3 --> FE4
+        FE3 --> FE5
+    end
+
+    subgraph Backend["后端 api/"]
+        BE1["uv run ruff check ."]
+        BE2["uv run ty check ."]
+        BE3["uv run pytest api/tests"]
+        BE1 --> BE2 --> BE3
+    end
+```
+
 前端关键路径浏览器 smoke：
 
 ```bash
