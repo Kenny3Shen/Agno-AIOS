@@ -10,13 +10,8 @@ import { VisibilitySelect } from '@/shared/ui/VisibilitySelect'
 import { MetadataDescriptions } from '@/shared/ui/MetadataDescriptions'
 import { useTranslation } from 'react-i18next'
 import { currentUserQuery } from '@/features/auth'
-import { hasScope, roleOf } from '@/shared/auth/permissions'
-import {
-  listCapabilities,
-  setCapabilityPreference,
-  type CapabilityItem,
-  type CapabilityPreference,
-} from '@/features/capabilities'
+import { hasScope } from '@/shared/auth/permissions'
+import { listCapabilities, setCapabilityPreference, type CapabilityItem, type CapabilityPreference } from '@/features/capabilities'
 
 const skillCapabilityKey = (skill: Skill) => skill.capability_key || skill.name
 
@@ -27,8 +22,8 @@ export function SkillsPage() {
   const query = useQuery({ queryKey: ['skills'], queryFn: listSkills })
   const capabilitiesQuery = useQuery({ queryKey: ['capabilities'], queryFn: listCapabilities })
   const currentUser = useQuery(currentUserQuery())
-  const isAdmin = roleOf(currentUser.data) === 'admin'
   const canSubmit = hasScope(currentUser.data, 'skill:submit')
+  const canManageSkills = hasScope(currentUser.data, 'skill:write')
   const [selectedName, setSelectedName] = useState<string | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
   const detailQuery = useQuery({
@@ -83,13 +78,10 @@ export function SkillsPage() {
     onError: (error) => message.error(error instanceof Error ? error.message : t('statusFailed')),
   })
   const updatePreference = useMutation({
-    mutationFn: ({ item, state }: { item: CapabilityItem; state: CapabilityPreference }) =>
-      setCapabilityPreference(item, state),
+    mutationFn: ({ item, state }: { item: CapabilityItem; state: CapabilityPreference }) => setCapabilityPreference(item, state),
     onSuccess: (updated) => {
       client.setQueryData<CapabilityItem[]>(['capabilities'], (current) =>
-        (current ?? []).map((item) =>
-          item.kind === updated.kind && item.capability_key === updated.capability_key ? updated : item,
-        ),
+        (current ?? []).map((item) => (item.kind === updated.kind && item.capability_key === updated.capability_key ? updated : item))
       )
       message.success(t('forMeUpdated'))
     },
@@ -147,7 +139,7 @@ export function SkillsPage() {
               dataIndex: 'visibility',
               width: 150,
               render: (value, row) =>
-                row.can_manage ? (
+                canManageSkills && row.can_manage ? (
                   <VisibilitySelect
                     value={value}
                     onClick={(event) => event.stopPropagation()}
@@ -157,7 +149,7 @@ export function SkillsPage() {
                   <Tag>{value === 'public' ? t('common:public') : t('common:private')}</Tag>
                 ),
             },
-            ...(isAdmin
+            ...(canManageSkills
               ? [
                   {
                     title: t('colEnabled'),
@@ -186,9 +178,7 @@ export function SkillsPage() {
               width: 110,
               render: (_: unknown, row: Skill) => {
                 const capability = capabilityByKey.get(skillCapabilityKey(row)) ?? capabilityByKey.get(row.name)
-                const pending =
-                  updatePreference.isPending &&
-                  updatePreference.variables?.item.capability_key === capability?.capability_key
+                const pending = updatePreference.isPending && updatePreference.variables?.item.capability_key === capability?.capability_key
                 const platformReady = Boolean(capability?.platform_enabled ?? row.enabled)
                 return (
                   <Switch
@@ -266,45 +256,45 @@ export function SkillsPage() {
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('common:loading')} />
                 ) : referencesQuery.data?.data.length ? (
                   <>
-                  {referencesQuery.data.truncated ? (
-                    <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
-                      {t('referencesTruncated')}
-                    </Typography.Text>
-                  ) : null}
-                  <Table
-                    size="small"
-                    rowKey="workflow_id"
-                    pagination={false}
-                    dataSource={referencesQuery.data.data}
-                    columns={[
-                      {
-                        title: t('referencedWorkflow'),
-                        dataIndex: 'name',
-                        ellipsis: true,
-                      },
-                      {
-                        title: t('version'),
-                        dataIndex: 'version',
-                        width: 88,
-                        render: (value: string) => (value ? `v${value}` : '—'),
-                      },
-                      {
-                        title: t('common:actions'),
-                        key: 'open',
-                        width: 100,
-                        render: (_, row) => (
-                          <Button
-                            type="link"
-                            size="small"
-                            style={{ paddingInline: 0 }}
-                            href={`#/workflow?workflow_id=${encodeURIComponent(row.workflow_id)}`}
-                          >
-                            {t('openWorkflow')}
-                          </Button>
-                        ),
-                      },
-                    ]}
-                  />
+                    {referencesQuery.data.truncated ? (
+                      <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+                        {t('referencesTruncated')}
+                      </Typography.Text>
+                    ) : null}
+                    <Table
+                      size="small"
+                      rowKey="workflow_id"
+                      pagination={false}
+                      dataSource={referencesQuery.data.data}
+                      columns={[
+                        {
+                          title: t('referencedWorkflow'),
+                          dataIndex: 'name',
+                          ellipsis: true,
+                        },
+                        {
+                          title: t('version'),
+                          dataIndex: 'version',
+                          width: 88,
+                          render: (value: string) => (value ? `v${value}` : '—'),
+                        },
+                        {
+                          title: t('common:actions'),
+                          key: 'open',
+                          width: 100,
+                          render: (_, row) => (
+                            <Button
+                              type="link"
+                              size="small"
+                              style={{ paddingInline: 0 }}
+                              href={`#/workflow?workflow_id=${encodeURIComponent(row.workflow_id)}`}
+                            >
+                              {t('openWorkflow')}
+                            </Button>
+                          ),
+                        },
+                      ]}
+                    />
                   </>
                 ) : (
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('referencesEmpty')} />

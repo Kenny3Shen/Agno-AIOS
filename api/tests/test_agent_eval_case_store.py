@@ -1118,7 +1118,7 @@ async def test_suite_run_execution_snapshot_is_private_and_case_definitions_live
         },
         run_manifest={
             "version": store.SUITE_RUN_EXECUTION_MANIFEST_VERSION,
-            "actor": {"id": "operator-1", "role": "author", "is_superuser": False},
+            "actor": {"id": "operator-1", "role": "user", "is_superuser": False},
             "selected_tag": None,
             "selected_name": None,
             "case_count": 2,
@@ -1175,7 +1175,7 @@ def test_suite_execution_manifest_freezes_worker_actor_and_selection() -> None:
         },
         run_manifest={
             "version": store.SUITE_RUN_EXECUTION_MANIFEST_VERSION,
-            "actor": {"id": "operator-1", "role": "author", "is_superuser": False},
+            "actor": {"id": "operator-1", "role": "user", "is_superuser": False},
             "selected_tag": "smoke",
             "selected_name": None,
             "case_count": 1,
@@ -1195,7 +1195,7 @@ def test_suite_execution_manifest_freezes_worker_actor_and_selection() -> None:
         "version": 1,
         "definition_source": "suite_case_work_item",
         "target": {"kind": "agent", "id": "security-operations"},
-        "actor": {"role": "author", "is_superuser": False},
+        "actor": {"role": "user", "is_superuser": False},
         "default_timeout_seconds": 75,
         "timeout_seconds": 75,
         "eval_profile": "full",
@@ -1233,18 +1233,6 @@ def test_suite_execution_manifest_freezes_worker_actor_and_selection() -> None:
         (
             {
                 "version": store.SUITE_RUN_EXECUTION_MANIFEST_VERSION,
-                "actor": {"id": "operator-1", "role": "root", "is_superuser": False},
-                "selected_tag": None,
-                "selected_name": None,
-                "case_count": 1,
-                "default_timeout": 0,
-                "judge_model_config_id": "",
-            },
-            "actor.role is unsupported",
-        ),
-        (
-            {
-                "version": store.SUITE_RUN_EXECUTION_MANIFEST_VERSION,
                 "actor": {"id": "operator-1", "role": "user", "is_superuser": False},
                 "selected_tag": None,
                 "selected_name": None,
@@ -1264,6 +1252,47 @@ def test_suite_execution_manifest_rejects_invalid_worker_contracts(
         store.normalize_suite_run_execution_manifest(manifest)
 
 
+def test_suite_execution_manifest_normalizes_retired_actor_role():
+    manifest = {
+        "version": store.SUITE_RUN_EXECUTION_MANIFEST_VERSION,
+        "actor": {"id": "operator-1", "role": "author", "is_superuser": False},
+        "selected_tag": None,
+        "selected_name": None,
+        "case_count": 1,
+        "default_timeout": 120,
+        "judge_model_config_id": "",
+    }
+
+    normalized = store.normalize_suite_run_execution_manifest(manifest)
+
+    assert normalized["actor"]["role"] == "user"
+
+
+def test_case_run_execution_provenance_canonicalizes_actor_snapshot():
+    normalized = store.normalize_case_run_execution_provenance(
+        {"actor": {"role": "author", "is_superuser": True}}
+    )
+
+    assert normalized["actor"] == {"role": "admin", "is_superuser": True}
+
+
+def test_suite_execution_manifest_canonicalizes_superuser_actor_role():
+    manifest = {
+        "version": store.SUITE_RUN_EXECUTION_MANIFEST_VERSION,
+        "actor": {"id": "operator-1", "role": "user", "is_superuser": True},
+        "selected_tag": None,
+        "selected_name": None,
+        "case_count": 1,
+        "default_timeout": 120,
+        "judge_model_config_id": "",
+    }
+
+    normalized = store.normalize_suite_run_execution_manifest(manifest)
+
+    assert normalized["actor"]["role"] == "admin"
+    assert normalized["actor"]["is_superuser"] is True
+
+
 def test_suite_execution_snapshot_v2_rejects_invalid_or_embedded_case_contracts():
     snapshot = store.build_suite_run_execution_snapshot(
         {
@@ -1273,7 +1302,7 @@ def test_suite_execution_snapshot_v2_rejects_invalid_or_embedded_case_contracts(
         },
         run_manifest={
             "version": store.SUITE_RUN_EXECUTION_MANIFEST_VERSION,
-            "actor": {"id": "operator-1", "role": "author", "is_superuser": False},
+            "actor": {"id": "operator-1", "role": "user", "is_superuser": False},
             "selected_tag": None,
             "selected_name": None,
             "case_count": 1,

@@ -16,6 +16,7 @@ from api.services.approvals_service import (
     get_pending_approval_count,
     list_approvals_native,
 )
+from api.tests.route_fakes import route_dependency
 
 
 def actor(user_id: str = "admin-1", role: str = "admin"):
@@ -114,6 +115,22 @@ async def test_resolve_route_maps_missing_and_conflict_to_http_errors():
     current_actor = actor("admin-1")
 
     with patch.object(
+        approvals, "get_approval_record", new=AsyncMock(return_value=None)
+    ):
+        with pytest.raises(HTTPException) as missing:
+            await approvals.resolve_approval(
+                "missing",
+                approvals.ApprovalResolveRequest(status="approved"),
+                request=request(),
+                user=current_actor,
+            )
+    assert missing.value.status_code == 404
+
+    with patch.object(
+        approvals,
+        "get_approval_record",
+        new=AsyncMock(return_value={"id": "approval-1", "user_id": "user-1"}),
+    ), patch.object(
         approvals, "resolve_approval_record", new=AsyncMock(return_value=None)
     ):
         with pytest.raises(HTTPException) as missing:
@@ -126,6 +143,10 @@ async def test_resolve_route_maps_missing_and_conflict_to_http_errors():
     assert missing.value.status_code == 404
 
     with patch.object(
+        approvals,
+        "get_approval_record",
+        new=AsyncMock(return_value={"id": "approval-1", "user_id": "user-1"}),
+    ), patch.object(
         approvals,
         "resolve_approval_record",
         new=AsyncMock(side_effect=ApprovalResolveConflictError("not pending")),
@@ -160,6 +181,11 @@ async def test_resolve_hitl_schedules_security_resume():
         "user_id": "user-1",
     }
     with (
+        patch.object(
+            approvals,
+            "get_approval_record",
+            new=AsyncMock(return_value=resolved),
+        ),
         patch.object(
             approvals,
             "resolve_approval_record",
@@ -235,6 +261,89 @@ async def test_retry_only_accepts_failed_security_chat_runs():
                 user=current_actor,
             )
     assert exc.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_normal_user_cannot_resolve_or_retry_another_users_approval():
+    current_actor = actor("user-1", role="user")
+    other_users_approval = {
+        "id": "approval-2",
+        "status": "pending",
+        "user_id": "user-2",
+    }
+
+    with patch.object(
+        approvals,
+        "get_approval_record",
+        new=AsyncMock(return_value=other_users_approval),
+    ), patch.object(approvals, "resolve_approval_record", new=AsyncMock()) as resolve:
+        with pytest.raises(HTTPException) as resolve_exc:
+            await approvals.resolve_approval(
+                "approval-2",
+                approvals.ApprovalResolveRequest(status="approved"),
+                request=request(),
+                user=current_actor,
+            )
+    assert resolve_exc.value.status_code == 404
+    resolve.assert_not_awaited()
+
+    with patch.object(
+        approvals,
+        "get_approval_record",
+        new=AsyncMock(return_value=other_users_approval),
+    ), patch.object(approvals, "resume_security_run", new=AsyncMock()) as resume:
+        with pytest.raises(HTTPException) as retry_exc:
+            await approvals.retry_approval_resume(
+                "approval-2", request=request(), user=current_actor
+            )
+    assert retry_exc.value.status_code == 404
+    resume.assert_not_awaited()
+
+
+def test_submission_resolution_is_admin_only():
+    dependency = route_dependency(
+        approvals.router, "resolve_submission_approval_request"
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        dependency(user=actor("user-1", role="user"))
+
+    assert exc.value.status_code == 403
+    assert dependency(user=actor()) is not None
+
+
+@pytest.mark.asyncio
+async def test_normal_user_can_resolve_own_hitl_approval():
+    current_actor = actor("user-1", role="user")
+    own_approval = {
+        "id": "approval-1",
+        "status": "pending",
+        "user_id": "user-1",
+    }
+    resolved_approval = {**own_approval, "status": "approved"}
+
+    with (
+        patch.object(
+            approvals,
+            "get_approval_record",
+            new=AsyncMock(side_effect=[own_approval, resolved_approval]),
+        ),
+        patch.object(
+            approvals,
+            "resolve_approval_record",
+            new=AsyncMock(return_value=resolved_approval),
+        ) as resolve,
+        patch.object(approvals, "record_policy_event", new=AsyncMock()),
+    ):
+        result = await approvals.resolve_approval(
+            "approval-1",
+            approvals.ApprovalResolveRequest(status="approved"),
+            request=request(),
+            user=current_actor,
+        )
+
+    assert result == resolved_approval
+    resolve.assert_awaited_once()
 
 
 @pytest.mark.asyncio

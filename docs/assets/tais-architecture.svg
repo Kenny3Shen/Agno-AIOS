@@ -86,7 +86,7 @@
     <path d="M137 414a15 15 0 1 1 0 30a15 15 0 0 1 0-30m-27 63c3-19 17-28 27-28s24 9 27 28" fill="none" stroke="#a5f3fc" stroke-width="5" stroke-linecap="round"/>
     <text x="137" y="530" text-anchor="middle" class="cardTitle" fill="#f0fdff">安全运营人员</text>
     <text x="137" y="555" text-anchor="middle" class="cardText" fill="#b9dbec">分析 · 编排 · 审批</text>
-    <text x="137" y="578" text-anchor="middle" class="cardText" fill="#7fb2cb">角色预设 · Scopes</text>
+    <text x="137" y="578" text-anchor="middle" class="cardText" fill="#7fb2cb">管理员 / 用户 · Scopes</text>
     <rect x="89" y="600" width="96" height="30" rx="15" fill="#114365"/>
     <text x="137" y="620" text-anchor="middle" class="small" fill="#8deaf7">浏览器访问</text>
   </g>
@@ -154,7 +154,7 @@
     <path d="M700 461l8 8l12-17" fill="none" stroke="#dbe4ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
     <text x="742" y="456" class="cardTitle" fill="#f8fbff">认证与 RBAC</text>
     <text x="742" y="478" class="cardText" fill="#c5d0f3">FastAPI Users · JWT · role + scopes</text>
-    <text x="742" y="500" class="cardText" fill="#98ace1">admin/user/analyst/author/… · 归属校验</text>
+    <text x="742" y="500" class="cardText" fill="#98ace1">admin / user · 归属校验</text>
 
     <rect x="674" y="540" width="287" height="100" rx="16" fill="#172a55" stroke="#a5b4fc" stroke-opacity=".22"/>
     <rect x="690" y="558" width="38" height="38" rx="10" fill="#344d92"/>

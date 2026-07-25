@@ -61,7 +61,7 @@ export interface KnowledgeRagSettings {
   rerank_min_candidates: number
 }
 
-type RolePreset = { role: UserRole | string; scopes: string[] }
+type RolePreset = { role: UserRole; scopes: string[] }
 
 type AdminUserListResult = {
   data: AuthUser[]
@@ -80,15 +80,9 @@ export const SERVER_DEFAULTED_MODEL_FIELDS = [
   'http_max_retries',
 ] as const
 
-type ServerManagedModelField =
-  | (typeof SERVER_DEFAULTED_MODEL_FIELDS)[number]
-  | 'description'
-  | 'builtin'
+type ServerManagedModelField = (typeof SERVER_DEFAULTED_MODEL_FIELDS)[number] | 'description' | 'builtin'
 
-export type ModelConfigInput = Omit<
-  ModelConfig,
-  ServerManagedModelField | 'capabilities' | 'configured'
-> &
+export type ModelConfigInput = Omit<ModelConfig, ServerManagedModelField | 'capabilities' | 'configured'> &
   Partial<Pick<ModelConfig, ServerManagedModelField>>
 
 export type ModelConfigUpdatePayload = {
@@ -101,16 +95,11 @@ export type ModelConfigUpdatePayload = {
 }
 
 export const getModels = () => requestJson<ModelConfigResponse>('/models')
-export const saveModels = (payload: ModelConfigUpdatePayload) =>
-  requestJson<ModelConfigResponse>('/models', jsonInit('PUT', payload))
+export const saveModels = (payload: ModelConfigUpdatePayload) => requestJson<ModelConfigResponse>('/models', jsonInit('PUT', payload))
 export const testModel = (model: ModelConfig) =>
-  requestJson<{ success: boolean; latency_ms?: number; message: string }>(
-    '/models/test',
-    jsonInit('POST', model),
-  )
+  requestJson<{ success: boolean; latency_ms?: number; message: string }>('/models/test', jsonInit('POST', model))
 export const getChatSettings = () => requestJson<ChatSettings>('/settings/chat')
-export const saveChatSettings = (payload: Partial<ChatSettings>) =>
-  requestJson<ChatSettings>('/settings/chat', jsonInit('PATCH', payload))
+export const saveChatSettings = (payload: Partial<ChatSettings>) => requestJson<ChatSettings>('/settings/chat', jsonInit('PATCH', payload))
 
 export interface UserNotificationSettings {
   feishu_webhook_configured: boolean
@@ -118,13 +107,11 @@ export interface UserNotificationSettings {
   global_feishu_webhook_configured: boolean
 }
 
-export const getNotificationSettings = () =>
-  requestJson<UserNotificationSettings>('/settings/notifications')
+export const getNotificationSettings = () => requestJson<UserNotificationSettings>('/settings/notifications')
 export const saveNotificationSettings = (payload: { feishu_webhook_url?: string }) =>
   requestJson<UserNotificationSettings>('/settings/notifications', jsonInit('PATCH', payload))
 
-export const getKnowledgeRagSettings = () =>
-  requestJson<KnowledgeRagSettings>('/settings/knowledge')
+export const getKnowledgeRagSettings = () => requestJson<KnowledgeRagSettings>('/settings/knowledge')
 export const saveKnowledgeRagSettings = (payload: Partial<KnowledgeRagSettings>) =>
   requestJson<KnowledgeRagSettings>('/settings/knowledge', jsonInit('PATCH', payload))
 
@@ -138,8 +125,7 @@ export interface GuardrailSettings {
   prompt_injection_enabled: boolean
 }
 
-export const getGuardrailSettings = () =>
-  requestJson<GuardrailSettings>('/settings/guardrails')
+export const getGuardrailSettings = () => requestJson<GuardrailSettings>('/settings/guardrails')
 export const saveGuardrailSettings = (payload: Partial<GuardrailSettings>) =>
   requestJson<GuardrailSettings>('/settings/guardrails', jsonInit('PATCH', payload))
 
@@ -152,13 +138,9 @@ export interface CveSourceSettingsResponse {
   sources: CveSourceSetting[]
 }
 
-export const getCveSourceSettings = () =>
-  requestJson<CveSourceSettingsResponse>('/settings/cve-sources')
+export const getCveSourceSettings = () => requestJson<CveSourceSettingsResponse>('/settings/cve-sources')
 export const saveCveSourceSettings = (sources: Record<string, boolean>) =>
-  requestJson<CveSourceSettingsResponse>(
-    '/settings/cve-sources',
-    jsonInit('PATCH', { sources }),
-  )
+  requestJson<CveSourceSettingsResponse>('/settings/cve-sources', jsonInit('PATCH', { sources }))
 
 export const listRolePresets = async () => (await requestJson<{ data: RolePreset[] }>('/auth/roles')).data
 
@@ -167,5 +149,5 @@ export const listAdminUsers = async (page = 1, limit = 50): Promise<AdminUserLis
   return requestJson<AdminUserListResult>(`/auth/admin/users?${search}`)
 }
 
-export const setUserRole = (userId: string, role: string) =>
+export const setUserRole = (userId: string, role: UserRole) =>
   requestJson<AuthUser>(`/auth/admin/users/${encodeURIComponent(userId)}/role`, jsonInit('PATCH', { role }))

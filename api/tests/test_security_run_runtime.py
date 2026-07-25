@@ -39,6 +39,58 @@ class EventAgent:
         }
 
 
+def test_runtime_metadata_canonicalizes_actor_role_and_superuser_flag():
+    request = security_run_runtime.SecurityRunRequest.from_chat_args(
+        "hello",
+        session_id="s1",
+        user_id="u1",
+        actor_role="author",
+        actor_is_superuser=False,
+    )
+    superuser_request = security_run_runtime.SecurityRunRequest.from_chat_args(
+        "hello",
+        session_id="s1",
+        user_id="u1",
+        actor_role="author",
+        actor_is_superuser=True,
+    )
+
+    assert request.runtime_metadata()["actor_role"] == "user"
+    assert request.runtime_metadata()["actor_is_superuser"] is False
+    assert superuser_request.runtime_metadata()["actor_role"] == "admin"
+    assert superuser_request.runtime_metadata()["actor_is_superuser"] is True
+
+
+def test_paused_run_metadata_restores_actor_capabilities_fail_closed():
+    request = security_run_runtime.SecurityRunRequest.from_run_metadata(
+        {
+            security_run_runtime.RUNTIME_METADATA_KEY: {
+                "version": security_run_runtime.RUNTIME_METADATA_VERSION,
+                "actor_role": "author",
+                "actor_is_superuser": "false",
+            }
+        },
+        session_id="s1",
+        user_id="u1",
+    )
+    superuser_request = security_run_runtime.SecurityRunRequest.from_run_metadata(
+        {
+            security_run_runtime.RUNTIME_METADATA_KEY: {
+                "version": security_run_runtime.RUNTIME_METADATA_VERSION,
+                "actor_role": "author",
+                "actor_is_superuser": True,
+            }
+        },
+        session_id="s1",
+        user_id="u1",
+    )
+
+    assert request.actor_role == "user"
+    assert request.actor_is_superuser is False
+    assert superuser_request.actor_role == "admin"
+    assert superuser_request.actor_is_superuser is True
+
+
 @pytest.mark.asyncio
 async def test_mid_run_client_disconnect_does_not_cancel_runner():
     """Leaving the page aborts SSE mid-run; Agno must keep going (COMPLETED)."""

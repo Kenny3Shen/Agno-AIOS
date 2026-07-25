@@ -5,20 +5,13 @@ from typing import Literal, Protocol, cast
 
 from agno.os.scopes import AgentOSScope, has_required_scopes
 
-# Product roles:
-# - admin: full control (AgentOS admin scope)
-# - user: default operator (existing broad access; backward compatible)
-# - analyst: day-to-day security investigation & chat
-# - author: content / workflow / skill authoring
-# - approver: HITL approval duty desk
-# - auditor: read-only audit & compliance
-# - guest: minimal read-only visitor
-Role = Literal["admin", "user", "analyst", "author", "approver", "auditor", "guest"]
+# Product roles deliberately stay small:
+# - admin: platform-level control through the AgentOS admin scope
+# - user: normal workspace operations
+Role = Literal["admin", "user"]
 ADMIN_SCOPE = AgentOSScope.ADMIN.value
 
-KNOWN_ROLES: frozenset[str] = frozenset(
-    {"admin", "user", "analyst", "author", "approver", "auditor", "guest"}
-)
+KNOWN_ROLES: frozenset[str] = frozenset({"admin", "user"})
 
 
 class ActorLike(Protocol):
@@ -32,106 +25,37 @@ class ActorLike(Protocol):
     def is_superuser(self) -> bool: ...
 
 
-# Shared building blocks so presets stay readable and consistent.
-_READ_OPS = {
+USER_SCOPES: set[str] = {
     "sessions:read",
+    "sessions:write",
     "traces:read",
     "memories:read",
+    "memories:write",
+    "memories:delete",
     "metrics:read",
     "knowledge:read",
+    "knowledge:write",
+    "knowledge:delete",
     "cve:read",
     "ip_blacklist:read",
     "collect:read",
+    "collect:write",
     "skill:read",
     "mcp:read",
     "config:read",
+    "workflows:read",
+    "workflows:write",
+    "workflows:run",
+    "mcp:submit",
+    "skill:submit",
+    "approvals:read",
+    "approvals:write",
+    "evals:read",
 }
 
 ROLE_SCOPES: dict[Role, set[str]] = {
     "admin": {ADMIN_SCOPE},
-    # Backward-compatible full operator (non-admin).
-    "user": {
-        *_READ_OPS,
-        "sessions:write",
-        "workflows:read",
-        "workflows:write",
-        "workflows:run",
-        "memories:write",
-        "memories:delete",
-        "collect:write",
-        "knowledge:write",
-        "knowledge:delete",
-        "mcp:submit",
-        "skill:submit",
-        "approvals:read",
-        "evals:read",
-    },
-    # Security analyst: investigate, chat, run published workflows; no system config writes.
-    "analyst": {
-        *_READ_OPS,
-        "sessions:write",
-        "workflows:read",
-        "workflows:run",
-        "memories:write",
-        "memories:delete",
-        "knowledge:write",
-        "collect:write",
-        "approvals:read",
-        "evals:read",
-    },
-    # Content / automation author: build knowledge, skills, workflows; submit MCP.
-    "author": {
-        *_READ_OPS,
-        "sessions:write",
-        "workflows:read",
-        "workflows:write",
-        "workflows:run",
-        "knowledge:write",
-        "knowledge:delete",
-        "skill:submit",
-        "mcp:submit",
-        "collect:write",
-        "memories:write",
-    },
-    # Approval duty: resolve HITL + review context; no content authoring.
-    "approver": {
-        "sessions:read",
-        "sessions:write",
-        "traces:read",
-        "metrics:read",
-        "knowledge:read",
-        "memories:read",
-        "approvals:read",
-        "approvals:write",
-        "workflows:read",
-        "config:read",
-    },
-    # Compliance auditor: read audit trail, traces, evals; no mutations.
-    "auditor": {
-        "sessions:read",
-        "traces:read",
-        "metrics:read",
-        "knowledge:read",
-        "cve:read",
-        "ip_blacklist:read",
-        "collect:read",
-        "memories:read",
-        "evals:read",
-        "audit:read",
-        "approvals:read",
-        "workflows:read",
-        "config:read",
-    },
-    "guest": {
-        "sessions:read",
-        "traces:read",
-        "memories:read",
-        "metrics:read",
-        "cve:read",
-        "ip_blacklist:read",
-        "collect:read",
-        "knowledge:read",
-    },
+    "user": USER_SCOPES,
 }
 
 
@@ -146,12 +70,10 @@ def actor_id(user: ActorLike) -> str:
 
 
 def actor_role(user: ActorLike) -> Role:
-    if bool(getattr(user, "is_superuser", False)):
-        return "admin"
-    role = str(getattr(user, "role", "user") or "user").lower()
-    if role in KNOWN_ROLES:
-        return cast(Role, role)
-    return "user"
+    return normalize_actor_role(
+        getattr(user, "role", "user"),
+        is_superuser=bool(getattr(user, "is_superuser", False)),
+    )
 
 
 def actor_scopes(user: ActorLike) -> list[str]:
@@ -199,3 +121,8 @@ def normalize_role(value: object, *, default: Role = "user") -> Role:
     if role in KNOWN_ROLES:
         return cast(Role, role)
     return default
+
+
+def normalize_actor_role(value: object, *, is_superuser: bool = False) -> Role:
+    """Canonicalize a persisted actor role while preserving superuser authority."""
+    return "admin" if is_superuser else normalize_role(value)

@@ -139,11 +139,11 @@ const suiteRunProgress = (run: SuiteRun): { completed: number; total: number } =
   const completed = Math.max(
     0,
     run.summary.completed_cases ??
-      ((run.summary.passed ?? 0) +
+      (run.summary.passed ?? 0) +
         (run.summary.failed ?? 0) +
         (run.summary.errored ?? 0) +
         (run.summary.skipped ?? 0) +
-        (run.summary.cancelled ?? 0))
+        (run.summary.cancelled ?? 0)
   )
   return { completed, total }
 }
@@ -602,13 +602,10 @@ export function EvaluationsPage() {
     queryKey: ['evals', 'suite-runs', suite, suiteRunsPage, suiteRunsPageSize],
     queryFn: () => listSuiteRuns(suite, { page: suiteRunsPage, limit: suiteRunsPageSize }),
     enabled: Boolean(suite),
-    refetchInterval: (query) =>
-      (query.state.data?.data ?? []).some((run) => isActiveSuiteRun(run.status)) ? 2_000 : false,
+    refetchInterval: (query) => ((query.state.data?.data ?? []).some((run) => isActiveSuiteRun(run.status)) ? 2_000 : false),
     refetchIntervalInBackground: true,
   })
-  const drillSuiteRunIsActive = (suiteRuns.data?.data ?? []).some(
-    (run) => run.id === drillSuiteRunId && isActiveSuiteRun(run.status)
-  )
+  const drillSuiteRunIsActive = (suiteRuns.data?.data ?? []).some((run) => run.id === drillSuiteRunId && isActiveSuiteRun(run.status))
   const failures = useQuery({
     queryKey: ['evals', 'failures'],
     queryFn: () => listFailures({ limit: 50 }),
@@ -846,15 +843,12 @@ export function EvaluationsPage() {
     setSavingSuite(true)
     try {
       const saved = editingSuite
-        ? await updateSuite(
-            editingSuite.id,
-            {
-              name: value.name,
-              description: value.description,
-              enabled: value.enabled,
-              tags: value.tags,
-            } satisfies EvalSuiteUpdate
-          )
+        ? await updateSuite(editingSuite.id, {
+            name: value.name,
+            description: value.description,
+            enabled: value.enabled,
+            tags: value.tags,
+          } satisfies EvalSuiteUpdate)
         : await createSuite(value)
       message.success(t(isEdit ? 'suiteSaved' : 'suiteCreated'))
       setSuite(saved.id)
@@ -900,7 +894,7 @@ export function EvaluationsPage() {
   }
 
   const handleRunSuite = async () => {
-    if (!suite) return
+    if (!canWriteEvals || !suite) return
     setRunningSuite(true)
     try {
       await runSuite(suite, {
@@ -1027,49 +1021,53 @@ export function EvaluationsPage() {
               }}
               style={{ width: 300 }}
             />
-            <Input
-              allowClear
-              value={selectedCaseTag ?? ''}
-              aria-label={t('runAllCaseTags')}
-              onChange={(event) => {
-                const value = event.target.value.trim()
-                setSelectedCaseTag(value || undefined)
-                if (value) setSelectedCaseName(undefined)
-              }}
-              placeholder={t('runAllCaseTags')}
-              disabled={!suite || runningSuite || hasActiveSuiteRun || removingPackId != null || removingSuiteId != null}
-              style={{ width: 210 }}
-            />
-            <Input
-              allowClear
-              value={selectedCaseName ?? ''}
-              aria-label={t('runOneCase')}
-              onChange={(event) => {
-                const value = event.target.value.trim()
-                setSelectedCaseName(value || undefined)
-                if (value) setSelectedCaseTag(undefined)
-              }}
-              placeholder={t('runOneCase')}
-              disabled={!suite || runningSuite || hasActiveSuiteRun || removingPackId != null || removingSuiteId != null}
-              style={{ width: 280 }}
-            />
-            <Tooltip title={t('tipDefaultTimeout')}>
-              <Space.Compact>
-                <Space.Addon>{t('defaultTimeout')}</Space.Addon>
-                <InputNumber
-                  min={1}
-                  max={3600}
-                  precision={0}
-                  value={defaultTimeout}
-                  disabled={!suite || runningSuite || removingPackId != null}
-                  onChange={(value) => {
-                    setDefaultTimeout(typeof value === 'number' && Number.isInteger(value) ? Math.min(3600, Math.max(1, value)) : 120)
+            {canWriteEvals ? (
+              <>
+                <Input
+                  allowClear
+                  value={selectedCaseTag ?? ''}
+                  aria-label={t('runAllCaseTags')}
+                  onChange={(event) => {
+                    const value = event.target.value.trim()
+                    setSelectedCaseTag(value || undefined)
+                    if (value) setSelectedCaseName(undefined)
                   }}
-                  style={{ width: 72 }}
+                  placeholder={t('runAllCaseTags')}
+                  disabled={!suite || runningSuite || hasActiveSuiteRun || removingPackId != null || removingSuiteId != null}
+                  style={{ width: 210 }}
                 />
-                <Space.Addon>{t('secondsAbbr')}</Space.Addon>
-              </Space.Compact>
-            </Tooltip>
+                <Input
+                  allowClear
+                  value={selectedCaseName ?? ''}
+                  aria-label={t('runOneCase')}
+                  onChange={(event) => {
+                    const value = event.target.value.trim()
+                    setSelectedCaseName(value || undefined)
+                    if (value) setSelectedCaseTag(undefined)
+                  }}
+                  placeholder={t('runOneCase')}
+                  disabled={!suite || runningSuite || hasActiveSuiteRun || removingPackId != null || removingSuiteId != null}
+                  style={{ width: 280 }}
+                />
+                <Tooltip title={t('tipDefaultTimeout')}>
+                  <Space.Compact>
+                    <Space.Addon>{t('defaultTimeout')}</Space.Addon>
+                    <InputNumber
+                      min={1}
+                      max={3600}
+                      precision={0}
+                      value={defaultTimeout}
+                      disabled={!suite || runningSuite || removingPackId != null}
+                      onChange={(value) => {
+                        setDefaultTimeout(typeof value === 'number' && Number.isInteger(value) ? Math.min(3600, Math.max(1, value)) : 120)
+                      }}
+                      style={{ width: 72 }}
+                    />
+                    <Space.Addon>{t('secondsAbbr')}</Space.Addon>
+                  </Space.Compact>
+                </Tooltip>
+              </>
+            ) : null}
             {canWriteEvals ? (
               <Button
                 icon={<PlusOutlined />}
@@ -1088,10 +1086,7 @@ export function EvaluationsPage() {
                   items: importablePacks.length
                     ? importablePacks.map((pack) => ({
                         key: `${pack.id}@${pack.pack_version ?? ''}`,
-                        label: [
-                          pack.layer ? `${pack.title} (${pack.layer})` : pack.title,
-                          pack.pack_version ? `@${pack.pack_version}` : '',
-                        ]
+                        label: [pack.layer ? `${pack.title} (${pack.layer})` : pack.title, pack.pack_version ? `@${pack.pack_version}` : '']
                           .filter(Boolean)
                           .join(' '),
                         disabled: importingPackId != null || removingPackId != null || removingSuiteId != null || runningSuite,
@@ -1160,15 +1155,17 @@ export function EvaluationsPage() {
                 </Button>
               </Popconfirm>
             ) : null}
-            <Button
-              type="primary"
-              icon={<PlayCircleOutlined />}
-              disabled={!suite || runningSuite || hasActiveSuiteRun || removingPackId != null || removingSuiteId != null}
-              loading={runningSuite}
-              onClick={() => void handleRunSuite()}
-            >
-              {t('runSuite')}
-            </Button>
+            {canWriteEvals ? (
+              <Button
+                type="primary"
+                icon={<PlayCircleOutlined />}
+                disabled={!suite || runningSuite || hasActiveSuiteRun || removingPackId != null || removingSuiteId != null}
+                loading={runningSuite}
+                onClick={() => void handleRunSuite()}
+              >
+                {t('runSuite')}
+              </Button>
+            ) : null}
           </>
         }
       />
@@ -1347,21 +1344,23 @@ export function EvaluationsPage() {
                                 {t('common:edit')}
                               </Button>
                             ) : null}
-                            <Button
-                              icon={<PlayCircleOutlined />}
-                              disabled={runningSuite || removingPackId != null || removingSuiteId != null || removingCaseId != null}
-                              onClick={async () => {
-                                try {
-                                  await runCase(row.id)
-                                  message.success(t('evalSubmitted'))
-                                  await refreshAfterRun()
-                                } catch (error) {
-                                  message.error(error instanceof Error ? error.message : t('evalFailed'))
-                                }
-                              }}
-                            >
-                              {t('runCase')}
-                            </Button>
+                            {canWriteEvals ? (
+                              <Button
+                                icon={<PlayCircleOutlined />}
+                                disabled={runningSuite || removingPackId != null || removingSuiteId != null || removingCaseId != null}
+                                onClick={async () => {
+                                  try {
+                                    await runCase(row.id)
+                                    message.success(t('evalSubmitted'))
+                                    await refreshAfterRun()
+                                  } catch (error) {
+                                    message.error(error instanceof Error ? error.message : t('evalFailed'))
+                                  }
+                                }}
+                              >
+                                {t('runCase')}
+                              </Button>
+                            ) : null}
                             {canDeleteEvals && !selectedPack ? (
                               <Popconfirm
                                 title={t('deleteCaseConfirmTitle', { case: row.name })}
@@ -1671,9 +1670,7 @@ export function EvaluationsPage() {
                                   percent={percent}
                                   status="active"
                                   size="small"
-                                  format={() =>
-                                    total ? t('suiteRunProgress', { completed, total }) : t('suiteRunProgressPending')
-                                  }
+                                  format={() => (total ? t('suiteRunProgress', { completed, total }) : t('suiteRunProgressPending'))}
                                 />
                               </div>
                             </Tooltip>
@@ -1914,15 +1911,19 @@ export function EvaluationsPage() {
                   rows={failures.data ?? []}
                   loading={failures.isLoading}
                   pagination={false}
-                  onReplay={async (id) => {
-                    try {
-                      await replay(id)
-                      message.success(t('replaySubmitted'))
-                      await refreshAfterRun()
-                    } catch (error) {
-                      message.error(error instanceof Error ? error.message : t('replayFailed'))
-                    }
-                  }}
+                  onReplay={
+                    canWriteEvals
+                      ? async (id) => {
+                          try {
+                            await replay(id)
+                            message.success(t('replaySubmitted'))
+                            await refreshAfterRun()
+                          } catch (error) {
+                            message.error(error instanceof Error ? error.message : t('replayFailed'))
+                          }
+                        }
+                      : undefined
+                  }
                 />
               ),
             },

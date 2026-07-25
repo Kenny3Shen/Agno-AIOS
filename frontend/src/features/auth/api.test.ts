@@ -47,6 +47,6 @@ describe('authentication behavior', () => {
   it('grants all scopes to administrators and explicit scopes to users', () => {
     expect(hasScope({ id: 'a', email: 'a@x', is_active: true, role: 'admin' }, 'config:write')).toBe(true)
     expect(hasScope({ id: 'u', email: 'u@x', is_active: true, role: 'user', scopes: ['sessions:write'] }, 'sessions:write')).toBe(true)
-    expect(roleOf(null)).toBe('guest')
+    expect(roleOf(null)).toBe('user')
   })
 })

@@ -2,16 +2,15 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import jwt
-import pytest
 from agno.os.middleware.jwt import JWTMiddleware
+from fastapi import HTTPException
+from pydantic import ValidationError
+import pytest
 
+from api.auth import router as auth_router
 from api.auth import claims
-from api.auth.claims import (
-    actor_role,
-    has_scope,
-    scope_claims,
-    scope_user_id,
-)
+from api.auth.claims import actor_role, has_scope, scope_claims, scope_user_id
+from api.tests.route_fakes import route_dependency
 
 ADMIN_SCOPE = "agent_os:admin"
 
@@ -21,7 +20,7 @@ def user(role: str = "user", is_superuser: bool = False):
 
 
 def test_superuser_is_admin():
-    actor = user("guest", is_superuser=True)
+    actor = user("user", is_superuser=True)
 
     assert actor_role(actor) == "admin"
     assert has_scope(actor, ADMIN_SCOPE)
@@ -29,14 +28,14 @@ def test_superuser_is_admin():
 
 
 def test_admin_claims_use_agentos_admin_scope():
-    claims = scope_claims(user("guest", is_superuser=True))
+    actor_claims = scope_claims(user("admin"))
 
-    assert claims.role == "admin"
-    assert claims.scopes == [ADMIN_SCOPE]
+    assert actor_claims.role == "admin"
+    assert actor_claims.scopes == [ADMIN_SCOPE]
 
 
-def test_user_scopes_use_agentos_resource_names():
-    actor = user("user")
+def test_user_scopes_cover_normal_workspace_operations():
+    actor = user()
 
     for scope in (
         "sessions:read",
@@ -49,89 +48,126 @@ def test_user_scopes_use_agentos_resource_names():
         "memories:write",
         "memories:delete",
         "metrics:read",
+        "collect:read",
         "collect:write",
         "cve:read",
         "knowledge:read",
         "knowledge:write",
+        "knowledge:delete",
         "mcp:read",
         "mcp:submit",
         "skill:read",
         "skill:submit",
         "approvals:read",
+        "approvals:write",
         "config:read",
         "evals:read",
     ):
         assert has_scope(actor, scope), scope
 
     for scope in (
-        "session:read:own",
-        "trace:read:own",
-        "memory:write:own",
-        "agent_eval:read",
-        "settings:read",
         "config:write",
         "mcp:write",
         "skill:write",
+        "evals:write",
+        "evals:delete",
+        "audit:read",
         ADMIN_SCOPE,
     ):
         assert not has_scope(actor, scope), scope
 
 
-def test_guest_scopes_are_read_only():
-    actor = user("guest")
-
-    assert has_scope(actor, "sessions:read")
-    assert has_scope(actor, "traces:read")
-    assert has_scope(actor, "memories:read")
-    assert has_scope(actor, "metrics:read")
-    assert has_scope(actor, "cve:read")
-    assert has_scope(actor, "knowledge:read")
-    assert not has_scope(actor, "sessions:write")
-    assert not has_scope(actor, "workflows:write")
-    assert not has_scope(actor, "workflows:run")
-    assert not has_scope(actor, "memories:write")
-    assert not has_scope(actor, "knowledge:write")
-    assert not has_scope(actor, "evals:read")
-
-
-def test_evals_permissions_are_role_scoped():
-    admin = user("admin")
-    normal_user = user("user")
-    guest = user("guest")
-
-    assert has_scope(admin, "evals:read")
-    assert has_scope(admin, "evals:write")
-    assert has_scope(admin, "evals:delete")
-    assert has_scope(normal_user, "evals:read")
-    assert not has_scope(normal_user, "evals:write")
-    assert not has_scope(normal_user, "evals:delete")
-    assert not has_scope(guest, "evals:read")
+def test_retired_and_unknown_roles_fail_closed_to_user():
+    for legacy_role in (
+        "analyst",
+        "author",
+        "approver",
+        "auditor",
+        "guest",
+        "not-a-real-role",
+    ):
+        actor = user(legacy_role)
+        assert actor_role(actor) == "user"
+        assert has_scope(actor, "sessions:write")
+        assert not has_scope(actor, ADMIN_SCOPE)
 
 
 def test_scope_claims_are_expanded_as_agentos_scopes():
-    user_claims = scope_claims(user("user"))
+    actor_claims = scope_claims(user())
 
-    assert user_claims.role == "user"
-    assert "sessions:read" in user_claims.scopes
-    assert "evals:read" in user_claims.scopes
-    assert "session:read:own" not in user_claims.scopes
-    assert "agent_eval:read" not in user_claims.scopes
+    assert actor_claims.role == "user"
+    assert "sessions:read" in actor_claims.scopes
+    assert "approvals:write" in actor_claims.scopes
+    assert "audit:read" not in actor_claims.scopes
+    assert "session:read:own" not in actor_claims.scopes
+    assert "agent_eval:read" not in actor_claims.scopes
 
 
-def test_user_read_serializes_scopes_without_permissions_alias():
+def test_user_read_normalizes_retired_roles_and_superusers():
     from api.auth.schemas import UserRead
 
-    payload = UserRead(
+    retired = UserRead.model_validate(
+        {
+            "id": uuid4(),
+            "email": "member@example.com",
+            "role": "author",
+            "is_active": True,
+            "is_superuser": False,
+            "is_verified": False,
+        }
+    ).model_dump()
+    superuser = UserRead(
         id=uuid4(),
         email="admin@example.com",
-        role="admin",
+        role="user",
         is_active=True,
         is_superuser=True,
         is_verified=False,
     ).model_dump()
 
-    assert payload["scopes"] == [ADMIN_SCOPE]
-    assert "permissions" not in payload
+    assert retired["role"] == "user"
+    assert "approvals:write" in retired["scopes"]
+    assert superuser["role"] == "admin"
+    assert superuser["scopes"] == [ADMIN_SCOPE]
+    assert "permissions" not in retired
+
+
+def test_public_user_schemas_do_not_expose_role_assignment():
+    from api.auth.schemas import UserCreate, UserUpdate
+
+    assert "role" not in UserCreate.model_fields
+    assert "role" not in UserUpdate.model_fields
+    with pytest.raises(ValidationError):
+        UserCreate.model_validate(
+            {
+                "email": "member@example.com",
+                "password": "secure-password",
+                "role": "admin",
+            }
+        )
+    with pytest.raises(ValidationError):
+        UserUpdate.model_validate({"role": "admin"})
+
+
+def test_admin_role_update_only_accepts_the_two_product_roles():
+    from api.auth.router import AdminRoleUpdate
+
+    assert AdminRoleUpdate(role="admin").role == "admin"
+    assert AdminRoleUpdate(role="user").role == "user"
+    with pytest.raises(ValidationError):
+        AdminRoleUpdate.model_validate({"role": "author"})
+
+
+@pytest.mark.asyncio
+async def test_role_catalog_is_admin_only_and_contains_two_roles():
+    dependency = route_dependency(auth_router.router, "list_role_presets")
+    with pytest.raises(HTTPException) as exc:
+        dependency(user=user())
+    assert exc.value.status_code == 403
+
+    catalog = await auth_router.list_role_presets(_admin=user("admin"))
+
+    assert [preset["role"] for preset in catalog["data"]] == ["admin", "user"]
 
 
 def test_scope_user_id_uses_actor_for_ordinary_users():
@@ -151,7 +187,7 @@ def test_scope_user_id_allows_admin_requested_user_or_all_users():
 async def test_fastapi_users_jwt_embeds_agentos_scopes():
     from api.auth.users import ScopedJWTStrategy
 
-    actor = user("admin", is_superuser=True)
+    actor = user("admin")
     secret = "test-secret-with-at-least-32-bytes"
     strategy = ScopedJWTStrategy(secret=secret, lifetime_seconds=60)
 
@@ -165,6 +201,7 @@ async def test_fastapi_users_jwt_embeds_agentos_scopes():
 
     assert payload["sub"] == str(actor.id)
     assert payload["aud"] == ["fastapi-users:auth"]
+    assert payload["role"] == "admin"
     assert payload["scopes"] == [ADMIN_SCOPE]
 
 
@@ -184,52 +221,3 @@ def test_main_app_installs_jwt_middleware():
     assert middleware.kwargs["user_isolation"] is True
     assert "/api/auth/*" in JWT_EXCLUDED_ROUTE_PATHS
     assert "/" in JWT_EXCLUDED_ROUTE_PATHS
-
-
-def test_analyst_role_preset():
-    actor = user("analyst")
-    assert has_scope(actor, "sessions:write")
-    assert has_scope(actor, "workflows:run")
-    assert has_scope(actor, "workflows:read")
-    assert not has_scope(actor, "workflows:write")
-    assert not has_scope(actor, "approvals:write")
-    assert not has_scope(actor, "audit:read")
-    assert not has_scope(actor, "mcp:write")
-
-
-def test_author_role_preset():
-    actor = user("author")
-    assert has_scope(actor, "workflows:write")
-    assert has_scope(actor, "knowledge:write")
-    assert has_scope(actor, "skill:submit")
-    assert has_scope(actor, "mcp:submit")
-    assert not has_scope(actor, "approvals:write")
-    assert not has_scope(actor, "audit:read")
-
-
-def test_approver_role_preset():
-    actor = user("approver")
-    assert has_scope(actor, "approvals:read")
-    assert has_scope(actor, "approvals:write")
-    assert has_scope(actor, "sessions:write")
-    assert has_scope(actor, "traces:read")
-    assert not has_scope(actor, "workflows:write")
-    assert not has_scope(actor, "knowledge:write")
-    assert not has_scope(actor, "audit:read")
-
-
-def test_auditor_role_preset():
-    actor = user("auditor")
-    assert has_scope(actor, "audit:read")
-    assert has_scope(actor, "evals:read")
-    assert has_scope(actor, "traces:read")
-    assert has_scope(actor, "approvals:read")
-    assert not has_scope(actor, "sessions:write")
-    assert not has_scope(actor, "approvals:write")
-    assert not has_scope(actor, "workflows:write")
-
-
-def test_unknown_role_falls_back_to_user():
-    actor = user("not-a-real-role")
-    assert actor_role(actor) == "user"
-    assert has_scope(actor, "sessions:write")

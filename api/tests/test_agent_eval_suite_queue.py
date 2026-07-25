@@ -13,7 +13,7 @@ def _actor() -> SimpleNamespace:
     return SimpleNamespace(
         id="user-1",
         email="operator@example.test",
-        role="author",
+        role="user",
         is_superuser=False,
     )
 
@@ -106,7 +106,7 @@ async def test_enqueue_suite_run_projects_plan_and_uses_atomic_persistence() -> 
     assert "sensitive prompt" not in str(snapshot)
     assert snapshot["run_manifest"] == {
         "version": queue.case_store.SUITE_RUN_EXECUTION_MANIFEST_VERSION,
-        "actor": {"id": "user-1", "role": "author", "is_superuser": False},
+        "actor": {"id": "user-1", "role": "user", "is_superuser": False},
         "selected_tag": "smoke",
         "selected_name": None,
         "case_count": 2,

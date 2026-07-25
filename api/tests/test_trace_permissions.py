@@ -16,11 +16,11 @@ def actor(user_id: str, role: str = "user"):
     return SimpleNamespace(id=user_id, role=role, is_superuser=False)
 
 
-def test_non_admin_trace_filter_forces_current_user():
+def test_user_trace_filter_forces_current_user():
     assert effective_trace_user_filter(actor("u1"), requested_user_id="u2") == "u1"
     assert (
-        effective_trace_user_filter(actor("g1", "guest"), requested_user_id=None)
-        == "g1"
+        effective_trace_user_filter(actor("u2"), requested_user_id=None)
+        == "u2"
     )
 
 

@@ -5,9 +5,10 @@ import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
 import { SettingsPage } from './SettingsPage'
 import type { ModelConfigResponse } from '@/shared/types/common'
+import type { AuthUser } from '@/shared/types/auth'
 import type { ModelConfigUpdatePayload } from './api'
 
-const admin = { id: 'admin-1', email: 'admin@example.com', role: 'admin', scopes: [], is_active: true }
+const admin: AuthUser = { id: 'admin-1', email: 'admin@example.com', role: 'admin', scopes: [], is_active: true }
 const chatSettings = {
   show_raw_reasoning: true,
   show_raw_tool_io: true,
@@ -64,9 +65,9 @@ const models = {
   ],
 } satisfies ModelConfigResponse
 
-const mockSettings = () =>
+const mockSettings = (currentUser: AuthUser = admin) =>
   server.use(
-    http.get('/api/auth/users/me', () => HttpResponse.json(admin)),
+    http.get('/api/auth/users/me', () => HttpResponse.json(currentUser)),
     http.get('/api/models', () => HttpResponse.json(models)),
     http.get('/api/settings/chat', () => HttpResponse.json(chatSettings))
   )
@@ -123,7 +124,7 @@ describe('model settings editor', () => {
             enabled: saved?.sources[item.source] ?? item.enabled,
           })),
         })
-      }),
+      })
     )
     renderWithQuery(<SettingsPage />)
 
@@ -143,6 +144,67 @@ describe('model settings editor', () => {
         },
       })
     })
+  })
+
+  it('shows only the admin and user roles in user management', async () => {
+    mockSettings()
+    server.use(
+      http.get('/api/auth/admin/users', () =>
+        HttpResponse.json({
+          data: [
+            {
+              id: 'member-1',
+              email: 'member@example.com',
+              role: 'user',
+              is_active: true,
+              is_superuser: false,
+            },
+          ],
+          meta: { page: 1, limit: 100, total_count: 1, total_pages: 1 },
+        })
+      ),
+      http.get('/api/auth/roles', () =>
+        HttpResponse.json({
+          data: [
+            { role: 'admin', scopes: ['agent_os:admin'] },
+            { role: 'user', scopes: ['sessions:write'] },
+          ],
+        })
+      )
+    )
+    renderWithQuery(<SettingsPage />)
+
+    const usersTab = (await screen.findByText('用户管理')).closest('[role="tab"]')
+    expect(usersTab).toBeTruthy()
+    fireEvent.click(usersTab!)
+
+    const roleSelect = await screen.findByRole('combobox')
+    fireEvent.mouseDown(roleSelect)
+
+    const options = await screen.findAllByRole('option')
+    expect(options.map((option) => option.textContent)).toEqual(['admin', 'user'])
+    expect(screen.queryByText('分析师')).toBeNull()
+    expect(screen.queryByText('访客')).toBeNull()
+  })
+
+  it('keeps model connections read-only for users without config:write', async () => {
+    mockSettings({
+      id: 'user-1',
+      email: 'user@example.com',
+      role: 'user',
+      scopes: ['config:read'],
+      is_active: true,
+    })
+    renderWithQuery(<SettingsPage />)
+
+    await screen.findByText('First model')
+
+    expect(screen.queryByRole('button', { name: '添加模型' })).toBeNull()
+    expect(screen.queryByRole('switch', { name: 'First model enabled' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '测试 First model 的连接' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '编辑 First model' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '设 First model 为当前模型' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '删除 First model' })).toBeNull()
   })
 
   it('loads the selected model after cancelling a previous edit', async () => {

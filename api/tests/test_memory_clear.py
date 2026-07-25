@@ -48,7 +48,7 @@ async def test_clear_user_memories(monkeypatch):
         "api.services.memory_service.get_async_agno_postgres_db",
         lambda: fake,
     )
-    actor = SimpleNamespace(id="u1", role="analyst", is_superuser=False)
+    actor = SimpleNamespace(id="u1", role="user", is_superuser=False)
     result = await clear_memory_records(actor, user_id="someone-else")
     assert result["user_id"] == "u1"
     assert result["deleted"] == 2
@@ -63,7 +63,7 @@ async def test_clear_all_requires_admin(monkeypatch):
         "api.services.memory_service.get_async_agno_postgres_db",
         lambda: fake,
     )
-    actor = SimpleNamespace(id="u1", role="analyst", is_superuser=False)
+    actor = SimpleNamespace(id="u1", role="user", is_superuser=False)
     with pytest.raises(PermissionError):
         await clear_memory_records(actor, all_users=True)
     assert fake.cleared_all is False

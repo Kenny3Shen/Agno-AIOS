@@ -26,7 +26,6 @@ def test_audit_route_rejects_non_admin_reader():
 
 def test_non_admin_cannot_read_audit_logs():
     assert not has_scope(actor("u1"), "audit:read")
-    assert not has_scope(actor("g1", "guest"), "audit:read")
 
 
 def test_request_context_helper_extracts_ip_and_user_agent():

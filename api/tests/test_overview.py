@@ -114,9 +114,9 @@ async def test_overview_aggregates_scoped_traces_into_stable_payload():
 
 
 def test_overview_route_enforces_trace_scope(monkeypatch):
-    monkeypatch.setitem(claims.ROLE_SCOPES, "guest", set())
+    monkeypatch.setitem(claims.ROLE_SCOPES, "user", set())
     with pytest.raises(HTTPException) as exc:
-        route_dependency(overview.router, "get_overview")(user=actor("g1", "guest"))
+        route_dependency(overview.router, "get_overview")(user=actor("u1"))
     assert exc.value.status_code == 403
 
 

@@ -1,8 +1,7 @@
 import type { AuthUser, UserRole } from '@/shared/types/auth'
 
 export const roleOf = (user: AuthUser | null | undefined): UserRole => {
-  if (user?.is_superuser) return 'admin'
-  return user?.role ?? 'guest'
+  return user?.is_superuser || user?.role === 'admin' ? 'admin' : 'user'
 }
 
 export const hasScope = (user: AuthUser | null | undefined, scope: string) => {

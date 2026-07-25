@@ -381,7 +381,7 @@ async function main() {
       fontFace: FONT, fontSize: 24, color: C.ink, bold: true, margin: 0,
     });
     const gov = [
-      { icon: icons.lock, t: "RBAC", d: "admin / analyst / author / approver / auditor / guest；JWT scopes 驱动导航与写操作。" },
+      { icon: icons.lock, t: "RBAC", d: "admin / user；JWT scopes 驱动导航与写操作。" },
       { icon: icons.shield, t: "模型护栏", d: "Agno PII + Prompt Injection pre_hooks；Settings 可热更新；不含 OpenAI Moderation。" },
       { icon: icons.bolt, t: "Durable Jobs", d: "Knowledge 入库、HITL resume、Workflow cron dispatch；SKIP LOCKED 租约与幂等键。" },
       { icon: icons.layers, t: "Trace & Audit", d: "Agno 风格 traces / sessions；审计日志；Dashboard 失败与延迟口径。" },

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 from uuid import uuid4
 
+from api.auth.claims import Role, actor_role, normalize_actor_role
 from api.persistence.durable_jobs import DurableJob, JobKind
 from api.services.audit_service import record_audit_event_async
 from api.services.durable_job_service import (
@@ -43,7 +44,7 @@ class KnowledgeJobActor:
 
     id: str
     email: str = ""
-    role: str = "user"
+    role: Role = "user"
     is_superuser: bool = False
 
 
@@ -80,11 +81,15 @@ def _optional_bool(value: object, *, field: str) -> bool:
 
 def _actor(payload: Mapping[str, Any]) -> KnowledgeJobActor:
     raw = _mapping(payload.get("actor"), field="actor")
+    is_superuser = _optional_bool(raw.get("is_superuser"), field="actor.is_superuser")
     return KnowledgeJobActor(
         id=_text(raw.get("id"), field="actor.id", required=True),
         email=_text(raw.get("email"), field="actor.email"),
-        role=_text(raw.get("role"), field="actor.role") or "user",
-        is_superuser=_optional_bool(raw.get("is_superuser"), field="actor.is_superuser"),
+        role=normalize_actor_role(
+            _text(raw.get("role"), field="actor.role"),
+            is_superuser=is_superuser,
+        ),
+        is_superuser=is_superuser,
     )
 
 
@@ -112,7 +117,7 @@ def build_knowledge_ingest_payload(
         "actor": {
             "id": actor_id,
             "email": str(getattr(actor, "email", "") or "").strip(),
-            "role": str(getattr(actor, "role", "user") or "user").strip() or "user",
+            "role": actor_role(actor),
             "is_superuser": bool(getattr(actor, "is_superuser", False)),
         },
         "owner_user_id": (owner_user_id or "").strip() or None,

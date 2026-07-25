@@ -128,12 +128,6 @@ class FakeMemoryMutationDb(FakeMemoryDb):
         return memory
 
 
-def test_guest_cannot_mutate_memory():
-    with pytest.raises(HTTPException) as context:
-        memory.require_memory_write_permission(user=actor("g1", "guest"))
-    assert context.value.status_code == 403
-
-
 @pytest.mark.asyncio
 async def test_delete_memory_route_records_audit():
     current_actor = actor("u1")
@@ -214,9 +208,8 @@ async def test_update_memory_route_records_audit():
     assert event.metadata == {"user_id": "u1", "topics": 2}
 
 
-def test_memory_write_permission_is_not_granted_to_guest():
+def test_memory_write_permission_is_granted_to_user():
     assert has_scope(actor("u1", "user"), "memories:write")
-    assert not has_scope(actor("guest", "guest"), "memories:write")
 
 
 @pytest.mark.asyncio

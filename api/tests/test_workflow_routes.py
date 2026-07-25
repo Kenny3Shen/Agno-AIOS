@@ -21,13 +21,6 @@ def test_list_workflows_allows_user_with_workflows_read():
     assert dependency(user=actor()) is not None
 
 
-def test_run_workflow_rejects_guest():
-    dependency = route_dependency(workflows.router, "run_workflow")
-    with pytest.raises(HTTPException) as exc:
-        dependency(user=actor("g1", "guest"))
-    assert exc.value.status_code == 403
-
-
 @pytest.mark.asyncio
 async def test_create_workflow_maps_definition_errors_to_422():
     body = workflows.WorkflowWriteRequest(name="x", definition={"steps": []})

@@ -44,7 +44,7 @@ def _actor() -> SimpleNamespace:
     return SimpleNamespace(
         id="user-1",
         email="user@example.test",
-        role="author",
+        role="user",
         is_superuser=False,
     )
 
@@ -142,7 +142,49 @@ async def test_text_handler_runs_lifecycle_and_records_request_audit() -> None:
         "user_agent": "pytest",
     }
     assert audit_call.args[0].id == "user-1"
-    assert audit_call.args[0].role == "author"
+    assert audit_call.args[0].role == "user"
+
+
+@pytest.mark.asyncio
+async def test_handler_canonicalizes_legacy_superuser_job_actor() -> None:
+    payload = _payload(
+        "text",
+        {
+            "title": "Runbook",
+            "content": "restart the service",
+            "source": "manual",
+            "visibility": "private",
+            "metadata": {},
+            "ingest_options": {},
+        },
+    )
+    payload["actor"] = {
+        "id": "user-1",
+        "email": "user@example.test",
+        "role": "author",
+        "is_superuser": True,
+    }
+    lifecycle = SimpleNamespace(
+        add_text_document_async=AsyncMock(return_value={"id": "doc-1"})
+    )
+    audit = AsyncMock()
+
+    with (
+        patch(
+            "api.services.knowledge_durable_jobs.get_knowledge_base_lifecycle",
+            return_value=lifecycle,
+        ),
+        patch(
+            "api.services.knowledge_durable_jobs.record_audit_event_async",
+            audit,
+        ),
+    ):
+        await handle_knowledge_ingest_job(_job(payload), _context())
+
+    audit_call = audit.await_args
+    assert audit_call is not None
+    assert audit_call.args[0].role == "admin"
+    assert audit_call.args[0].is_superuser is True
 
 
 @pytest.mark.asyncio

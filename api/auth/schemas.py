@@ -3,13 +3,24 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi_users import schemas
-from pydantic import Field, computed_field, field_validator
+from pydantic import ConfigDict, computed_field, field_validator, model_validator
 
-from api.auth.claims import normalize_role, scope_claims
+from api.auth.claims import Role, normalize_role, scope_claims
 
 
 class UserRead(schemas.BaseUser[UUID]):
-    role: str = "user"
+    role: Role = "user"
+
+    @field_validator("role", mode="before")
+    @classmethod
+    def normalize_persisted_role(cls, value: object) -> Role:
+        """Present retired database roles as the consolidated user role."""
+        return normalize_role(value)
+
+    @model_validator(mode="after")
+    def align_role_with_superuser(self) -> UserRead:
+        self.role = scope_claims(self).role
+        return self
 
     @computed_field
     @property
@@ -18,25 +29,12 @@ class UserRead(schemas.BaseUser[UUID]):
 
 
 class UserCreate(schemas.BaseUserCreate):
-    role: str = Field(default="user")
+    """Public registration payload without product-role assignment."""
 
-    @field_validator("role")
-    @classmethod
-    def validate_role(cls, value: str) -> str:
-        role = normalize_role(value)
-        if role == "admin":
-            # Non-admin registration cannot self-promote; bootstrap/admin API only.
-            return "user"
-        return role
+    model_config = ConfigDict(extra="forbid")
 
 
 class UserUpdate(schemas.BaseUserUpdate):
-    role: str | None = None
+    """Public profile update payload without product-role assignment."""
 
-    @field_validator("role")
-    @classmethod
-    def validate_role(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        role = normalize_role(value)
-        return role
+    model_config = ConfigDict(extra="forbid")

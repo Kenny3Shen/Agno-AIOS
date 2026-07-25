@@ -23,6 +23,7 @@ from anyio import Path as AsyncPath
 from anyio import to_thread
 from loguru import logger
 
+from api.auth.claims import Role, normalize_actor_role
 from api.config import get_settings
 from api.persistence.durable_jobs import JobKind, JobState, retry_job
 from api.services.durable_job_service import enqueue_durable_job
@@ -663,7 +664,7 @@ class SecurityRunRequest:
     reasoning_effort: str | None
     user_id: str | None
     knowledge_owner_user_id: str | None
-    actor_role: str = "user"
+    actor_role: Role = "user"
     actor_is_superuser: bool = False
     memory_enabled: bool = True
     store_raw_tool_io: bool = False
@@ -688,6 +689,21 @@ class SecurityRunRequest:
     videos: tuple[Any, ...] = ()
     # Light UI metadata only (name/mime/kind); not sent to the model.
     attachments: tuple[dict[str, str], ...] = ()
+
+    def __post_init__(self) -> None:
+        """Freeze a canonical, fail-closed actor capability snapshot.
+
+        Paused HITL runs restore this request from persisted JSON.  Only an
+        actual JSON boolean ``true`` may retain superuser authority; a truthy
+        malformed value such as the string ``"false"`` must not elevate it.
+        """
+        is_superuser = self.actor_is_superuser is True
+        object.__setattr__(self, "actor_is_superuser", is_superuser)
+        object.__setattr__(
+            self,
+            "actor_role",
+            normalize_actor_role(self.actor_role, is_superuser=is_superuser),
+        )
 
     @classmethod
     def from_chat_args(
@@ -726,6 +742,7 @@ class SecurityRunRequest:
             resolved_skills = skill_names
             if skill_names is None and infer_skills:
                 resolved_skills = infer_chat_skill_names(message)
+        normalized_superuser = actor_is_superuser is True
         return cls(
             message=message,
             session_id=session_id,
@@ -733,8 +750,10 @@ class SecurityRunRequest:
             reasoning_effort=reasoning_effort,
             user_id=user_id,
             knowledge_owner_user_id=knowledge_owner_user_id,
-            actor_role=actor_role,
-            actor_is_superuser=actor_is_superuser,
+            actor_role=normalize_actor_role(
+                actor_role, is_superuser=normalized_superuser
+            ),
+            actor_is_superuser=normalized_superuser,
             memory_enabled=memory_enabled,
             store_raw_tool_io=store_raw_tool_io,
             search_knowledge=search_knowledge,
@@ -783,6 +802,7 @@ class SecurityRunRequest:
             resolved_target.kind == "agent"
             and profile_attaches_skills(resolved_target.id)
         )
+        normalized_superuser = actor_is_superuser is True
         return cls(
             message=message,
             session_id=session_id,
@@ -790,8 +810,10 @@ class SecurityRunRequest:
             reasoning_effort=reasoning_effort,
             user_id=user_id,
             knowledge_owner_user_id=knowledge_owner_user_id,
-            actor_role=actor_role,
-            actor_is_superuser=actor_is_superuser,
+            actor_role=normalize_actor_role(
+                actor_role, is_superuser=normalized_superuser
+            ),
+            actor_is_superuser=normalized_superuser,
             memory_enabled=memory_enabled,
             store_raw_tool_io=store_raw_tool_io,
             search_knowledge=search_knowledge,
@@ -887,7 +909,7 @@ class SecurityRunRequest:
             user_id=user_id,
             knowledge_owner_user_id=str(context.get("knowledge_owner_user_id") or "") or None,
             actor_role=str(context.get("actor_role") or "user"),
-            actor_is_superuser=bool(context.get("actor_is_superuser", False)),
+            actor_is_superuser=context.get("actor_is_superuser") is True,
             memory_enabled=bool(context.get("memory_enabled", True)),
             store_raw_tool_io=bool(context.get("store_raw_tool_io", False)),
             search_knowledge=bool(context.get("search_knowledge", True)),

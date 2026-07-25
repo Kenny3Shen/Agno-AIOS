@@ -9,7 +9,7 @@ from math import isfinite
 from typing import Any
 from uuid import uuid4
 
-from api.auth.claims import KNOWN_ROLES, actor_id
+from api.auth.claims import actor_id, normalize_actor_role
 from api.services.eval_targets import parse_eval_target
 from api.services.safety_eval_rubrics import eval_profile_from_metadata
 from api.utils.pagination import pagination_meta
@@ -496,11 +496,19 @@ def normalize_case_run_definition_snapshot(value: Any) -> dict[str, Any]:
 
 def normalize_case_run_execution_provenance(value: Any) -> dict[str, Any]:
     """Canonicalize immutable private execution provenance for storage."""
-    return _canonical_private_case_run_mapping(
+    provenance = _canonical_private_case_run_mapping(
         value,
         field="execution_provenance",
         max_bytes=MAX_CASE_RUN_EXECUTION_PROVENANCE_BYTES,
     )
+    actor = provenance.get("actor")
+    if isinstance(actor, dict):
+        is_superuser = actor.get("is_superuser") is True
+        actor["is_superuser"] = is_superuser
+        actor["role"] = normalize_actor_role(
+            actor.get("role"), is_superuser=is_superuser
+        )
+    return provenance
 
 
 def _terminal_checkpoint_optional_bool(value: Any, *, field: str) -> bool | None:
@@ -837,14 +845,15 @@ def normalize_suite_run_execution_manifest(value: Any) -> dict[str, Any]:
             + ", ".join(actor_missing)
         )
     actor_id_value = _manifest_text(actor["id"], field="actor.id")
-    actor_role_value = _manifest_text(actor["role"], field="actor.role").lower()
-    if actor_role_value not in KNOWN_ROLES:
-        raise ValueError("execution_snapshot.run_manifest.actor.role is unsupported")
     actor_is_superuser = actor["is_superuser"]
     if not isinstance(actor_is_superuser, bool):
         raise ValueError(
             "execution_snapshot.run_manifest.actor.is_superuser must be a boolean"
         )
+    actor_role_value = normalize_actor_role(
+        _manifest_text(actor["role"], field="actor.role"),
+        is_superuser=actor_is_superuser,
+    )
 
     selected_tag = _manifest_selector(manifest["selected_tag"], field="selected_tag")
     selected_name = _manifest_selector(
@@ -1421,11 +1430,11 @@ def build_case_run_execution_provenance(
 ) -> dict[str, Any]:
     """Build the private, immutable execution contract for one CaseRun."""
     normalized_target = parse_eval_target(target, require_available=False).to_dict()
-    normalized_role = str(actor_role_value or "").strip().lower()
-    if normalized_role not in KNOWN_ROLES:
-        raise ValueError("CaseRun execution provenance actor role is unsupported")
     if not isinstance(actor_is_superuser, bool):
         raise ValueError("CaseRun execution provenance actor superuser must be a boolean")
+    normalized_role = normalize_actor_role(
+        actor_role_value, is_superuser=actor_is_superuser
+    )
     normalized_source = str(definition_source or "").strip()
     if not normalized_source:
         raise ValueError("CaseRun execution provenance definition_source is required")

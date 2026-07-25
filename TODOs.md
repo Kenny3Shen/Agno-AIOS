@@ -1123,12 +1123,12 @@
 - Workflow 模板覆盖告警研判、条件分支、并行执行、HITL、Cron 与 Webhook 编排。
 
 
-## 已完成：P1 角色预设（分析师 / 作者 / 审批 / 审计）
+## 已完成：RBAC 收敛为管理员 / 用户
 
-- `ROLE_SCOPES` 扩展：`analyst` / `author` / `approver` / `auditor`（保留 `admin`/`user`/`guest` 兼容）。
-- `GET /api/auth/roles` 角色目录；`GET/PATCH /api/auth/admin/users` 管理端用户列表与角色赋值（审计 `auth.role_update`）。
-- Settings「角色与用户」Tab（管理员）：下拉分配角色；superuser 不可直接降级。
-- 前端 `UserRole` 类型扩展；RBAC 单测覆盖四类预设。
+- 产品角色仅保留 `admin` / `user`；`user` 覆盖日常工作台操作，系统级写操作仍仅限管理员。
+- `GET /api/auth/roles` 与 Settings「用户管理」只展示两项；角色变更仍通过管理员专用端点审计 `auth.role_update`。
+- 公共注册/用户更新 schema 不再接收 `role`，避免自行切换权限；superuser 不可直接降级。
+- Alembic 将历史专属角色及 durable worker 快照归并为 `user`；运行时也对遗留/未知角色安全降级。
 
 
 ## 已完成：Chat tools-off 与自动轻量语义分离
@@ -1377,7 +1377,7 @@ P0.4 审批值班薄入口        ✅
 
 - Dashboard 聚合下推 / 可信失败列表  
 - ~~Workflow 模板与 Executor 目录产品化~~ ✅（见上）
-- ~~角色预设（分析师 / 作者 / 审批 / 审计）~~ ✅  
+- ~~RBAC 收敛为管理员 / 用户~~ ✅
 - Skill 版本与「被引用」只读视图  
 - i18n 与静默失败显性化（模型/Memory 后台错误）
 

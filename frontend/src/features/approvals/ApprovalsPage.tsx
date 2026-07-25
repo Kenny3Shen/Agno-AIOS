@@ -4,7 +4,7 @@ import { Alert, App, Button, Card, Collapse, Descriptions, Drawer, Input, InputN
 import { CheckOutlined, CloseOutlined } from '@ant-design/icons'
 import { Markdown } from '@/shared/ui/Markdown'
 import { currentUserQuery } from '@/features/auth'
-import { hasScope } from '@/shared/auth/permissions'
+import { hasScope, roleOf } from '@/shared/auth/permissions'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { CopyableValue } from '@/shared/ui/MetadataDescriptions'
 import { PayloadViewer } from '@/shared/ui/PayloadViewer'
@@ -206,6 +206,7 @@ export function ApprovalsPage() {
   const openedNotificationApprovalId = useRef<string | null>(null)
   const currentUser = useQuery(currentUserQuery())
   const canResolve = hasScope(currentUser.data, 'approvals:write')
+  const isAdmin = roleOf(currentUser.data) === 'admin'
   const [status, setStatus] = useState('pending')
   const [kind, setKind] = useState<ApprovalKind>('workflow')
   const [page, setPage] = useState(1)
@@ -398,7 +399,7 @@ export function ApprovalsPage() {
 
   const approvalActions = selected ? (
     <Space size={4}>
-      {canResolve ? (
+      {canResolve && (!isSubmissionApproval(selected) || isAdmin) ? (
         <>
           <Button
             type="primary"

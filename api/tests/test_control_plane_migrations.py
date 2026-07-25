@@ -96,6 +96,21 @@ def _terminalize_legacy_eval_runs_revision() -> ModuleType:
     return module
 
 
+def _simplify_rbac_roles_revision() -> ModuleType:
+    revision_path = (
+        Path(__file__).resolve().parents[2]
+        / "alembic"
+        / "versions"
+        / "20260725_0029_simplify_rbac_roles.py"
+    )
+    spec = spec_from_file_location("simplify_rbac_roles_revision", revision_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_fresh_baseline_does_not_include_future_control_plane_schema() -> None:
     """Keep the initial revision frozen before the first later table migration.
 
@@ -411,6 +426,47 @@ def test_terminalize_legacy_active_eval_runs_migration_only_updates_empty_snapsh
     assert "completed_at=now()" in sql
     assert compiled.params["status"] == "error"
     assert compiled.params["error_summary"] == revision._LEGACY_ACTIVE_RUN_ERROR
+
+
+def test_simplify_rbac_roles_migration_canonicalizes_active_account_and_job_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    revision = _simplify_rbac_roles_revision()
+    executed: list[Any] = []
+
+    class Operations:
+        def execute(self, statement: Any) -> None:
+            executed.append(statement)
+
+    monkeypatch.setattr(revision, "op", Operations())
+    monkeypatch.setattr(
+        revision,
+        "get_settings",
+        lambda: SimpleNamespace(agno_app_schema="rbac_test"),
+    )
+
+    revision.upgrade()
+
+    assert revision.down_revision == "20260725_0028"
+    assert len(executed) == 4
+    compiled = [
+        str(statement.compile(dialect=postgresql.dialect())) for statement in executed
+    ]
+    sql = "\n".join(compiled)
+    assert 'UPDATE "user"' in sql
+    assert "UPDATE rbac_test.agent_eval_suite_runs" in sql
+    assert "UPDATE rbac_test.agent_eval_case_runs" in sql
+    assert "UPDATE rbac_test.durable_jobs" in sql
+    assert all("jsonb_set" in statement for statement in compiled[1:])
+    assert "jsonb_typeof" in sql
+    assert "run_manifest,actor,role" in sql
+    assert "run_manifest,actor,is_superuser" in sql
+    assert "actor,role" in sql
+    assert "is_superuser" in sql
+    assert "'\"admin\"'::jsonb" in sql
+    assert "'false'::jsonb" in sql
+    assert "admin" in executed[0].compile(dialect=postgresql.dialect()).params.values()
+    assert "knowledge_ingest" in str(executed[3].compile(dialect=postgresql.dialect()).params)
 
 
 class _RevisionConnection:

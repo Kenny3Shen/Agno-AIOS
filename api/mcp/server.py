@@ -25,7 +25,7 @@ from api.mcp.config import (
     find_token,
     set_component_override,
 )
-from api.auth.claims import actor_role, actor_scopes
+from api.auth.claims import actor_id, actor_role, actor_scopes
 from api.auth.database import get_active_user_by_id
 from api.mcp.tools.basic import basic_mcp
 from api.mcp.tools.hitl import hitl_mcp
@@ -92,7 +92,9 @@ def _access_actor() -> Any | None:
     claims = token.claims or {}
     user_id = str(claims.get("sub") or token.subject or "").strip()
     if not user_id or claims.get("kind") not in {"user", "delegation"}:
-        return SimpleNamespace(id="", role="guest", is_superuser=False)
+        # Service credentials do not map to the user role.  The middleware
+        # recognizes the empty subject and grants no user-owned capabilities.
+        return SimpleNamespace(id="", role="user", is_superuser=False)
     return SimpleNamespace(
         id=user_id,
         role=str(claims.get("role") or "user"),
@@ -107,6 +109,8 @@ class CapabilityPolicyMiddleware(Middleware):
         actor = _access_actor()
         if actor is None:
             return None
+        if not actor_id(actor):
+            return set()
         return await effective_mcp_server_ids_for_actor(actor)
 
     async def _component_allowed(self, component_name: object) -> bool:

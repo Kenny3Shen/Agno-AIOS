@@ -190,3 +190,19 @@ async def test_service_token_cannot_claim_a_normal_user_identity() -> None:
     assert access is not None
     assert access.subject is None
     assert access.claims == {"kind": "service"}
+
+
+@pytest.mark.asyncio
+async def test_service_actor_receives_no_user_capabilities() -> None:
+    middleware = server.CapabilityPolicyMiddleware()
+    service_actor = SimpleNamespace(id="", role="user", is_superuser=False)
+
+    with patch.object(server, "_access_actor", return_value=service_actor), patch.object(
+        server,
+        "effective_mcp_server_ids_for_actor",
+        new_callable=AsyncMock,
+    ) as effective_ids:
+        allowed = await middleware._allowed_server_ids()
+
+    assert allowed == set()
+    effective_ids.assert_not_awaited()

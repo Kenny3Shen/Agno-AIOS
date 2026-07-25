@@ -45,13 +45,8 @@ import {
   type McpToken,
 } from './api'
 import { currentUserQuery } from '@/features/auth'
-import { hasScope, roleOf } from '@/shared/auth/permissions'
-import {
-  listCapabilities,
-  setCapabilityPreference,
-  type CapabilityItem,
-  type CapabilityPreference,
-} from '@/features/capabilities'
+import { hasScope } from '@/shared/auth/permissions'
+import { listCapabilities, setCapabilityPreference, type CapabilityItem, type CapabilityPreference } from '@/features/capabilities'
 
 const tokenTime = (value: number, neverExpires: string) => (value ? new Date(value * 1000).toLocaleString() : neverExpires)
 
@@ -84,8 +79,8 @@ export function McpPage() {
   const config = useQuery({ queryKey: ['mcp', 'config'], queryFn: getConfig })
   const capabilitiesQuery = useQuery({ queryKey: ['capabilities'], queryFn: listCapabilities })
   const currentUser = useQuery(currentUserQuery())
-  const isAdmin = roleOf(currentUser.data) === 'admin'
   const canSubmit = hasScope(currentUser.data, 'mcp:submit')
+  const canManageMcp = hasScope(currentUser.data, 'mcp:write')
   const components = useQuery({ queryKey: ['mcp', 'components', namespace], queryFn: () => listComponents(namespace) })
   const tokens = useQuery({ queryKey: ['mcp', 'tokens'], queryFn: listTokens })
   const capabilityByServerId = useMemo(() => {
@@ -139,13 +134,10 @@ export function McpPage() {
     onError: (error) => message.error(error.message),
   })
   const updatePreference = useMutation({
-    mutationFn: ({ item, state }: { item: CapabilityItem; state: CapabilityPreference }) =>
-      setCapabilityPreference(item, state),
+    mutationFn: ({ item, state }: { item: CapabilityItem; state: CapabilityPreference }) => setCapabilityPreference(item, state),
     onSuccess: (updated) => {
       client.setQueryData<CapabilityItem[]>(['capabilities'], (current) =>
-        (current ?? []).map((item) =>
-          item.kind === updated.kind && item.capability_key === updated.capability_key ? updated : item,
-        ),
+        (current ?? []).map((item) => (item.kind === updated.kind && item.capability_key === updated.capability_key ? updated : item))
       )
       message.success(t('forMeUpdated'))
     },
@@ -231,7 +223,7 @@ export function McpPage() {
                         ),
                       },
                       { title: t('colTransport'), dataIndex: 'transport', width: 150, render: (value) => <Tag>{value}</Tag> },
-                      ...(isAdmin
+                      ...(canManageMcp
                         ? [
                             {
                               title: t('colEnabled'),
@@ -261,8 +253,7 @@ export function McpPage() {
                         render: (_: unknown, row: McpServer) => {
                           const capability = capabilityByServerId.get(row.id)
                           const pending =
-                            updatePreference.isPending &&
-                            updatePreference.variables?.item.capability_key === capability?.capability_key
+                            updatePreference.isPending && updatePreference.variables?.item.capability_key === capability?.capability_key
                           const platformReady = Boolean(capability?.platform_enabled ?? row.enabled)
                           return (
                             <Switch
@@ -286,7 +277,7 @@ export function McpPage() {
                         title: t('colVisibility'),
                         width: 140,
                         render: (_, row) =>
-                          row.can_manage ? (
+                          canManageMcp && row.can_manage ? (
                             <VisibilitySelect
                               value={row.visibility}
                               onClick={(event) => event.stopPropagation()}
@@ -300,9 +291,20 @@ export function McpPage() {
                         title: t('colActions'),
                         width: 76,
                         render: (_, row) =>
-                          row.can_delete ? (
-                            <Popconfirm title={t('deleteServerConfirm', { name: row.name })} okText={t('common:delete')} okButtonProps={{ danger: true }} onConfirm={() => removeServer(row)}>
-                              <Button danger type="text" icon={<DeleteOutlined />} aria-label={t('deleteServerNamed', { name: row.name })} onClick={(event) => event.stopPropagation()} />
+                          canManageMcp && row.can_delete ? (
+                            <Popconfirm
+                              title={t('deleteServerConfirm', { name: row.name })}
+                              okText={t('common:delete')}
+                              okButtonProps={{ danger: true }}
+                              onConfirm={() => removeServer(row)}
+                            >
+                              <Button
+                                danger
+                                type="text"
+                                icon={<DeleteOutlined />}
+                                aria-label={t('deleteServerNamed', { name: row.name })}
+                                onClick={(event) => event.stopPropagation()}
+                              />
                             </Popconfirm>
                           ) : null,
                       },
@@ -351,12 +353,8 @@ export function McpPage() {
                         render: (_, row) => {
                           const pending = toggleComponent.isPending && toggleComponent.variables?.item.key === row.key
                           const server = servers.find((item) => item.id === row.server_id)
-                          if (!server?.can_manage) {
-                            return (
-                              <Tag aria-label={`${row.name} enabled`}>
-                                {row.enabled ? t('common:enabled') : t('common:disabled')}
-                              </Tag>
-                            )
+                          if (!canManageMcp || !server?.can_manage) {
+                            return <Tag aria-label={`${row.name} enabled`}>{row.enabled ? t('common:enabled') : t('common:disabled')}</Tag>
                           }
                           return (
                             <Switch
@@ -407,7 +405,6 @@ export function McpPage() {
                     },
                   ]}
                 />
-
               </Card>
             ),
           },
@@ -423,7 +420,7 @@ export function McpPage() {
         title={component?.name || selectedServer?.name || 'Detail'}
         destroyOnHidden
         extra={
-          component?.type === 'tool' ? (
+          canManageMcp && component?.type === 'tool' ? (
             <Button
               icon={<PlayCircleOutlined />}
               onClick={() => {
@@ -448,9 +445,7 @@ export function McpPage() {
             prefix="Manifest"
           />
         ) : null}
-        {!component && !selectedServer ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('selectForDetails')} />
-        ) : null}
+        {!component && !selectedServer ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('selectForDetails')} /> : null}
         {component ? (
           <Tabs
             destroyOnHidden
@@ -485,7 +480,6 @@ export function McpPage() {
           />
         ) : null}
       </Drawer>
-
 
       <Modal open={issueOpen} footer={null} onCancel={() => setIssueOpen(false)} title={t('issueToken')}>
         <Form
@@ -551,26 +545,34 @@ export function McpPage() {
             <Button type="primary" htmlType="submit">
               {t('common:save')}
             </Button>
-            <Button
-              onClick={async () => {
-                try {
-                  const values = await serverForm.validateFields()
-                  const result = await testServer(values)
-                  message.success(t('connectDiscovered', { count: result.tools.length }))
-                } catch (error) {
-                  // validateFields reject is user-facing form state; only toast transport errors.
-                  if (error && typeof error === 'object' && 'errorFields' in error) return
-                  message.error(error instanceof Error ? error.message : t('testConnectionFailed'))
-                }
-              }}
-            >
-              {t('testConnection')}
-            </Button>
+            {canManageMcp ? (
+              <Button
+                onClick={async () => {
+                  try {
+                    const values = await serverForm.validateFields()
+                    const result = await testServer(values)
+                    message.success(t('connectDiscovered', { count: result.tools.length }))
+                  } catch (error) {
+                    // validateFields reject is user-facing form state; only toast transport errors.
+                    if (error && typeof error === 'object' && 'errorFields' in error) return
+                    message.error(error instanceof Error ? error.message : t('testConnectionFailed'))
+                  }
+                }}
+              >
+                {t('testConnection')}
+              </Button>
+            ) : null}
           </Space>
         </Form>
       </Modal>
 
-      <Modal open={callOpen} onCancel={() => setCallOpen(false)} title={t('tryCall', { name: component?.name ?? '' })} onOk={runTool} okText={t('call')}>
+      <Modal
+        open={callOpen}
+        onCancel={() => setCallOpen(false)}
+        title={t('tryCall', { name: component?.name ?? '' })}
+        onOk={runTool}
+        okText={t('call')}
+      >
         <Typography.Paragraph type="secondary">{t('callHint')}</Typography.Paragraph>
         <Input.TextArea rows={8} value={callArgs} onChange={(event) => setCallArgs(event.target.value)} />
         {callResult !== undefined && <FormattedContentCard title={t('callResult')} value={callResult} />}

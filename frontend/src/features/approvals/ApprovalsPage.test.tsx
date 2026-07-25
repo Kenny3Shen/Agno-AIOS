@@ -120,7 +120,7 @@ describe('ApprovalsPage', () => {
           id: 'member-1',
           email: 'member@example.com',
           role: 'user',
-          scopes: ['approvals:read'],
+          scopes: ['approvals:read', 'approvals:write'],
         })
       ),
       http.get('/api/approvals', () =>

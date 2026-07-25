@@ -1,6 +1,26 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Card, Collapse, Flex, Form, Input, InputNumber, Modal, Popconfirm, Radio, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
+import {
+  App,
+  Button,
+  Card,
+  Collapse,
+  Flex,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Popconfirm,
+  Radio,
+  Select,
+  Space,
+  Switch,
+  Table,
+  Tabs,
+  Tag,
+  Tooltip,
+  Typography,
+} from 'antd'
 import {
   ApiOutlined,
   AuditOutlined,
@@ -14,7 +34,7 @@ import {
 } from '@ant-design/icons'
 import { PageHeader } from '@/shared/ui/PageHeader'
 import { currentUserQuery } from '@/features/auth'
-import { roleOf } from '@/shared/auth/permissions'
+import { hasScope, roleOf } from '@/shared/auth/permissions'
 import {
   getChatSettings,
   getCveSourceSettings,
@@ -41,7 +61,7 @@ import {
   type ModelConfigInput,
   type ModelConfigUpdatePayload,
 } from './api'
-import type { AuthUser } from '@/shared/types/auth'
+import type { AuthUser, UserRole } from '@/shared/types/auth'
 import type { ModelConfig, ModelConfigResponse } from '@/shared/types/common'
 import { useTranslation } from 'react-i18next'
 import './settings.css'
@@ -140,6 +160,7 @@ export function SettingsPage() {
   const models = useQuery({ queryKey: ['settings', 'models'], queryFn: getModels })
   const currentUser = useQuery(currentUserQuery())
   const isAdmin = roleOf(currentUser.data) === 'admin'
+  const canManageModels = hasScope(currentUser.data, 'config:write')
   const chatSettings = useQuery({ queryKey: ['settings', 'chat'], queryFn: getChatSettings, enabled: isAdmin })
   const [editing, setEditing] = useState<ModelConfigInput | null>(null)
   const [form] = Form.useForm<ModelConfigInput>()
@@ -225,11 +246,11 @@ export function SettingsPage() {
   }
 
   const roleOptions = (rolePresetsQuery.data ?? []).map((preset) => ({
-    value: String(preset.role),
-    label: roleLabel(String(preset.role)),
+    value: preset.role,
+    label: roleLabel(preset.role),
   }))
 
-  const updateUserRole = async (row: AuthUser, role: string) => {
+  const updateUserRole = async (row: AuthUser, role: UserRole) => {
     if (row.is_superuser && role !== 'admin') {
       message.warning(t('cannotDemoteSuperuser'))
       return
@@ -276,19 +297,14 @@ export function SettingsPage() {
 
   const saveCveSources = async () => {
     const sources = Object.fromEntries(
-      (cveSourceSettings.data?.sources ?? []).map(({ source, enabled }) => [
-        source,
-        cveSourceEnabled[source] ?? enabled,
-      ]),
+      (cveSourceSettings.data?.sources ?? []).map(({ source, enabled }) => [source, cveSourceEnabled[source] ?? enabled])
     )
     if (!Object.keys(sources).length) return
 
     setCveSourceSaving(true)
     try {
       const next = await saveCveSourceSettings(sources)
-      setCveSourceEnabled(
-        Object.fromEntries(next.sources.map(({ source, enabled }) => [source, enabled])),
-      )
+      setCveSourceEnabled(Object.fromEntries(next.sources.map(({ source, enabled }) => [source, enabled])))
       await client.invalidateQueries({ queryKey: ['settings', 'cve-sources'] })
       message.success(t('cveSourcesSaved'))
     } catch (error) {
@@ -304,9 +320,7 @@ export function SettingsPage() {
       const payload: Partial<KnowledgeRagSettings> = {
         ...values,
         similarity_threshold:
-          values.similarity_threshold == null || Number(values.similarity_threshold) <= 0
-            ? null
-            : Number(values.similarity_threshold),
+          values.similarity_threshold == null || Number(values.similarity_threshold) <= 0 ? null : Number(values.similarity_threshold),
       }
       const next = await saveKnowledgeRagSettings(payload)
       knowledgeForm.setFieldsValue(next)
@@ -324,9 +338,7 @@ export function SettingsPage() {
     await saveKnowledgeRag(KNOWLEDGE_RAG_SETTINGS_DEFAULTS)
   }
 
-  const resetKnowledgeFieldToDefault = async (
-    field: Exclude<keyof KnowledgeRagSettings, 'rerank_model'>,
-  ) => {
+  const resetKnowledgeFieldToDefault = async (field: Exclude<keyof KnowledgeRagSettings, 'rerank_model'>) => {
     const value = KNOWLEDGE_RAG_SETTINGS_DEFAULTS[field]
     knowledgeForm.setFieldValue(field, value)
     await saveKnowledgeRag({
@@ -399,9 +411,7 @@ export function SettingsPage() {
       enabled: model.enabled ?? true,
       builtin: previous?.builtin ?? model.builtin ?? false,
     }
-    const submitted = !previous || previous.provider !== model.provider
-      ? omitProviderManagedFields(normalized)
-      : normalized
+    const submitted = !previous || previous.provider !== model.provider ? omitProviderManagedFields(normalized) : normalized
     const next: ModelConfigInput[] = current.models.some((item) => item.id === submitted.id)
       ? current.models.map((item) => (item.id === submitted.id ? submitted : item))
       : [...current.models, submitted]
@@ -465,11 +475,7 @@ export function SettingsPage() {
         memory_model_id: already ? null : model.id,
         eval_judge_model_id: current.eval_judge_model_id ?? null,
       })
-      message.success(
-        already
-          ? t('memoryModelCleared', { name: model.name })
-          : t('memoryModelActivated', { name: model.name }),
-      )
+      message.success(already ? t('memoryModelCleared', { name: model.name }) : t('memoryModelActivated', { name: model.name }))
     } catch (error) {
       message.error(error instanceof Error ? error.message : t('memoryModelActivateFailed'))
     } finally {
@@ -488,11 +494,7 @@ export function SettingsPage() {
         memory_model_id: current.memory_model_id ?? null,
         eval_judge_model_id: already ? null : model.id,
       })
-      message.success(
-        already
-          ? t('evalJudgeModelCleared', { name: model.name })
-          : t('evalJudgeModelActivated', { name: model.name }),
-      )
+      message.success(already ? t('evalJudgeModelCleared', { name: model.name }) : t('evalJudgeModelActivated', { name: model.name }))
     } catch (error) {
       message.error(error instanceof Error ? error.message : t('evalJudgeModelActivateFailed'))
     } finally {
@@ -538,9 +540,7 @@ export function SettingsPage() {
     let active_model_id = current.active_model_id
     if (active_model_id === model.id) {
       const next =
-        remaining.find((item) => item.enabled && item.configured !== false) ??
-        remaining.find((item) => item.enabled) ??
-        remaining[0]
+        remaining.find((item) => item.enabled && item.configured !== false) ?? remaining.find((item) => item.enabled) ?? remaining[0]
       active_model_id = next.id
     }
     let memory_model_id = current.memory_model_id ?? null
@@ -629,103 +629,110 @@ export function SettingsPage() {
           title: t('colEnabled'),
           dataIndex: 'enabled',
           width: 110,
-          render: (value, row) => (
-            <Switch
-              checked={value}
-              loading={updatingId === row.id}
-              onChange={(checked) => void setEnabled(row, checked)}
-              aria-label={`${row.name} enabled`}
-            />
-          ),
+          render: (value, row) =>
+            canManageModels ? (
+              <Switch
+                checked={value}
+                loading={updatingId === row.id}
+                onChange={(checked) => void setEnabled(row, checked)}
+                aria-label={`${row.name} enabled`}
+              />
+            ) : (
+              <Tag color={value ? 'success' : 'default'}>{value ? t('common:enabled') : t('common:disabled')}</Tag>
+            ),
         },
-        {
-          title: t('colActions'),
-          width: 260,
-          render: (_, row) => {
-            const isActive = models.data?.active_model_id === row.id
-            const isMemory = models.data?.memory_model_id === row.id
-            const isEvalJudge = models.data?.eval_judge_model_id === row.id
-            const pinDisabled = !row.enabled || row.configured === false
-            return (
-            <Space>
-              <Tooltip title={t('testConnection')}>
-                <Button
-                  icon={<ApiOutlined />}
-                  loading={testingId === row.id}
-                  aria-label={t('testConnectionNamed', { name: row.name })}
-                  onClick={() => void runConnectivityTest(row)}
-                />
-              </Tooltip>
-              <Tooltip title={t('editModel')}>
-                <Button icon={<EditOutlined />} aria-label={t('editModelNamed', { name: row.name })} onClick={() => openEditor(row)} />
-              </Tooltip>
-              <Tooltip title={isActive ? t('currentModel') : t('setCurrentModel')}>
-                <Button
-                  icon={<CheckCircleOutlined />}
-                  type={isActive ? 'primary' : 'default'}
-                  ghost={isActive}
-                  loading={updatingId === row.id}
-                  aria-label={t('setCurrentModelNamed', { name: row.name })}
-                  onClick={() => void setActiveModel(row)}
-                />
-              </Tooltip>
-              <Tooltip title={isMemory ? t('memoryModelCurrent') : t('setMemoryModel')}>
-                <Button
-                  icon={<DatabaseOutlined />}
-                  type={isMemory ? 'primary' : 'default'}
-                  ghost={isMemory}
-                  loading={updatingId === row.id}
-                  disabled={pinDisabled}
-                  aria-label={t('setMemoryModelNamed', { name: row.name })}
-                  onClick={() => void setMemoryModel(row)}
-                />
-              </Tooltip>
-              <Tooltip title={isEvalJudge ? t('evalJudgeModelCurrent') : t('setEvalJudgeModel')}>
-                <Button
-                  icon={<AuditOutlined />}
-                  type={isEvalJudge ? 'primary' : 'default'}
-                  ghost={isEvalJudge}
-                  loading={updatingId === row.id}
-                  disabled={pinDisabled}
-                  aria-label={t('setEvalJudgeModelNamed', { name: row.name })}
-                  onClick={() => void setEvalJudgeModel(row)}
-                />
-              </Tooltip>
-              <Tooltip
-                title={
-                  row.builtin
-                    ? t('cannotDeleteBuiltin')
-                    : (models.data?.models.length ?? 0) <= 1
-                      ? t('cannotDeleteLastModel')
-                      : t('deleteModel')
-                }
-              >
-                <Popconfirm
-                  title={t('deleteModelConfirm', { name: row.name })}
-                  description={
-                    models.data?.active_model_id === row.id
-                      ? t('deleteActiveModelHint')
-                      : undefined
-                  }
-                  okText={t('deleteModel')}
-                  cancelText={t('common:cancel')}
-                  okButtonProps={{ danger: true }}
-                  disabled={row.builtin || (models.data?.models.length ?? 0) <= 1}
-                  onConfirm={() => void deleteModel(row)}
-                >
-                  <Button
-                    danger
-                    icon={<DeleteOutlined />}
-                    disabled={row.builtin || (models.data?.models.length ?? 0) <= 1}
-                    loading={updatingId === row.id}
-                    aria-label={t('deleteModelNamed', { name: row.name })}
-                  />
-                </Popconfirm>
-              </Tooltip>
-            </Space>
-            )
-          },
-        },
+        ...(canManageModels
+          ? [
+              {
+                title: t('colActions'),
+                width: 260,
+                render: (_: unknown, row: ModelConfig) => {
+                  const isActive = models.data?.active_model_id === row.id
+                  const isMemory = models.data?.memory_model_id === row.id
+                  const isEvalJudge = models.data?.eval_judge_model_id === row.id
+                  const pinDisabled = !row.enabled || row.configured === false
+                  return (
+                    <Space>
+                      <Tooltip title={t('testConnection')}>
+                        <Button
+                          icon={<ApiOutlined />}
+                          loading={testingId === row.id}
+                          aria-label={t('testConnectionNamed', { name: row.name })}
+                          onClick={() => void runConnectivityTest(row)}
+                        />
+                      </Tooltip>
+                      <Tooltip title={t('editModel')}>
+                        <Button
+                          icon={<EditOutlined />}
+                          aria-label={t('editModelNamed', { name: row.name })}
+                          onClick={() => openEditor(row)}
+                        />
+                      </Tooltip>
+                      <Tooltip title={isActive ? t('currentModel') : t('setCurrentModel')}>
+                        <Button
+                          icon={<CheckCircleOutlined />}
+                          type={isActive ? 'primary' : 'default'}
+                          ghost={isActive}
+                          loading={updatingId === row.id}
+                          aria-label={t('setCurrentModelNamed', { name: row.name })}
+                          onClick={() => void setActiveModel(row)}
+                        />
+                      </Tooltip>
+                      <Tooltip title={isMemory ? t('memoryModelCurrent') : t('setMemoryModel')}>
+                        <Button
+                          icon={<DatabaseOutlined />}
+                          type={isMemory ? 'primary' : 'default'}
+                          ghost={isMemory}
+                          loading={updatingId === row.id}
+                          disabled={pinDisabled}
+                          aria-label={t('setMemoryModelNamed', { name: row.name })}
+                          onClick={() => void setMemoryModel(row)}
+                        />
+                      </Tooltip>
+                      <Tooltip title={isEvalJudge ? t('evalJudgeModelCurrent') : t('setEvalJudgeModel')}>
+                        <Button
+                          icon={<AuditOutlined />}
+                          type={isEvalJudge ? 'primary' : 'default'}
+                          ghost={isEvalJudge}
+                          loading={updatingId === row.id}
+                          disabled={pinDisabled}
+                          aria-label={t('setEvalJudgeModelNamed', { name: row.name })}
+                          onClick={() => void setEvalJudgeModel(row)}
+                        />
+                      </Tooltip>
+                      <Tooltip
+                        title={
+                          row.builtin
+                            ? t('cannotDeleteBuiltin')
+                            : (models.data?.models.length ?? 0) <= 1
+                              ? t('cannotDeleteLastModel')
+                              : t('deleteModel')
+                        }
+                      >
+                        <Popconfirm
+                          title={t('deleteModelConfirm', { name: row.name })}
+                          description={models.data?.active_model_id === row.id ? t('deleteActiveModelHint') : undefined}
+                          okText={t('deleteModel')}
+                          cancelText={t('common:cancel')}
+                          okButtonProps={{ danger: true }}
+                          disabled={row.builtin || (models.data?.models.length ?? 0) <= 1}
+                          onConfirm={() => void deleteModel(row)}
+                        >
+                          <Button
+                            danger
+                            icon={<DeleteOutlined />}
+                            disabled={row.builtin || (models.data?.models.length ?? 0) <= 1}
+                            loading={updatingId === row.id}
+                            aria-label={t('deleteModelNamed', { name: row.name })}
+                          />
+                        </Popconfirm>
+                      </Tooltip>
+                    </Space>
+                  )
+                },
+              },
+            ]
+          : []),
       ]}
     />
   )
@@ -1082,100 +1089,97 @@ export function SettingsPage() {
     } as ChatSettings)
   }
 
-  const renderChatSettingTable = (
-    rows: ChatSettingRow[],
-    options: { saving: boolean; onResetField: (field: ChatField) => void },
-  ) => {
+  const renderChatSettingTable = (rows: ChatSettingRow[], options: { saving: boolean; onResetField: (field: ChatField) => void }) => {
     const { saving: isSaving, onResetField } = options
     return (
-    <Table<ChatSettingRow>
-      rowKey="key"
-      size="middle"
-      loading={chatSettings.isLoading}
-      pagination={false}
-      tableLayout="auto"
-      style={{ width: '100%' }}
-      dataSource={rows}
-      columns={[
-        {
-          title: t('colParameter'),
-          dataIndex: 'parameter',
-          width: '22%',
-          render: (value: string) => <Typography.Text strong>{value}</Typography.Text>,
-        },
-        {
-          title: t('colDescription'),
-          dataIndex: 'description',
-          render: (value: string) => (
-            <Typography.Text type="secondary" className="settings-param-description">
-              {value}
-            </Typography.Text>
-          ),
-        },
-        {
-          title: t('colValue'),
-          dataIndex: 'field',
-          width: 260,
-          render: (_field, row) => {
-            if (row.control === 'memory_mode') {
+      <Table<ChatSettingRow>
+        rowKey="key"
+        size="middle"
+        loading={chatSettings.isLoading}
+        pagination={false}
+        tableLayout="auto"
+        style={{ width: '100%' }}
+        dataSource={rows}
+        columns={[
+          {
+            title: t('colParameter'),
+            dataIndex: 'parameter',
+            width: '22%',
+            render: (value: string) => <Typography.Text strong>{value}</Typography.Text>,
+          },
+          {
+            title: t('colDescription'),
+            dataIndex: 'description',
+            render: (value: string) => (
+              <Typography.Text type="secondary" className="settings-param-description">
+                {value}
+              </Typography.Text>
+            ),
+          },
+          {
+            title: t('colValue'),
+            dataIndex: 'field',
+            width: 260,
+            render: (_field, row) => {
+              if (row.control === 'memory_mode') {
+                return (
+                  <Form.Item name="memory_mode" noStyle>
+                    <Radio.Group
+                      optionType="button"
+                      buttonStyle="solid"
+                      size="small"
+                      aria-label={String(row.field)}
+                      options={[
+                        { value: 'off', label: t('memoryModeOff') },
+                        { value: 'automatic', label: t('memoryModeAutomatic') },
+                        { value: 'agentic', label: t('memoryModeAgentic') },
+                      ]}
+                    />
+                  </Form.Item>
+                )
+              }
+              if (row.control === 'switch') {
+                return (
+                  <Form.Item name={row.field} noStyle valuePropName="checked">
+                    <Switch aria-label={String(row.field)} />
+                  </Form.Item>
+                )
+              }
               return (
-                <Form.Item name="memory_mode" noStyle>
-                  <Radio.Group
-                    optionType="button"
-                    buttonStyle="solid"
-                    size="small"
-                    aria-label={String(row.field)}
-                    options={[
-                      { value: 'off', label: t('memoryModeOff') },
-                      { value: 'automatic', label: t('memoryModeAutomatic') },
-                      { value: 'agentic', label: t('memoryModeAgentic') },
-                    ]}
+                <Form.Item name={row.field} noStyle>
+                  <InputNumber
+                    min={row.min}
+                    max={row.max}
+                    step={1}
+                    style={{ width: '100%' }}
+                    placeholder={row.control === 'optional_number' ? '—' : undefined}
                   />
                 </Form.Item>
               )
-            }
-            if (row.control === 'switch') {
-              return (
-                <Form.Item name={row.field} noStyle valuePropName="checked">
-                  <Switch aria-label={String(row.field)} />
-                </Form.Item>
-              )
-            }
-            return (
-              <Form.Item name={row.field} noStyle>
-                <InputNumber
-                  min={row.min}
-                  max={row.max}
-                  step={1}
-                  style={{ width: '100%' }}
-                  placeholder={row.control === 'optional_number' ? '—' : undefined}
-                />
-              </Form.Item>
-            )
+            },
           },
-        },
-        {
-          title: t('colReset'),
-          key: 'reset',
-          width: 88,
-          align: 'center',
-          render: (_value, row) => (
-            <div className="settings-param-row-reset">
-              <Tooltip title={t('resetFieldDefault')}>
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<UndoOutlined />}
-                  aria-label={t('resetFieldDefaultNamed', { name: row.parameter })}
-                  disabled={chatSettings.isLoading || isSaving}
-                  onClick={() => onResetField(row.field)}
-                />
-              </Tooltip>
-            </div>
-          ),
-        },
-      ]}
-    />
+          {
+            title: t('colReset'),
+            key: 'reset',
+            width: 88,
+            align: 'center',
+            render: (_value, row) => (
+              <div className="settings-param-row-reset">
+                <Tooltip title={t('resetFieldDefault')}>
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<UndoOutlined />}
+                    aria-label={t('resetFieldDefaultNamed', { name: row.parameter })}
+                    disabled={chatSettings.isLoading || isSaving}
+                    onClick={() => onResetField(row.field)}
+                  />
+                </Tooltip>
+              </div>
+            ),
+          },
+        ]}
+      />
     )
   }
 
@@ -1322,14 +1326,14 @@ export function SettingsPage() {
             title: t('colRole'),
             dataIndex: 'role',
             width: 200,
-            render: (value: string | undefined, row) => (
-              <Select
+            render: (_value: string | undefined, row) => (
+              <Select<UserRole>
                 size="small"
                 style={{ width: '100%' }}
-                value={value || 'user'}
-                options={roleOptions.length ? roleOptions : [{ value: value || 'user', label: roleLabel(value || 'user') }]}
-                loading={roleUpdatingId === row.id}
-                disabled={Boolean(row.is_superuser) && (value || 'user') === 'admin'}
+                value={roleOf(row)}
+                options={roleOptions}
+                loading={rolePresetsQuery.isLoading || roleUpdatingId === row.id}
+                disabled={Boolean(row.is_superuser) && roleOf(row) === 'admin'}
                 onChange={(role) => void updateUserRole(row, role)}
               />
             ),
@@ -1344,7 +1348,6 @@ export function SettingsPage() {
       />
     </div>
   )
-
 
   const knowledgeSearchTypeOptions = [
     { value: 'hybrid', label: 'hybrid' },
@@ -1364,78 +1367,79 @@ export function SettingsPage() {
     | 'rerank_min_candidates'
     | 'rerank_model'
 
-  const knowledgeSettingRows: Array<SettingRow & { field: KnowledgeField; control: 'select' | 'number' | 'switch' | 'text' | 'readonly' }> = [
-    {
-      key: 'search_type',
-      field: 'search_type',
-      parameter: t('searchTypeLabel'),
-      description: t('searchTypeDesc'),
-      control: 'select',
-    },
-    {
-      key: 'top_k',
-      field: 'top_k',
-      parameter: t('topKLabel'),
-      description: t('topKDesc'),
-      control: 'number',
-    },
-    {
-      key: 'vector_score_weight',
-      field: 'vector_score_weight',
-      parameter: t('vectorScoreWeightLabel'),
-      description: t('vectorScoreWeightDesc'),
-      control: 'number',
-    },
-    {
-      key: 'similarity_threshold',
-      field: 'similarity_threshold',
-      parameter: t('similarityThresholdLabel'),
-      description: t('similarityThresholdDesc'),
-      control: 'number',
-    },
-    {
-      key: 'content_language',
-      field: 'content_language',
-      parameter: t('contentLanguageLabel'),
-      description: t('contentLanguageDesc'),
-      control: 'text',
-    },
-    {
-      key: 'prefix_match',
-      field: 'prefix_match',
-      parameter: t('prefixMatchLabel'),
-      description: t('prefixMatchDesc'),
-      control: 'switch',
-    },
-    {
-      key: 'rerank_enabled',
-      field: 'rerank_enabled',
-      parameter: t('rerankEnabledLabel'),
-      description: t('rerankEnabledDesc'),
-      control: 'switch',
-    },
-    {
-      key: 'rerank_candidate_multiplier',
-      field: 'rerank_candidate_multiplier',
-      parameter: t('rerankMultiplierLabel'),
-      description: t('rerankMultiplierDesc'),
-      control: 'number',
-    },
-    {
-      key: 'rerank_min_candidates',
-      field: 'rerank_min_candidates',
-      parameter: t('rerankMinCandidatesLabel'),
-      description: t('rerankMinCandidatesDesc'),
-      control: 'number',
-    },
-    {
-      key: 'rerank_model',
-      field: 'rerank_model',
-      parameter: t('rerankModelLabel'),
-      description: t('rerankModelDesc'),
-      control: 'readonly',
-    },
-  ]
+  const knowledgeSettingRows: Array<SettingRow & { field: KnowledgeField; control: 'select' | 'number' | 'switch' | 'text' | 'readonly' }> =
+    [
+      {
+        key: 'search_type',
+        field: 'search_type',
+        parameter: t('searchTypeLabel'),
+        description: t('searchTypeDesc'),
+        control: 'select',
+      },
+      {
+        key: 'top_k',
+        field: 'top_k',
+        parameter: t('topKLabel'),
+        description: t('topKDesc'),
+        control: 'number',
+      },
+      {
+        key: 'vector_score_weight',
+        field: 'vector_score_weight',
+        parameter: t('vectorScoreWeightLabel'),
+        description: t('vectorScoreWeightDesc'),
+        control: 'number',
+      },
+      {
+        key: 'similarity_threshold',
+        field: 'similarity_threshold',
+        parameter: t('similarityThresholdLabel'),
+        description: t('similarityThresholdDesc'),
+        control: 'number',
+      },
+      {
+        key: 'content_language',
+        field: 'content_language',
+        parameter: t('contentLanguageLabel'),
+        description: t('contentLanguageDesc'),
+        control: 'text',
+      },
+      {
+        key: 'prefix_match',
+        field: 'prefix_match',
+        parameter: t('prefixMatchLabel'),
+        description: t('prefixMatchDesc'),
+        control: 'switch',
+      },
+      {
+        key: 'rerank_enabled',
+        field: 'rerank_enabled',
+        parameter: t('rerankEnabledLabel'),
+        description: t('rerankEnabledDesc'),
+        control: 'switch',
+      },
+      {
+        key: 'rerank_candidate_multiplier',
+        field: 'rerank_candidate_multiplier',
+        parameter: t('rerankMultiplierLabel'),
+        description: t('rerankMultiplierDesc'),
+        control: 'number',
+      },
+      {
+        key: 'rerank_min_candidates',
+        field: 'rerank_min_candidates',
+        parameter: t('rerankMinCandidatesLabel'),
+        description: t('rerankMinCandidatesDesc'),
+        control: 'number',
+      },
+      {
+        key: 'rerank_model',
+        field: 'rerank_model',
+        parameter: t('rerankModelLabel'),
+        description: t('rerankModelDesc'),
+        control: 'readonly',
+      },
+    ]
 
   type GuardrailField = keyof GuardrailSettings
   const guardrailSettingRows: Array<{
@@ -1561,11 +1565,7 @@ export function SettingsPage() {
               onConfirm={() => void resetGuardrailsToDefaults()}
               disabled={guardrailSettings.isLoading || guardrailSaving}
             >
-              <Button
-                icon={<UndoOutlined />}
-                loading={guardrailSaving}
-                disabled={guardrailSettings.isLoading}
-              >
+              <Button icon={<UndoOutlined />} loading={guardrailSaving} disabled={guardrailSettings.isLoading}>
                 {t('resetDefaults')}
               </Button>
             </Popconfirm>
@@ -1636,11 +1636,7 @@ export function SettingsPage() {
                   )
                 }
                 if (row.control === 'readonly') {
-                  return (
-                    <Typography.Text type="secondary">
-                      {knowledgeRagSettings.data?.rerank_model || '—'}
-                    </Typography.Text>
-                  )
+                  return <Typography.Text type="secondary">{knowledgeRagSettings.data?.rerank_model || '—'}</Typography.Text>
                 }
                 const numberProps =
                   row.field === 'top_k'
@@ -1675,11 +1671,7 @@ export function SettingsPage() {
                         icon={<UndoOutlined />}
                         aria-label={t('resetFieldDefaultNamed', { name: row.parameter })}
                         disabled={knowledgeRagSettings.isLoading || knowledgeSaving}
-                        onClick={() =>
-                          void resetKnowledgeFieldToDefault(
-                            row.field as Exclude<keyof KnowledgeRagSettings, 'rerank_model'>,
-                          )
-                        }
+                        onClick={() => void resetKnowledgeFieldToDefault(row.field as Exclude<keyof KnowledgeRagSettings, 'rerank_model'>)}
                       />
                     </Tooltip>
                   </div>
@@ -1701,11 +1693,7 @@ export function SettingsPage() {
               onConfirm={() => void resetKnowledgeToDefaults()}
               disabled={knowledgeRagSettings.isLoading || knowledgeSaving}
             >
-              <Button
-                icon={<UndoOutlined />}
-                loading={knowledgeSaving}
-                disabled={knowledgeRagSettings.isLoading}
-              >
+              <Button icon={<UndoOutlined />} loading={knowledgeSaving} disabled={knowledgeRagSettings.isLoading}>
                 {t('resetDefaults')}
               </Button>
             </Popconfirm>
@@ -1756,9 +1744,7 @@ export function SettingsPage() {
                 checked={cveSourceEnabled[row.source] ?? enabled}
                 disabled={cveSourceSettings.isLoading || cveSourceSaving}
                 aria-label={t('cveSourceEnabledNamed', { name: cveSourceLabel(row.source) })}
-                onChange={(checked) =>
-                  setCveSourceEnabled((current) => ({ ...current, [row.source]: checked }))
-                }
+                onChange={(checked) => setCveSourceEnabled((current) => ({ ...current, [row.source]: checked }))}
               />
             ),
           },
@@ -1803,11 +1789,7 @@ export function SettingsPage() {
             onConfirm={() => void clearFeishuWebhook()}
             disabled={!notificationSettings.data?.feishu_webhook_configured}
           >
-            <Button
-              danger
-              loading={notificationSaving}
-              disabled={!notificationSettings.data?.feishu_webhook_configured}
-            >
+            <Button danger loading={notificationSaving} disabled={!notificationSettings.data?.feishu_webhook_configured}>
               {t('clearFeishuWebhook')}
             </Button>
           </Popconfirm>
@@ -1825,7 +1807,7 @@ export function SettingsPage() {
           onChange={setActiveTab}
           destroyOnHidden
           tabBarExtraContent={
-            activeTab === 'models' ? (
+            activeTab === 'models' && canManageModels ? (
               <Button type="primary" icon={<PlusOutlined />} onClick={addModel}>
                 {t('addModel')}
               </Button>

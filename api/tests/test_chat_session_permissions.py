@@ -10,7 +10,6 @@ from starlette.requests import Request
 
 from api.auth.ownership import assert_owned_resource
 from api.routes import chat
-from api.tests.route_fakes import route_dependency
 import pytest
 
 
@@ -49,15 +48,6 @@ def test_owned_resource_hides_foreign_resource():
 def test_admin_can_access_foreign_resource():
     admin = SimpleNamespace(id="admin", role="admin", is_superuser=False)
     assert_owned_resource(admin, owner_user_id="u2", resource_name="Session")
-
-
-def test_chat_write_route_rejects_guest_actor():
-    dependency = route_dependency(chat.router, "chat_agent")
-
-    with pytest.raises(HTTPException) as exc:
-        dependency(user=actor("g1", "guest"))
-
-    assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio

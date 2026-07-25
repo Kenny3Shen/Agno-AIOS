@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from loguru import logger
 from pydantic import BaseModel, Field, model_validator
 
-from api.auth.claims import actor_id, actor_role
+from api.auth.claims import ADMIN_SCOPE, actor_id, actor_role
 from api.auth.models import User
 from api.auth.scopes import require_scope
 from api.auth.users import current_active_user
@@ -99,7 +99,7 @@ async def resolve_submission_approval_request(
     approval_id: str,
     body: SubmissionApprovalResolveRequest,
     request: Request,
-    user: User = Depends(require_scope("approvals:write")),
+    user: User = Depends(require_scope(ADMIN_SCOPE)),
 ):
     approval = await resolve_submission_approval(
         approval_id,
@@ -121,6 +121,15 @@ async def resolve_submission_approval_request(
         request,
     )
     return approval
+
+
+def _ensure_hitl_approval_owner(approval: Mapping[str, object], user: User) -> None:
+    """Allow a normal user to act only on their own HITL approval."""
+    if actor_role(user) == "admin":
+        return
+    if str(approval.get("user_id") or "") != actor_id(user):
+        # A 404 avoids confirming another user's approval id.
+        raise HTTPException(status_code=404, detail="Approval not found")
 
 
 @router.get("/submissions/{approval_id}/skill-preview")
@@ -236,6 +245,10 @@ async def resolve_approval(
     user: User = Depends(require_scope("approvals:write")),
 ):
     try:
+        existing = await get_approval_record(approval_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Approval not found")
+        _ensure_hitl_approval_owner(existing, user)
         resolution_data = dict(body.resolution_data or {})
         if body.status == "rejected":
             reason = (body.rejection_reason or "").strip()
@@ -247,6 +260,8 @@ async def resolve_approval(
             resolved_by=_resolver_id(user),
             resolution_data=resolution_data or None,
         )
+    except HTTPException:
+        raise
     except ApprovalResolveConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
@@ -300,6 +315,7 @@ async def retry_approval_resume(
     approval = await get_approval_record(approval_id)
     if approval is None:
         raise HTTPException(status_code=404, detail="Approval not found")
+    _ensure_hitl_approval_owner(approval, user)
     if not _is_security_chat_approval(approval):
         raise HTTPException(status_code=400, detail="Approval is not a resumable security chat run")
     if approval.get("status") not in {"approved", "rejected"}:
