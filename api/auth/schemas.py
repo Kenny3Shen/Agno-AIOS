@@ -3,7 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi_users import schemas
-from pydantic import ConfigDict, computed_field, field_validator, model_validator
+from pydantic import ConfigDict, EmailStr, computed_field, field_validator, model_validator
 
 from api.auth.claims import Role, normalize_role, scope_claims
 
@@ -28,13 +28,17 @@ class UserRead(schemas.BaseUser[UUID]):
         return scope_claims(self).scopes
 
 
-class UserCreate(schemas.BaseUserCreate):
+class UserCreate(schemas.CreateUpdateDictModel):
     """Public registration payload without product-role assignment."""
 
+    email: EmailStr
+    password: str
     model_config = ConfigDict(extra="forbid")
 
 
-class UserUpdate(schemas.BaseUserUpdate):
+class UserUpdate(schemas.CreateUpdateDictModel):
     """Public profile update payload without product-role assignment."""
 
+    email: EmailStr | None = None
+    password: str | None = None
     model_config = ConfigDict(extra="forbid")

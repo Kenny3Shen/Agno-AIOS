@@ -187,6 +187,51 @@ describe('model settings editor', () => {
     expect(screen.queryByText('访客')).toBeNull()
   })
 
+  it('locks only the current administrator role selector', async () => {
+    mockSettings()
+    server.use(
+      http.get('/api/auth/admin/users', () =>
+        HttpResponse.json({
+          data: [
+            {
+              id: 'admin-1',
+              email: 'admin@example.com',
+              role: 'admin',
+              is_active: true,
+              is_superuser: true,
+            },
+            {
+              id: 'admin-2',
+              email: 'other-admin@example.com',
+              role: 'admin',
+              is_active: true,
+              is_superuser: true,
+            },
+          ],
+          meta: { page: 1, limit: 100, total_count: 2, total_pages: 1 },
+        })
+      ),
+      http.get('/api/auth/roles', () =>
+        HttpResponse.json({
+          data: [
+            { role: 'admin', scopes: ['agent_os:admin'] },
+            { role: 'user', scopes: ['sessions:write'] },
+          ],
+        })
+      )
+    )
+    renderWithQuery(<SettingsPage />)
+
+    const usersTab = (await screen.findByText('用户管理')).closest('[role="tab"]')
+    expect(usersTab).toBeTruthy()
+    fireEvent.click(usersTab!)
+
+    const roleSelects = await screen.findAllByRole('combobox')
+    expect(roleSelects).toHaveLength(2)
+    expect(roleSelects[0].getAttribute('disabled')).not.toBeNull()
+    expect(roleSelects[1].getAttribute('disabled')).toBeNull()
+  })
+
   it('keeps model connections read-only for users without config:write', async () => {
     mockSettings({
       id: 'user-1',

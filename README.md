@@ -66,7 +66,7 @@ TAIS_BOOTSTRAP_ADMIN_EMAIL=admin@example.com
 TAIS_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
 ```
 
-产品角色仅保留：`admin` / `user`。管理员在设置页「用户管理」分配；`user` 覆盖日常工作台操作，`admin` 保留系统级控制。JWT 含 `role`+`scopes`，改角色后需重新登录；升级时 Alembic 会将历史专属角色归并为 `user`。
+产品角色仅保留：`admin` / `user`。管理员在设置页「用户管理」分配；`user` 覆盖日常工作台操作，`admin` 保留系统级控制。JWT 含 `role`+`scopes`+账户授权版本；改角色会立即使目标账户的旧 token 失效。升级时 Alembic 会将历史专属角色归并为 `user`。
 
 控制面表结构由 Alembic 管理：发布前执行 `uv run alembic upgrade head`。环境变量、Jobs Worker、模型策略与生产校验见 [配置与运维](./docs/operations.md)。
 

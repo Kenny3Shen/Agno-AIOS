@@ -111,6 +111,21 @@ def _simplify_rbac_roles_revision() -> ModuleType:
     return module
 
 
+def _user_auth_versions_revision() -> ModuleType:
+    revision_path = (
+        Path(__file__).resolve().parents[2]
+        / "alembic"
+        / "versions"
+        / "20260726_0030_user_auth_versions.py"
+    )
+    spec = spec_from_file_location("user_auth_versions_revision", revision_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_fresh_baseline_does_not_include_future_control_plane_schema() -> None:
     """Keep the initial revision frozen before the first later table migration.
 
@@ -467,6 +482,57 @@ def test_simplify_rbac_roles_migration_canonicalizes_active_account_and_job_stat
     assert "'false'::jsonb" in sql
     assert "admin" in executed[0].compile(dialect=postgresql.dialect()).params.values()
     assert "knowledge_ingest" in str(executed[3].compile(dialect=postgresql.dialect()).params)
+
+
+def test_user_auth_version_migration_canonicalizes_admin_state_and_adds_guards(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    revision = _user_auth_versions_revision()
+    added: list[tuple[str, Any]] = []
+    executed: list[str] = []
+    constraints: list[tuple[str, str, str]] = []
+    dropped_constraints: list[tuple[str, str]] = []
+    removed: list[tuple[str, str]] = []
+
+    class Operations:
+        def add_column(self, table: str, column: Any) -> None:
+            added.append((table, column))
+
+        def execute(self, statement: str) -> None:
+            executed.append(statement)
+
+        def create_check_constraint(self, name: str, table: str, condition: str) -> None:
+            constraints.append((name, table, condition))
+
+        def drop_constraint(self, name: str, table: str) -> None:
+            dropped_constraints.append((name, table))
+
+        def drop_column(self, table: str, column: str) -> None:
+            removed.append((table, column))
+
+    monkeypatch.setattr(revision, "op", Operations())
+
+    revision.upgrade()
+
+    assert revision.down_revision == "20260725_0029"
+    assert [(table, column.name) for table, column in added] == [("user", "auth_version")]
+    assert getattr(added[0][1], "nullable") is False
+    assert "UPDATE \"user\"" in executed[0]
+    assert "lower(trim(role)) = 'admin'" in executed[0]
+    assert constraints == [
+        ("ck_user_role", "user", "role IN ('admin', 'user')"),
+        ("ck_user_role_matches_superuser", "user", "is_superuser = (role = 'admin')"),
+        ("ck_user_auth_version", "user", "auth_version >= 1"),
+    ]
+
+    revision.downgrade()
+
+    assert dropped_constraints == [
+        ("ck_user_auth_version", "user"),
+        ("ck_user_role_matches_superuser", "user"),
+        ("ck_user_role", "user"),
+    ]
+    assert removed == [("user", "auth_version")]
 
 
 class _RevisionConnection:

@@ -251,10 +251,6 @@ export function SettingsPage() {
   }))
 
   const updateUserRole = async (row: AuthUser, role: UserRole) => {
-    if (row.is_superuser && role !== 'admin') {
-      message.warning(t('cannotDemoteSuperuser'))
-      return
-    }
     setRoleUpdatingId(row.id)
     try {
       await setUserRole(row.id, role)
@@ -1333,7 +1329,8 @@ export function SettingsPage() {
                 value={roleOf(row)}
                 options={roleOptions}
                 loading={rolePresetsQuery.isLoading || roleUpdatingId === row.id}
-                disabled={Boolean(row.is_superuser) && roleOf(row) === 'admin'}
+                disabled={row.id === currentUser.data?.id}
+                title={row.id === currentUser.data?.id ? t('cannotChangeOwnRole') : undefined}
                 onChange={(role) => void updateUserRole(row, role)}
               />
             ),

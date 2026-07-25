@@ -1,20 +1,28 @@
 from __future__ import annotations
 
+from typing import cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi_users import schemas as fastapi_users_schemas
 from httpx_oauth.clients.github import GitHubOAuth2
 from httpx_oauth.clients.google import GoogleOAuth2
 from httpx_oauth.clients.microsoft import MicrosoftGraphOAuth2
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, or_, select, text
 
-from api.auth.claims import ADMIN_SCOPE, ROLE_SCOPES, Role, normalize_role
+from api.auth.claims import (
+    ADMIN_SCOPE,
+    ROLE_SCOPES,
+    Role,
+    normalize_actor_role,
+)
 from api.auth.database import async_session_maker
 from api.auth.models import User
 from api.auth.models import User as AuthUser
 from api.auth.schemas import UserCreate, UserRead, UserUpdate
 from api.auth.scopes import require_scope
+from api.auth.token_version import next_authorization_version
 from api.auth.users import auth_backend, current_active_user, fastapi_users
 from api.config import get_settings
 from api.services.audit_service import audit_request_context, record_audit_event_async
@@ -28,10 +36,20 @@ router.include_router(
     prefix="/jwt",
 )
 router.include_router(
-    fastapi_users.get_register_router(UserRead, UserCreate),
+    fastapi_users.get_register_router(
+        UserRead,
+        # FastAPI Users constrains this generic to its broad built-in DTO;
+        # this narrower public DTO intentionally omits elevated fields.
+        cast(type[fastapi_users_schemas.BaseUserCreate], UserCreate),
+    ),
 )
 router.include_router(
-    fastapi_users.get_users_router(UserRead, UserUpdate),
+    fastapi_users.get_users_router(
+        UserRead,
+        # See the registration schema above: runtime behavior is compatible,
+        # but the public OpenAPI DTO deliberately has a smaller field set.
+        cast(type[fastapi_users_schemas.BaseUserUpdate], UserUpdate),
+    ),
     prefix="/users",
 )
 
@@ -119,6 +137,33 @@ class AdminRoleUpdate(BaseModel):
     role: Role
 
 
+def _is_admin_account(user: AuthUser) -> bool:
+    return normalize_actor_role(
+        user.role,
+        is_superuser=bool(user.is_superuser),
+    ) == "admin"
+
+
+async def _lock_role_changes(session) -> None:
+    """Serialize role updates so two demotions cannot remove every admin."""
+    await session.execute(text("SELECT pg_advisory_xact_lock(hashtext('tais:auth-role-change'))"))
+
+
+async def _active_admin_count(session) -> int:
+    count = await session.scalar(
+        select(func.count())
+        .select_from(AuthUser)
+        .where(
+            cast(ColumnElement[bool], AuthUser.is_active).is_(True),
+            or_(
+                cast(ColumnElement[bool], AuthUser.is_superuser).is_(True),
+                func.lower(func.trim(AuthUser.role)) == "admin",
+            ),
+        )
+    )
+    return int(count or 0)
+
+
 @router.get("/admin/users", name="users:list")
 async def list_users_for_admin(
     page: int = 1,
@@ -153,20 +198,35 @@ async def set_user_role(
     request: Request,
     admin: User = Depends(require_scope(ADMIN_SCOPE)),
 ):
-    """Assign a product role preset to a user (admin only)."""
+    """Atomically assign access level and revoke the target's old JWTs."""
     async with async_session_maker() as session:
-        row = await session.get(AuthUser, user_id)
+        await _lock_role_changes(session)
+        row = await session.get(AuthUser, user_id, with_for_update=True)
         if row is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-        if row.is_superuser and body.role != "admin":
+        if str(row.id) == str(admin.id):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot demote a superuser via role preset; clear superuser first.",
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Administrators cannot change their own access level.",
             )
-        previous = normalize_role(row.role)
+
+        previous = normalize_actor_role(row.role, is_superuser=bool(row.is_superuser))
+        target_is_admin = body.role == "admin"
+        stored_role = str(row.role or "").strip().lower()
+        changed = stored_role != body.role or bool(row.is_superuser) != target_is_admin
+        if not changed:
+            return UserRead.model_validate(row)
+
+        if _is_admin_account(row) and not target_is_admin and bool(row.is_active):
+            if await _active_admin_count(session) <= 1:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Cannot demote the last active administrator.",
+                )
+
         row.role = body.role
-        if body.role == "admin":
-            row.is_superuser = True
+        row.is_superuser = target_is_admin
+        row.auth_version = next_authorization_version(getattr(row, "auth_version", 1))
         session.add(row)
         await session.commit()
         await session.refresh(row)
@@ -175,7 +235,12 @@ async def set_user_role(
             action="auth.role_update",
             resource_type="user",
             resource_id=str(user_id),
-            metadata={"from": previous, "to": body.role, "email": row.email},
+            metadata={
+                "from": previous,
+                "to": body.role,
+                "email": row.email,
+                "auth_version": row.auth_version,
+            },
             **audit_request_context(request),
         )
         return UserRead.model_validate(row)

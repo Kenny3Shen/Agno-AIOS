@@ -55,7 +55,8 @@ async def bootstrap_admin_user(app_settings: Settings | None = None) -> None:
                     is_active,
                     is_superuser,
                     is_verified,
-                    role
+                    role,
+                    auth_version
                 )
                 VALUES (
                     :id,
@@ -64,14 +65,23 @@ async def bootstrap_admin_user(app_settings: Settings | None = None) -> None:
                     true,
                     true,
                     true,
-                    'admin'
+                    'admin',
+                    1
                 )
                 ON CONFLICT (email) DO UPDATE
                 SET hashed_password = EXCLUDED.hashed_password,
                     is_active = true,
                     is_superuser = true,
                     is_verified = true,
-                    role = 'admin'
+                    role = 'admin',
+                    auth_version = CASE
+                        WHEN "user".hashed_password IS DISTINCT FROM EXCLUDED.hashed_password
+                            OR "user".role IS DISTINCT FROM 'admin'
+                            OR "user".is_superuser IS DISTINCT FROM true
+                            OR "user".is_active IS DISTINCT FROM true
+                        THEN "user".auth_version + 1
+                        ELSE "user".auth_version
+                    END
                 """
             ),
             {

@@ -30,8 +30,9 @@ async def test_bootstrap_admin_writes_normalized_email_and_hashed_password(monke
     captured: dict[str, object] = {}
 
     class FakeConnection:
-        async def execute(self, _statement, params):
+        async def execute(self, statement, params):
             captured["params"] = params
+            captured["statement"] = str(statement)
 
     class FakeBegin:
         async def __aenter__(self):
@@ -66,3 +67,6 @@ async def test_bootstrap_admin_writes_normalized_email_and_hashed_password(monke
     assert params["email"] == "admin@example.com"
     assert params["hashed_password"] == "hashed:AdminPass123!"
     assert captured["raw_password"] == "AdminPass123!"
+    statement = str(captured["statement"])
+    assert '"user".hashed_password IS DISTINCT FROM EXCLUDED.hashed_password' in statement
+    assert '"user".auth_version + 1' in statement

@@ -17,6 +17,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from api.auth.claims import ADMIN_SCOPE
 from api.auth.database import bootstrap_admin_user, close_auth_engine
 from api.auth.router import router as auth_router
+from api.auth.token_version import UserTokenVersionMiddleware
 from api.config import get_settings
 from api.core.logging import configure_logging_async
 from api.mcp.config import bootstrap_mcp_config
@@ -267,6 +268,11 @@ app.add_middleware(
     excluded_route_paths=JWT_EXCLUDED_ROUTE_PATHS,
     admin_scope=ADMIN_SCOPE,
     user_isolation=True,
+)
+app.add_middleware(
+    UserTokenVersionMiddleware,
+    secret=app_settings.auth_jwt_secret.get_secret_value(),
+    algorithm="HS256",
 )
 app.add_middleware(
     TrustedHostMiddleware,

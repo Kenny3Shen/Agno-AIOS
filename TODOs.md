@@ -1129,6 +1129,7 @@
 - `GET /api/auth/roles` 与 Settings「用户管理」只展示两项；角色变更仍通过管理员专用端点审计 `auth.role_update`。
 - 公共注册/用户更新 schema 不再接收 `role`，避免自行切换权限；superuser 不可直接降级。
 - Alembic 将历史专属角色及 durable worker 快照归并为 `user`；运行时也对遗留/未知角色安全降级。
+- P0 授权生命周期：`admin` 与 `is_superuser` 强一致，禁止自降级与移除最后一名活跃管理员；角色、密码或引导管理员凭据变更都会推进 `auth_version` 并立即拒绝旧 JWT。`rehearse-rbac-migration` 只允许在有备份引用的 PostgreSQL 克隆库演练升级和后置不变量检查。
 
 
 ## 已完成：Chat tools-off 与自动轻量语义分离
