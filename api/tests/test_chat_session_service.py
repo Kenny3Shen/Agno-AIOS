@@ -1,10 +1,14 @@
 """Critical chat session service business tests."""
 
+import json
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from agno.session.agent import AgentSession
 import pytest
+from sqlalchemy import Column, MetaData, String, Table
+from sqlalchemy.dialects.postgresql import JSONB, dialect
 
 from api.services import chat_session_service
 
@@ -43,7 +47,9 @@ class AsyncFakeAgnoDb:
 async def test_list_sessions_filters_archived_by_default():
     async def fake_query(**kwargs):
         assert kwargs["include_archived"] is False
-        return [{"session_id": "active", "metadata": {}, "runs": [], "updated_at": 1}], 1
+        return [
+            {"session_id": "active", "metadata": {}, "runs": [], "updated_at": 1}
+        ], 1
 
     with (
         patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
@@ -97,7 +103,9 @@ async def test_archive_session_updates_agno_session_metadata():
     )
     with (
         patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
-        patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=db),
+        patch.object(
+            chat_session_service, "get_async_agno_postgres_db", return_value=db
+        ),
         patch.object(chat_session_service, "record_audit_event_async"),
     ):
         archived = await chat_session_service.archive_session("s1", user_id="u1")
@@ -130,9 +138,13 @@ async def test_unarchive_session_clears_flags():
     db.upsert_session = AsyncMock()
     with (
         patch.object(
-            chat_session_service, "ensure_agno_postgres_tables_async", new_callable=AsyncMock
+            chat_session_service,
+            "ensure_agno_postgres_tables_async",
+            new_callable=AsyncMock,
         ),
-        patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=db),
+        patch.object(
+            chat_session_service, "get_async_agno_postgres_db", return_value=db
+        ),
     ):
         ok = await chat_session_service.unarchive_session("s1", user_id="u1")
     assert ok
@@ -162,11 +174,411 @@ async def test_session_history_messages_keep_their_session_id():
     )
     with (
         patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
-        patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=db),
+        patch.object(
+            chat_session_service, "get_async_agno_postgres_db", return_value=db
+        ),
     ):
         messages = await chat_session_service.get_session_messages_async("session-1")
 
     assert [message["session_id"] for message in messages] == ["session-1", "session-1"]
+
+
+@pytest.mark.asyncio
+async def test_session_history_returns_recent_turn_windows_without_splitting_pairs():
+    runs = [
+        {
+            "run_id": f"run-{index}",
+            "input": {"input_content": f"question-{index}"},
+            "content": f"answer-{index}",
+            "status": "COMPLETED",
+        }
+        for index in range(1, 6)
+    ]
+    db = AsyncFakeAgnoDb(
+        rows=[],
+        session_row={"session_id": "session-1", "runs": runs},
+    )
+    chat_settings = SimpleNamespace(
+        show_raw_tool_io=False,
+        show_thought_chain=True,
+        show_raw_reasoning=False,
+    )
+    with (
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
+        patch.object(
+            chat_session_service, "get_async_agno_postgres_db", return_value=db
+        ),
+        patch.object(
+            chat_session_service,
+            "get_chat_settings_async",
+            new=AsyncMock(return_value=chat_settings),
+        ),
+    ):
+        newest = await chat_session_service.get_session_messages_page_async(
+            "session-1",
+            limit=2,
+        )
+        middle = await chat_session_service.get_session_messages_page_async(
+            "session-1",
+            before="turn:3",
+            limit=2,
+        )
+        oldest = await chat_session_service.get_session_messages_page_async(
+            "session-1",
+            before="turn:1",
+            limit=2,
+        )
+
+    assert [message["id"] for message in newest["data"]] == [
+        "history-3:run-4:user",
+        "history-3:run-4",
+        "history-4:run-5:user",
+        "history-4:run-5",
+    ]
+    assert newest["meta"] == {
+        "limit": 2,
+        "has_more": True,
+        "next_cursor": "turn:3",
+        "total_runs": 5,
+    }
+    assert [message["id"] for message in middle["data"]] == [
+        "history-1:run-2:user",
+        "history-1:run-2",
+        "history-2:run-3:user",
+        "history-2:run-3",
+    ]
+    assert middle["meta"]["next_cursor"] == "turn:1"
+    assert [message["id"] for message in oldest["data"]] == [
+        "history-0:run-1:user",
+        "history-0:run-1",
+    ]
+    assert oldest["meta"]["has_more"] is False
+    assert oldest["meta"]["next_cursor"] is None
+
+
+@pytest.mark.asyncio
+async def test_session_history_duplicate_run_ids_use_ordinal_cursors_without_skipping_turns():
+    """An imported duplicate run id must not make the next page jump backwards."""
+    runs = [
+        {
+            "run_id": run_id,
+            "input": {"input_content": f"question-{index}"},
+            "content": f"answer-{index}",
+            "status": "COMPLETED",
+        }
+        for index, run_id in enumerate(("a", "dup", "b", "dup", "c"))
+    ]
+    db = AsyncFakeAgnoDb(
+        rows=[],
+        session_row={"session_id": "session-1", "runs": runs},
+    )
+    settings = SimpleNamespace(
+        show_raw_tool_io=False,
+        show_thought_chain=True,
+        show_raw_reasoning=False,
+    )
+    with (
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
+        patch.object(
+            chat_session_service, "get_async_agno_postgres_db", return_value=db
+        ),
+        patch.object(
+            chat_session_service,
+            "get_chat_settings_async",
+            new=AsyncMock(return_value=settings),
+        ),
+    ):
+        newest = await chat_session_service.get_session_messages_page_async(
+            "session-1", limit=2
+        )
+        middle = await chat_session_service.get_session_messages_page_async(
+            "session-1", before="turn:3", limit=2
+        )
+        oldest = await chat_session_service.get_session_messages_page_async(
+            "session-1", before="turn:1", limit=2
+        )
+
+    assert newest["meta"]["next_cursor"] == "turn:3"
+    assert [
+        message["run_id"]
+        for message in middle["data"]
+        if message["role"] == "assistant"
+    ] == [
+        "dup",
+        "b",
+    ]
+    assert middle["meta"]["next_cursor"] == "turn:1"
+    assert [
+        message["run_id"]
+        for message in oldest["data"]
+        if message["role"] == "assistant"
+    ] == ["a"]
+    assert len({message["id"] for message in newest["data"] + middle["data"]}) == len(
+        newest["data"] + middle["data"]
+    )
+
+
+def test_history_page_sibling_runs_omit_ambiguous_duplicate_leader_children():
+    """Child rows cannot be safely reconstructed when a leader id repeats."""
+    first_leader = {"run_id": "duplicate"}
+    second_leader = {"run_id": "duplicate"}
+    children = [
+        {"run_id": "member-1", "parent_run_id": "duplicate", "content": "first"},
+        {"run_id": "member-2", "parent_run_id": "duplicate", "content": "second"},
+    ]
+
+    sibling_runs = chat_session_service._history_page_sibling_runs(
+        [first_leader, children[0], second_leader, children[1]],
+        [(0, first_leader)],
+    )
+
+    assert sibling_runs == []
+
+
+@pytest.mark.asyncio
+async def test_session_history_rejects_unknown_page_cursor():
+    db = AsyncFakeAgnoDb(
+        rows=[],
+        session_row={
+            "session_id": "session-1",
+            "runs": [
+                {
+                    "run_id": "run-1",
+                    "input": {"input_content": "question"},
+                    "content": "answer",
+                    "status": "COMPLETED",
+                }
+            ],
+        },
+    )
+    with (
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
+        patch.object(
+            chat_session_service, "get_async_agno_postgres_db", return_value=db
+        ),
+        patch.object(
+            chat_session_service,
+            "get_chat_settings_async",
+            new=AsyncMock(
+                return_value=SimpleNamespace(
+                    show_raw_tool_io=False,
+                    show_thought_chain=True,
+                    show_raw_reasoning=False,
+                )
+            ),
+        ),
+    ):
+        with pytest.raises(ValueError, match="cursor"):
+            await chat_session_service.get_session_messages_page_async(
+                "session-1",
+                before="not-a-cursor",
+                limit=2,
+            )
+
+
+@pytest.mark.asyncio
+async def test_session_history_page_uses_jsonb_window_query_when_sqlalchemy_db_is_available():
+    table = Table(
+        "agno_sessions",
+        MetaData(),
+        Column("session_id", String),
+        Column("user_id", String),
+        Column("runs", JSONB),
+    )
+    captured: dict[str, Any] = {}
+    rows = [
+        {
+            "user_id": "u1",
+            "runs_type": "array",
+            "run": {
+                "run_id": "run-4",
+                "input": {"input_content": "question-4"},
+                "content": "answer-4",
+                "status": "COMPLETED",
+            },
+            "run_index": 3,
+            "is_leader": True,
+            "total_runs": 5,
+            "eligible_runs": 5,
+            "cursor_matches": 0,
+        },
+        {
+            "user_id": "u1",
+            "runs_type": "array",
+            "run": {
+                "run_id": "run-5",
+                "input": {"input_content": "question-5"},
+                "content": "answer-5",
+                "status": "COMPLETED",
+            },
+            "run_index": 4,
+            "is_leader": True,
+            "total_runs": 5,
+            "eligible_runs": 5,
+            "cursor_matches": 0,
+        },
+    ]
+
+    class PageSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def execute(self, statement, parameters):
+            captured["statement"] = statement
+            captured["parameters"] = parameters
+
+            class Result:
+                def mappings(self):
+                    return rows
+
+            return Result()
+
+    class SqlPageDb:
+        _get_table = AsyncMock(return_value=table)
+        get_session = AsyncMock(
+            side_effect=AssertionError("paged read must not load full runs")
+        )
+
+        @staticmethod
+        def async_session_factory():
+            return PageSession()
+
+    db = SqlPageDb()
+    with (
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
+        patch.object(
+            chat_session_service, "get_async_agno_postgres_db", return_value=db
+        ),
+        patch.object(
+            chat_session_service,
+            "get_chat_settings_async",
+            new=AsyncMock(
+                return_value=SimpleNamespace(
+                    show_raw_tool_io=False,
+                    show_thought_chain=True,
+                    show_raw_reasoning=False,
+                )
+            ),
+        ),
+    ):
+        result = await chat_session_service.get_session_messages_page_async(
+            "session-1",
+            limit=2,
+            actor=SimpleNamespace(id="u1", role="user", is_superuser=False),
+        )
+
+    assert [message["id"] for message in result["data"]] == [
+        "history-3:run-4:user",
+        "history-3:run-4",
+        "history-4:run-5:user",
+        "history-4:run-5",
+    ]
+    assert result["meta"] == {
+        "limit": 2,
+        "has_more": True,
+        "next_cursor": "turn:3",
+        "total_runs": 5,
+    }
+    assert captured["parameters"] == {
+        "history_session_id": "session-1",
+        "history_before": "",
+        "history_limit": 2,
+        "history_owner_user_id": "u1",
+    }
+    compiled = str(captured["statement"].compile(dialect=dialect()))
+    assert "jsonb_array_elements" in compiled
+    assert "history_unique_selected_parent_ids" in compiled
+    db.get_session.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_paged_history_falls_back_for_legacy_json_string_runs():
+    table = Table(
+        "agno_sessions",
+        MetaData(),
+        Column("session_id", String),
+        Column("user_id", String),
+        Column("runs", JSONB),
+    )
+    legacy_runs = [
+        {
+            "run_id": "run-1",
+            "input": {"input_content": "question"},
+            "content": "answer",
+            "status": "COMPLETED",
+        }
+    ]
+
+    class PageSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def execute(self, _statement, _parameters):
+            class Result:
+                def mappings(self):
+                    return [
+                        {
+                            "user_id": "u1",
+                            "runs_type": "string",
+                            "run": None,
+                            "run_index": None,
+                            "is_leader": None,
+                            "total_runs": 0,
+                            "eligible_runs": 0,
+                            "cursor_matches": 0,
+                        }
+                    ]
+
+            return Result()
+
+    class LegacyStringRunsDb:
+        _get_table = AsyncMock(return_value=table)
+        get_session = AsyncMock(
+            return_value={
+                "session_id": "session-1",
+                "user_id": "u1",
+                "runs": json.dumps(legacy_runs),
+            }
+        )
+
+        @staticmethod
+        def async_session_factory():
+            return PageSession()
+
+    db = LegacyStringRunsDb()
+    with (
+        patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
+        patch.object(
+            chat_session_service, "get_async_agno_postgres_db", return_value=db
+        ),
+        patch.object(
+            chat_session_service,
+            "get_chat_settings_async",
+            new=AsyncMock(
+                return_value=SimpleNamespace(
+                    show_raw_tool_io=False,
+                    show_thought_chain=True,
+                    show_raw_reasoning=False,
+                )
+            ),
+        ),
+    ):
+        result = await chat_session_service.get_session_messages_page_async(
+            "session-1", limit=2
+        )
+
+    assert [message["id"] for message in result["data"]] == [
+        "history-0:run-1:user",
+        "history-0:run-1",
+    ]
+    assert result["meta"]["total_runs"] == 1
+    db.get_session.assert_awaited_once_with("session-1", deserialize=False)
 
 
 @pytest.mark.asyncio
@@ -209,7 +621,9 @@ async def test_session_history_maps_paused_status_and_approval_id():
     )
     with (
         patch.object(chat_session_service, "ensure_agno_postgres_tables_async"),
-        patch.object(chat_session_service, "get_async_agno_postgres_db", return_value=db),
+        patch.object(
+            chat_session_service, "get_async_agno_postgres_db", return_value=db
+        ),
         patch.object(
             chat_session_service,
             "get_chat_settings_async",

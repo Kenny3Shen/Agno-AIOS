@@ -1,7 +1,7 @@
 import { ApiError, apiFetch, jsonInit, requestJson } from '@/shared/api/client'
 import { normalizePaginatedList, type ListPaginationMeta } from '@/shared/lib/pagination'
 import type { ModelConfigResponse, ReasoningEffort } from '@/shared/types/common'
-import type { ChatRunEvent, ChatSession, TeamTaskState, TeamTaskStatus } from './types'
+import type { ChatRunEvent, ChatSession, Message, TeamTaskState, TeamTaskStatus } from './types'
 import { consumeSse, normalizeMessages } from './utils'
 
 const SESSION_TYPES = new Set(['agent', 'team', 'workflow'])
@@ -50,6 +50,16 @@ export type SessionListResult = {
   meta: SessionListMeta
 }
 
+export type ChatHistoryPage = {
+  data: Message[]
+  meta: {
+    limit: number
+    has_more: boolean
+    next_cursor: string | null
+    total_runs: number
+  }
+}
+
 type ListSessionsOptions = {
   includeArchived?: boolean
   /** When true, only archived sessions (server SQL filter). */
@@ -86,6 +96,52 @@ export const listSessions = async (options: ListSessionsOptions = {}): Promise<S
 }
 export const getHistory = async (sessionId: string) =>
   normalizeMessages(await requestJson<unknown>(`/chat/sessions/${encodeURIComponent(sessionId)}`))
+
+const parseHistoryPage = (value: unknown): ChatHistoryPage => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('getHistoryPage: invalid history payload')
+  }
+  const row = value as Record<string, unknown>
+  const meta = row.meta
+  if (!Array.isArray(row.data) || !meta || typeof meta !== 'object' || Array.isArray(meta)) {
+    throw new Error('getHistoryPage: invalid history payload')
+  }
+  const page = meta as Record<string, unknown>
+  const limit = Number(page.limit)
+  const totalRuns = Number(page.total_runs)
+  const nextCursor = page.next_cursor
+  if (
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    !Number.isInteger(totalRuns) ||
+    totalRuns < 0 ||
+    typeof page.has_more !== 'boolean' ||
+    (nextCursor !== null && (typeof nextCursor !== 'string' || !nextCursor.trim()))
+  ) {
+    throw new Error('getHistoryPage: invalid history pagination metadata')
+  }
+  return {
+    data: normalizeMessages(row.data),
+    meta: {
+      limit,
+      has_more: page.has_more,
+      next_cursor: nextCursor,
+      total_runs: totalRuns,
+    },
+  }
+}
+
+export const getHistoryPage = async (
+  sessionId: string,
+  options: { before?: string | null; limit?: number } = {}
+): Promise<ChatHistoryPage> => {
+  const limit = Math.max(1, Math.min(100, Math.floor(Number(options.limit ?? 40) || 40)))
+  const before = (options.before ?? '').trim()
+  const search = new URLSearchParams({ limit: String(limit) })
+  if (before) search.set('before', before)
+  const payload = await requestJson<unknown>(`/chat/sessions/${encodeURIComponent(sessionId)}?${search.toString()}`)
+  return parseHistoryPage(payload)
+}
 /** List-style projection for one session (deep links outside loaded recents). */
 export const getSessionMeta = async (sessionId: string): Promise<ChatSession | null> => {
   try {
@@ -99,10 +155,7 @@ export const getSessionMeta = async (sessionId: string): Promise<ChatSession | n
 export const archiveSession = (sessionId: string) =>
   requestJson<{ success: boolean }>(`/chat/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' })
 export const unarchiveSession = (sessionId: string) =>
-  requestJson<{ success: boolean; archived?: boolean }>(
-    `/chat/sessions/${encodeURIComponent(sessionId)}/unarchive`,
-    jsonInit('POST'),
-  )
+  requestJson<{ success: boolean; archived?: boolean }>(`/chat/sessions/${encodeURIComponent(sessionId)}/unarchive`, jsonInit('POST'))
 export const renameSession = (sessionId: string, title: string) =>
   requestJson<ChatSession>(`/chat/sessions/${encodeURIComponent(sessionId)}`, jsonInit('PATCH', { title }))
 export const getModels = () => requestJson<ModelConfigResponse>('/models')
@@ -126,11 +179,38 @@ type ChatAgentCatalogItem = {
 
 type ChatAgentCatalogResponse = { data: ChatAgentCatalogItem[] }
 
-export const getChatAgents = async (): Promise<ChatAgentCatalogItem[]> =>
-  (await requestJson<ChatAgentCatalogResponse>('/chat/agents')).data
+export const getChatAgents = async (): Promise<ChatAgentCatalogItem[]> => (await requestJson<ChatAgentCatalogResponse>('/chat/agents')).data
 
 export const cancelRun = (runId: string) =>
   requestJson<{ success?: boolean }>(`/chat/runs/${encodeURIComponent(runId)}/cancel`, jsonInit('POST'))
+
+const sseEventIndex = (data: string): number | undefined => {
+  try {
+    const raw: unknown = JSON.parse(data)
+    if (raw && typeof raw === 'object' && 'event_index' in raw) {
+      const index = (raw as { event_index?: unknown }).event_index
+      if (typeof index === 'number' && Number.isFinite(index)) return index
+    }
+  } catch {
+    // The event parser below owns normal payload validation.
+  }
+  return undefined
+}
+
+type EventIndexCursor = {
+  current: number | null
+  /** Commit already queued visual frames before advancing past an ignored frame. */
+  flushPendingEvents?: () => void
+}
+
+const advanceIgnoredEventIndex = (eventIndex: number | undefined, cursor?: EventIndexCursor) => {
+  if (eventIndex === undefined || !cursor) return
+  // A preceding visual event can still be waiting in the rAF reducer queue.
+  // Commit it before this ignored frame advances the resume cursor, otherwise
+  // detach/re-attach could skip that visual delta.
+  cursor.flushPendingEvents?.()
+  cursor.current = eventIndex
+}
 
 /** Re-attach to a leave-page detached server run (catch-up + live SSE).
  *
@@ -139,13 +219,13 @@ export const cancelRun = (runId: string) =>
  */
 export const attachLiveSessionStream = async (
   sessionId: string,
-  onEvent: (event: ChatRunEvent) => void,
+  onEvent: (event: ChatRunEvent, eventIndex?: number) => void,
   signal: AbortSignal,
   options?: {
     lastEventIndex?: number | null
-    /** Updated on each frame so leave/return can resume after this index. */
-    eventIndexCursor?: { current: number | null }
-  },
+    /** Advanced for ignored frames that never reach the UI reducer. */
+    eventIndexCursor?: EventIndexCursor
+  }
 ) => {
   const params = new URLSearchParams()
   if (options?.lastEventIndex != null && Number.isFinite(options.lastEventIndex)) {
@@ -179,32 +259,20 @@ export const attachLiveSessionStream = async (
   await consumeSse(
     response.body,
     ({ event, data }) => {
-      // Track monotonic event_index from raw SSE before parse filters.
-      try {
-        const raw: unknown = JSON.parse(data)
-        if (raw && typeof raw === 'object' && 'event_index' in raw) {
-          const idx = (raw as { event_index?: unknown }).event_index
-          if (
-            typeof idx === 'number' &&
-            Number.isFinite(idx) &&
-            options?.eventIndexCursor
-          ) {
-            options.eventIndexCursor.current = idx
-          }
-        }
-      } catch {
-        // ignore
-      }
+      const eventIndex = sseEventIndex(data)
       const chatEvent = parseEvent(event, data)
-      if (!chatEvent) return
+      if (!chatEvent) {
+        advanceIgnoredEventIndex(eventIndex, options?.eventIndexCursor)
+        return
+      }
       terminal ||=
         chatEvent.type === 'run.paused' ||
         chatEvent.type === 'run.completed' ||
         chatEvent.type === 'run.cancelled' ||
         chatEvent.type === 'run.failed'
-      onEvent(chatEvent)
+      onEvent(chatEvent, eventIndex)
     },
-    signal,
+    signal
   )
   if (!terminal && !signal.aborted) {
     throw new Error('Live stream ended before a terminal event')
@@ -214,17 +282,9 @@ export const attachLiveSessionStream = async (
 
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object'
 const stringValue = (record: Record<string, unknown>, key: string) => (typeof record[key] === 'string' ? record[key] : undefined)
-const TEAM_TASK_STATUSES = new Set<TeamTaskStatus>([
-  'pending',
-  'in_progress',
-  'completed',
-  'failed',
-  'blocked',
-  'cancelled',
-])
+const TEAM_TASK_STATUSES = new Set<TeamTaskStatus>(['pending', 'in_progress', 'completed', 'failed', 'blocked', 'cancelled'])
 
-const isTeamTaskStatus = (value: string): value is TeamTaskStatus =>
-  TEAM_TASK_STATUSES.has(value as TeamTaskStatus)
+const isTeamTaskStatus = (value: string): value is TeamTaskStatus => TEAM_TASK_STATUSES.has(value as TeamTaskStatus)
 
 const taskText = (record: Record<string, unknown>, key: string, max: number) => {
   const value = stringValue(record, key)?.trim() ?? ''
@@ -340,9 +400,7 @@ const parseEvent = (event: string, data: string): ChatRunEvent | null => {
               ? 'success'
               : thought.status === 'error' || thought.status === 'failed'
                 ? 'error'
-                : thought.status === 'abort' ||
-                    thought.status === 'cancelled' ||
-                    thought.status === 'canceled'
+                : thought.status === 'abort' || thought.status === 'cancelled' || thought.status === 'canceled'
                   ? 'abort'
                   : 'loading',
           summary: stringValue(thought, 'summary'),
@@ -435,10 +493,10 @@ type StreamMessagePayload = {
 
 export const streamMessage = async (
   payload: StreamMessagePayload,
-  onEvent: (event: ChatRunEvent) => void,
+  onEvent: (event: ChatRunEvent, eventIndex?: number) => void,
   signal: AbortSignal,
-  /** Optional cursor updated on each SSE frame (survives mid-stream abort). */
-  eventIndexCursor?: { current: number | null },
+  /** Optional cursor committed after visual reducer batches (survives mid-stream abort). */
+  eventIndexCursor?: EventIndexCursor
 ) => {
   const files = (payload.files ?? []).filter((file) => file instanceof File)
   let response: Response
@@ -485,27 +543,20 @@ export const streamMessage = async (
   await consumeSse(
     response.body,
     ({ event, data }) => {
-      try {
-        const raw: unknown = JSON.parse(data)
-        if (raw && typeof raw === 'object' && 'event_index' in raw) {
-          const idx = (raw as { event_index?: unknown }).event_index
-          if (typeof idx === 'number' && Number.isFinite(idx) && eventIndexCursor) {
-            eventIndexCursor.current = idx
-          }
-        }
-      } catch {
-        // ignore
-      }
+      const eventIndex = sseEventIndex(data)
       const chatEvent = parseEvent(event, data)
-      if (!chatEvent) return
+      if (!chatEvent) {
+        advanceIgnoredEventIndex(eventIndex, eventIndexCursor)
+        return
+      }
       terminal ||=
         chatEvent.type === 'run.paused' ||
         chatEvent.type === 'run.completed' ||
         chatEvent.type === 'run.cancelled' ||
         chatEvent.type === 'run.failed'
-      onEvent(chatEvent)
+      onEvent(chatEvent, eventIndex)
     },
-    signal,
+    signal
   )
   if (!terminal) throw new Error('Chat stream ended before a terminal event')
 }

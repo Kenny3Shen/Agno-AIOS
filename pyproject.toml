@@ -43,6 +43,7 @@ verify-pgvector-indexes = "api.tasks.verify_pgvector_indexes:run"
 job-worker = "api.tasks.job_worker:run"
 benchmark-runtime = "api.tasks.benchmark_runtime:run"
 rehearse-rbac-migration = "api.tasks.rehearse_rbac_migration:run"
+audit-trace-indexes = "api.tasks.audit_trace_indexes:run"
 
 [build-system]
 requires = ["hatchling"]

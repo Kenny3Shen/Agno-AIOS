@@ -1,6 +1,6 @@
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from starlette.datastructures import FormData, UploadFile
 from typing import Literal
@@ -15,6 +15,7 @@ from api.services.chat_session_service import (
     unarchive_session,
     list_sessions_async,
     get_session_messages_async,
+    get_session_messages_page_async,
     get_session_owner_async,
     get_session_summary_async,
     rename_session,
@@ -514,13 +515,34 @@ async def get_session_meta(
 @router.get("/chat/sessions/{session_id}")
 async def get_session(
     session_id: str,
+    before: str | None = Query(
+        default=None,
+        min_length=1,
+        max_length=256,
+        description="Cursor for the next older chat-history turn window",
+    ),
+    limit: int | None = Query(
+        default=None,
+        ge=1,
+        le=100,
+        description="Recent chat-history turns to return; enables cursor pagination",
+    ),
     user: User = Depends(require_scope("sessions:read")),
 ):
-    """获取指定会话的聊天记录"""
+    """获取指定会话的聊天记录（``limit`` 时返回分页窗口）。"""
     try:
+        if limit is not None or before is not None:
+            return await get_session_messages_page_async(
+                session_id,
+                actor=user,
+                before=before,
+                limit=limit or 40,
+            )
         return await get_session_messages_async(session_id, actor=user)
     except HTTPException:
         raise
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as e:
         logger.error("获取会话记录失败: {}", e)
         raise HTTPException(status_code=500, detail=str(e))

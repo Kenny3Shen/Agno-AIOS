@@ -74,6 +74,10 @@ TAIS_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
 
 CVE 库更新支持 GitHub PoC/Exp 与 Exploit-DB 数据源；管理员可在设置页的「CVE 数据源」中分别启用或停用。停用源不会删除既有 CVE 数据或缓存。
 
+## 性能热路径
+
+Dashboard Overview 对同一权限投影与查询窗口合并并缓存 3 秒的进程内请求；Chat 初始读取最近 40 个完整 turns，支持向前分页并按动画帧合并 SSE 更新。Agno Trace 索引仍由 Agno 管理，先用 `uv run audit-trace-indexes --explain` 收集只读计划证据，确认后才可显式执行带确认参数的并发建索引。部署边界与命令见 [配置与运维](./docs/operations.md)。
+
 ## 架构
 
 React 工作台通过共享 API client 携带 JWT 请求 FastAPI；后端校验权限与资源归属后，按模型、MCP、Skills、Knowledge 与 Memory 创建 Agno 运行时。Chat 走 SSE；长期记忆使用廉价 MemoryManager，可配置是否记忆工具内容、注入侧打分截断，并由 durable job 按年龄 + Top-k 自动 prune。Workflow Studio 负责定义编译与流式运行；HITL 与上传审批汇入审批中心。

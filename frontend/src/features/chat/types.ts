@@ -66,6 +66,8 @@ export interface Message {
   final: boolean
   status?: RunStatus
   run_id?: string | null
+  /** Opaque server cursor for this persisted history turn (not a Trace run id). */
+  history_cursor?: string | null
   session_id?: string | null
   user_id?: string | null
   metrics?: RunMetrics | null
@@ -146,6 +148,8 @@ export type ChatAction =
   /** Resume a leave-page detached run: replace transcript and set requesting. */
   | { type: 'attach-live'; messages: Message[]; assistantId: string }
   | { type: 'event'; id: string; event: ChatRunEvent }
+  /** SSE events collected in one animation frame; reducer visits messages once. */
+  | { type: 'events'; id: string; events: ChatRunEvent[] }
   | { type: 'network-error'; id: string; message: string }
   | { type: 'soft-error'; message: string }
   | { type: 'clear-error' }

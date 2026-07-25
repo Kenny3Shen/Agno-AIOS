@@ -470,6 +470,44 @@ export const chatReducer = (state: ChatState, action: ChatAction): ChatState => 
         messages,
       }
     }
+    case 'events':
+      // One rAF batch is one reducer dispatch/React render. Preserve exact
+      // event order, but reduce against a one-message working state and splice
+      // the result back once. The former recursive approach remapped the full
+      // transcript for every token in a frame (O(messages × events)).
+      {
+        const targetIndex = state.messages.findIndex((message) => message.id === action.id)
+        let working: ChatState = {
+          ...state,
+          messages: targetIndex >= 0 ? [state.messages[targetIndex] as Message] : [],
+        }
+        for (const event of action.events) {
+          working = chatReducer(working, { type: 'event', id: action.id, event })
+        }
+        if (targetIndex < 0) {
+          return {
+            ...state,
+            requesting: working.requesting,
+            error: working.error,
+          }
+        }
+        const nextMessage = working.messages[0]
+        if (!nextMessage || nextMessage === state.messages[targetIndex]) {
+          return {
+            ...state,
+            requesting: working.requesting,
+            error: working.error,
+          }
+        }
+        const messages = [...state.messages]
+        messages[targetIndex] = nextMessage
+        return {
+          ...state,
+          requesting: working.requesting,
+          error: working.error,
+          messages,
+        }
+      }
     case 'network-error':
       return {
         ...state,
@@ -601,6 +639,7 @@ export const normalizeMessages = (value: unknown): Message[] =>
           final: status !== 'streaming',
           status,
           run_id: asString(source.run_id),
+          history_cursor: asString(source.history_cursor),
           session_id: asString(source.session_id),
           approval_id: asString(source.approval_id),
           metrics: asMetrics(source.metrics),

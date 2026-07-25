@@ -98,6 +98,7 @@
   "knowledgeSearchNeedsTools": "Turn on Tools/Skills before enabling knowledge retrieval.",
   "retryingDetailWithDelay": "Model temporarily unavailable; retry {{attempt}}/{{max}} in {{seconds}}s…",
   "historyLoadFailed": "Unable to load conversation history. Please retry.",
+  "historyLoadOlder": "Load earlier messages",
   "sessionMetaLoading": "Loading session…",
   "historyLoading": "Loading conversation history…",
   "sessionNotFound": "Session not found or access denied",

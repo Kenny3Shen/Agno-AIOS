@@ -247,8 +247,9 @@ export function AppFrame({ children }: { children: ReactNode }) {
               })
               void queryClient.invalidateQueries({ queryKey: ['approvals'] })
               void queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
-              const sessionId = typeof notification.data.session_id === 'string' ? notification.data.session_id : ''
-              if (sessionId) void queryClient.invalidateQueries({ queryKey: chatKeys.history(sessionId) })
+              // Chat keeps older transcript pages immutable and refreshes only
+              // its newest window through useChat. Invalidating this infinite
+              // query here would replay every cursor page after any notification.
               // Surface important failures immediately (badge alone is easy to miss).
               const status = typeof notification.data.status === 'string' ? notification.data.status : ''
               const resourceType =

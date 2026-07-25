@@ -1,5 +1,6 @@
 """Critical business tests for runtime overview aggregation and scoping."""
 
+import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -13,6 +14,7 @@ from api.auth import claims
 from api.routes import overview
 from api.services import overview_service
 from api.tests.route_fakes import route_dependency
+from api.utils.ttl_cache import AsyncTtlCache
 
 
 def actor(user_id: str, role: str = "user"):
@@ -29,6 +31,73 @@ def trace_sql_table(*columns: str) -> Table:
         MetaData(),
         *(Column(column, column_types.get(column, String)) for column in columns),
     )
+
+
+@pytest.mark.asyncio
+async def test_overview_cache_coalesces_same_scope_request_and_copies_payload(monkeypatch):
+    cache: AsyncTtlCache[object, dict[str, object]] = AsyncTtlCache(ttl_sec=5.0)
+    monkeypatch.setattr(overview_service, "_OVERVIEW_CACHE", cache)
+    started = asyncio.Event()
+    release = asyncio.Event()
+    calls = 0
+
+    async def build(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        started.set()
+        await release.wait()
+        return {"metrics": {"total_runs": calls}}
+
+    monkeypatch.setattr(overview_service, "_build_runtime_overview", build)
+    current_actor = actor("u1")
+    first = asyncio.create_task(
+        overview_service.get_runtime_overview(current_actor, range_name="24h", timezone="UTC")
+    )
+    await started.wait()
+    second = asyncio.create_task(
+        overview_service.get_runtime_overview(current_actor, range_name="24h", timezone="UTC")
+    )
+    await asyncio.sleep(0)
+    assert calls == 1
+
+    release.set()
+    first_result, second_result = await asyncio.gather(first, second)
+    assert first_result == second_result == {"metrics": {"total_runs": 1}}
+    assert first_result is not second_result
+    first_result["metrics"]["total_runs"] = 999  # type: ignore[index]
+
+    cached = await overview_service.get_runtime_overview(
+        current_actor,
+        range_name="24h",
+        timezone="UTC",
+    )
+    assert cached == {"metrics": {"total_runs": 1}}
+    assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_overview_cache_key_isolates_actor_range_and_timezone(monkeypatch):
+    cache: AsyncTtlCache[object, dict[str, object]] = AsyncTtlCache(ttl_sec=5.0)
+    monkeypatch.setattr(overview_service, "_OVERVIEW_CACHE", cache)
+    calls: list[tuple[str, str, str]] = []
+
+    async def build(current_actor, *, range_name, display_timezone, **_kwargs):
+        calls.append((str(current_actor.id), range_name, str(display_timezone)))
+        return {"call": len(calls)}
+
+    monkeypatch.setattr(overview_service, "_build_runtime_overview", build)
+    first_actor = actor("u1")
+    second_actor = actor("u2")
+    assert await overview_service.get_runtime_overview(first_actor) == {"call": 1}
+    assert await overview_service.get_runtime_overview(second_actor) == {"call": 2}
+    assert await overview_service.get_runtime_overview(first_actor, range_name="1h") == {"call": 3}
+    assert (
+        await overview_service.get_runtime_overview(
+            first_actor,
+            timezone="Asia/Shanghai",
+        )
+    ) == {"call": 4}
+    assert len(calls) == 4
 
 
 @pytest.mark.asyncio

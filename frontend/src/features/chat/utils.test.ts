@@ -58,6 +58,25 @@ describe('chatReducer business events', () => {
     expect(next.requesting).toBe(true)
   })
 
+  it('applies one animation-frame batch in event order', () => {
+    const started = chatReducer(initialChatState, {
+      type: 'start',
+      assistant: assistant({ id: 'run-1' }),
+      modelId: 'm1',
+    })
+    const next = chatReducer(started, {
+      type: 'events',
+      id: 'run-1',
+      events: [
+        { type: 'content.delta', runId: 'run-1', delta: 'Hel' },
+        { type: 'content.delta', runId: 'run-1', delta: 'lo' },
+        { type: 'run.completed', runId: 'run-1', sessionId: 's1' },
+      ],
+    })
+    expect(next.messages[0]).toMatchObject({ content: 'Hello', status: 'completed', final: true })
+    expect(next.requesting).toBe(false)
+  })
+
   it('run.completed finalizes the assistant message', () => {
     const started = chatReducer(initialChatState, {
       type: 'start',

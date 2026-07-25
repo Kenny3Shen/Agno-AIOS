@@ -1,11 +1,12 @@
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
 
 from agno.session.agent import AgentSession
 from agno.session.team import TeamSession
 from agno.session.workflow import WorkflowSession
-from api.auth.claims import actor_id
+from api.auth.claims import actor_id, actor_role
 from api.auth.ownership import assert_owned_resource
 from api.services.audit_service import record_audit_event_async
 from api.services.postgres_store import (
@@ -27,7 +28,23 @@ ARCHIVED_METADATA_KEY = "agno_aios_archived"
 ARCHIVED_BY_METADATA_KEY = "agno_aios_archived_by"
 ARCHIVED_AT_METADATA_KEY = "agno_aios_archived_at"
 TITLE_METADATA_KEY = "agno_aios_title"
+_HISTORY_PAGE_DEFAULT_LIMIT = 40
+_HISTORY_PAGE_MAX_LIMIT = 100
+_HISTORY_PAGE_CURSOR_PREFIX = "turn:"
 
+
+@dataclass(frozen=True)
+class _HistoryPageRows:
+    """The small subset of a session needed to render one history page."""
+
+    found: bool
+    owner_user_id: str = ""
+    top_level_runs: list[tuple[int, dict[str, Any]]] | None = None
+    sibling_runs: list[dict[str, Any]] | None = None
+    total_runs: int = 0
+    eligible_runs: int = 0
+    cursor_matches: int = 0
+    runs_are_array: bool = True
 
 
 async def get_session_owner_async(session_id: str) -> str | None:
@@ -167,7 +184,9 @@ async def get_session_summary_async(
             resource_name="Session",
         )
     session_row = cast(dict[str, Any], row)
-    projected = _project_session_rows([session_row], include_runs=False, already_sorted=True)
+    projected = _project_session_rows(
+        [session_row], include_runs=False, already_sorted=True
+    )
     return projected[0] if projected else None
 
 
@@ -216,9 +235,6 @@ async def rename_session(
         "title": normalized_title,
         "preview": _preview_from_runs(coerce_json_value(row.get("runs"))) or "新对话",
     }
-
-
-
 
 
 async def _query_sessions_page(
@@ -317,7 +333,9 @@ async def list_sessions_async(
         limit=safe_limit,
         q=q,
     )
-    sessions = _project_session_rows(rows, include_runs=include_runs, already_sorted=True)
+    sessions = _project_session_rows(
+        rows, include_runs=include_runs, already_sorted=True
+    )
     return {
         "data": sessions,
         "meta": pagination_meta(
@@ -379,7 +397,14 @@ def _preview_from_runs(runs: Any) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()[:80]
         if isinstance(value, dict):
-            for key in ("input_content", "content", "message", "input", "text", "query"):
+            for key in (
+                "input_content",
+                "content",
+                "message",
+                "input",
+                "text",
+                "query",
+            ):
                 nested = value.get(key)
                 if isinstance(nested, str) and nested.strip():
                     return nested.strip()[:80]
@@ -387,7 +412,6 @@ def _preview_from_runs(runs: Any) -> str:
 
 
 def _project_session_rows(
-
     rows: list[dict[str, Any]],
     *,
     include_runs: bool,
@@ -428,8 +452,6 @@ def _project_session_rows(
             session["runs"] = runs if isinstance(runs, list) else []
         sessions.append(session)
     return sessions
-
-
 
 
 _MISSING = object()
@@ -491,11 +513,8 @@ def _history_runtime_tool_surface(
         lean_mode = False
 
     requested_search = bool(context.get("search_knowledge", True))
-    search_knowledge = bool(
-        requested_search and enable_tools and lean_mode is not True
-    )
+    search_knowledge = bool(requested_search and enable_tools and lean_mode is not True)
     return enable_tools, lean_mode, skill_names, mcp_server_names, search_knowledge
-
 
 
 def _history_run_status(value: object, tools: object) -> str:
@@ -526,7 +545,9 @@ def _history_run_status(value: object, tools: object) -> str:
             requires_confirmation = bool(tool.get("requires_confirmation"))
             approval_type = str(tool.get("approval_type") or "")
             has_approval = bool(tool.get("approval_id"))
-            if not (requires_confirmation or approval_type == "required" or has_approval):
+            if not (
+                requires_confirmation or approval_type == "required" or has_approval
+            ):
                 continue
             if confirmed is True or confirmed is False:
                 continue
@@ -558,18 +579,30 @@ def _project_history_content(run: dict[str, object], status: str) -> str:
     confirmed = [
         tool
         for tool in tools
-        if isinstance(tool, dict) and tool.get("confirmed") is True and tool.get("result") not in (None, "")
+        if isinstance(tool, dict)
+        and tool.get("confirmed") is True
+        and tool.get("result") not in (None, "")
     ]
     rejected = [
         tool
         for tool in tools
-        if isinstance(tool, dict) and (tool.get("confirmed") is False or tool.get("tool_call_error") is True)
+        if isinstance(tool, dict)
+        and (tool.get("confirmed") is False or tool.get("tool_call_error") is True)
     ]
-    waiting_markers = ("等待管理员审批", "i have tools to execute, but i need confirmation")
+    waiting_markers = (
+        "等待管理员审批",
+        "i have tools to execute, but i need confirmation",
+    )
     stale = content_text.casefold()
     is_stale = any(marker in stale for marker in waiting_markers)
-    has_admin_reason = "Rejected by administrator" in content_text or "拒绝原因" in content_text
-    if rejected and status != "paused" and (not content_text or is_stale or not has_admin_reason):
+    has_admin_reason = (
+        "Rejected by administrator" in content_text or "拒绝原因" in content_text
+    )
+    if (
+        rejected
+        and status != "paused"
+        and (not content_text or is_stale or not has_admin_reason)
+    ):
         admin_reason = approval_rejection_reason(run)
         notes = [str(tool.get("confirmation_note") or "").strip() for tool in rejected]
         if admin_reason:
@@ -582,7 +615,11 @@ def _project_history_content(run: dict[str, object], status: str) -> str:
                 if admin_reason and (not note or note == "Tool call was rejected"):
                     note = f"Rejected by administrator: {admin_reason}"
                 note = note or "Tool call was rejected"
-                args = tool.get("tool_args") if isinstance(tool.get("tool_args"), dict) else {}
+                args = (
+                    tool.get("tool_args")
+                    if isinstance(tool.get("tool_args"), dict)
+                    else {}
+                )
                 lines_out.append(f"- **工具**：`{name}`")
                 if isinstance(args, dict) and args.get("target"):
                     lines_out.append(f"- **目标**：`{args.get('target')}`")
@@ -601,7 +638,6 @@ def _project_history_content(run: dict[str, object], status: str) -> str:
         lines_out.append("管理员审批已处理；以上结果来自审批恢复后的工具执行记录。")
         return chr(10).join(lines_out)
     return content_text
-
 
 
 def _history_user_attachments(run: dict[str, Any]) -> list[dict[str, str]]:
@@ -625,7 +661,9 @@ def _history_user_attachments(run: dict[str, Any]) -> list[dict[str, str]]:
             if not isinstance(raw, dict):
                 continue
             name = (
-                str(raw.get("filename") or raw.get("name") or raw.get("id") or kind).strip()
+                str(
+                    raw.get("filename") or raw.get("name") or raw.get("id") or kind
+                ).strip()
                 or kind
             )
             mime = str(raw.get("mime_type") or raw.get("mime") or "").strip()
@@ -647,7 +685,8 @@ def _history_user_attachments(run: dict[str, Any]) -> list[dict[str, str]]:
                         {
                             "name": name,
                             "mime": str(raw.get("mime") or "").strip(),
-                            "kind": str(raw.get("kind") or "document").strip() or "document",
+                            "kind": str(raw.get("kind") or "document").strip()
+                            or "document",
                         }
                     )
     # Dedupe by name+kind
@@ -660,8 +699,6 @@ def _history_user_attachments(run: dict[str, Any]) -> list[dict[str, str]]:
         seen.add(key)
         unique.append(item)
     return unique
-
-
 
 
 def _is_child_member_run(run: object) -> bool:
@@ -832,7 +869,6 @@ def _history_run_has_assistant_payload(
     return False
 
 
-
 def _history_member_content_fallback(
     run: dict[str, Any],
     *,
@@ -844,7 +880,6 @@ def _history_member_content_fallback(
         if isinstance(content, str) and content.strip():
             return content.strip()
     return ""
-
 
 
 def _history_team_sources(
@@ -884,44 +919,491 @@ def _history_team_sources(
     return merged
 
 
-async def get_session_messages_async(
+def _history_run_id(run: Mapping[str, Any], index: int) -> str:
+    """Return the actual run identity used for Trace links and message fields."""
+    return str(run.get("run_id") or f"history-{index}")
+
+
+def _history_page_sibling_runs(
+    all_runs: list[dict[str, Any]],
+    selected_runs: list[tuple[int, dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Return safely attributable Team children for one history page.
+
+    Agno child runs carry only ``parent_run_id``.  If imported data reuses a
+    leader id, no ordinal parent reference exists to tell which duplicate owns
+    a child; reconstructing both would put another turn's tools/content on the
+    visible turn.  Keep embedded ``member_responses`` as-is, but fail closed
+    for child-row reconstruction unless the leader id is globally unique.
+    """
+    leader_id_counts: dict[str, int] = {}
+    for row in all_runs:
+        if _is_child_member_run(row):
+            continue
+        run_id = str(row.get("run_id") or "").strip()
+        if run_id:
+            leader_id_counts[run_id] = leader_id_counts.get(run_id, 0) + 1
+    allowed_parent_ids = {
+        str(run.get("run_id") or "").strip()
+        for _, run in selected_runs
+        if str(run.get("run_id") or "").strip()
+        and leader_id_counts.get(str(run.get("run_id") or "").strip()) == 1
+    }
+    return [
+        row
+        for row in all_runs
+        if _is_child_member_run(row)
+        and str(row.get("parent_run_id") or "").strip() in allowed_parent_ids
+    ]
+
+
+def _history_page_cursor(index: int) -> str:
+    """Return an opaque ordinal cursor that remains unique when run ids repeat."""
+    return f"{_HISTORY_PAGE_CURSOR_PREFIX}{index}"
+
+
+def _history_message_id(run: Mapping[str, Any], index: int, *, paginated: bool) -> str:
+    """Return a unique client row identity without changing the real ``run_id``.
+
+    Agno normally generates unique run ids, but malformed/imported session rows
+    can contain duplicates.  Cursor pagination must not let such rows collide
+    in React's message list; the legacy unpaginated response retains its prior
+    identifiers for compatibility.
+    """
+    run_id = _history_run_id(run, index)
+    return f"history-{index}:{run_id}" if paginated else run_id
+
+
+def _history_page_limit(limit: int) -> int:
+    return max(1, min(int(limit), _HISTORY_PAGE_MAX_LIMIT))
+
+
+def _empty_history_page(*, limit: int) -> dict[str, Any]:
+    return {
+        "data": [],
+        "meta": {
+            "limit": limit,
+            "has_more": False,
+            "next_cursor": None,
+            "total_runs": 0,
+        },
+    }
+
+
+async def _query_history_page_rows(
+    db: Any,
+    *,
+    session_id: str,
+    before: str,
+    limit: int,
+    owner_user_id: str | None = None,
+) -> _HistoryPageRows | None:
+    """Read only a history window from the JSONB ``runs`` column.
+
+    Agno stores a complete transcript in one JSONB array.  Expanding that array
+    on the PostgreSQL side lets the API return just the requested top-level
+    turns, plus child member runs needed to render Team tool details.  ``None``
+    is reserved for lightweight/mocked DB implementations that do not expose
+    SQLAlchemy access; those keep the compatibility path below.
+    """
+    get_table = getattr(db, "_get_table", None)
+    session_factory = getattr(db, "async_session_factory", None)
+    if not callable(get_table) or not callable(session_factory):
+        return None
+
+    table = await get_table(table_type="sessions")
+    if table is None or "runs" not in table.c or "session_id" not in table.c:
+        return None
+
+    from sqlalchemy import (
+        Integer,
+        String,
+        bindparam,
+        case,
+        cast as sql_cast,
+        func,
+        literal,
+        or_,
+        select,
+        true,
+        union_all,
+    )
+    from sqlalchemy.dialects.postgresql import JSONB
+
+    session_id_param = bindparam("history_session_id", type_=String())
+    before_param = bindparam("history_before", type_=String())
+    limit_param = bindparam("history_limit", type_=Integer())
+
+    # Keep the owning row separate from the lateral array expansion: a session
+    # with no runs still produces one result row so ownership and empty-page
+    # semantics stay identical to the legacy read path.
+    session_row = (
+        select(
+            table.c.user_id.label("user_id"),
+            table.c.runs.label("runs"),
+        )
+        .where(table.c.session_id == session_id_param)
+        .cte("history_session")
+    )
+    # Keep the source session row in the final SELECT so a foreign session can
+    # still receive the normal 404 ownership result, but only let an owned row
+    # reach JSONB expansion. This avoids making an arbitrary foreign session
+    # an expensive history-window query before authorization is checked.
+    authorized_session_stmt = select(session_row)
+    if owner_user_id is not None:
+        owner_param = bindparam("history_owner_user_id", type_=String())
+        authorized_session_stmt = authorized_session_stmt.where(
+            session_row.c.user_id == owner_param
+        )
+    authorized_session = authorized_session_stmt.cte("history_authorized_session")
+    safe_runs = case(
+        (
+            func.jsonb_typeof(authorized_session.c.runs) == "array",
+            authorized_session.c.runs,
+        ),
+        else_=sql_cast(literal("[]"), JSONB),
+    )
+    elements = (
+        func.jsonb_array_elements(safe_runs)
+        .table_valued("run", with_ordinality="ordinality")
+        .render_derived(name="history_run_elements")
+    )
+    run = elements.c.run
+    run_index = (sql_cast(elements.c.ordinality, Integer) - 1).label("run_index")
+    run_id = func.nullif(run.op("->>")("run_id"), "").label("run_id")
+    parent_run_id = func.coalesce(run.op("->>")("parent_run_id"), "").label(
+        "parent_run_id"
+    )
+    all_runs = (
+        select(
+            run.label("run"),
+            run_index,
+            run_id,
+            parent_run_id,
+        )
+        .select_from(authorized_session.join(elements, true()))
+        .where(func.jsonb_typeof(run) == "object")
+        .cte("history_all_runs")
+    )
+    top_runs = (
+        select(
+            all_runs.c.run,
+            all_runs.c.run_index,
+            all_runs.c.run_id,
+            (
+                literal(_HISTORY_PAGE_CURSOR_PREFIX)
+                + sql_cast(all_runs.c.run_index, String)
+            ).label("cursor"),
+        )
+        .where(all_runs.c.parent_run_id == "")
+        .cte("history_top_runs")
+    )
+    # An ordinal cursor is deliberately independent of ``run_id``. Imported
+    # or malformed Agno rows can reuse a run id; selecting by that id would
+    # ambiguously jump to the first duplicate and skip intervening turns.
+    cursor_run_index = (
+        select(top_runs.c.run_index)
+        .where(top_runs.c.cursor == before_param)
+        .order_by(top_runs.c.run_index.asc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    eligible_runs = (
+        select(top_runs)
+        .where(or_(before_param == "", top_runs.c.run_index < cursor_run_index))
+        .cte("history_eligible_runs")
+    )
+    selected_desc = (
+        select(eligible_runs)
+        .order_by(eligible_runs.c.run_index.desc())
+        .limit(limit_param)
+        .cte("history_selected_desc")
+    )
+    selected_runs = (
+        select(selected_desc)
+        .order_by(selected_desc.c.run_index.asc())
+        .cte("history_selected_runs")
+    )
+    # A child run identifies its leader only by ``parent_run_id``. When an
+    # imported transcript reuses a leader run id, that relation is ambiguous;
+    # only reconstruct children for globally unique selected leader ids rather
+    # than mixing another page's Team output into this page.
+    leader_run_id_counts = (
+        select(
+            top_runs.c.run_id,
+            func.count().label("leader_count"),
+        )
+        .where(top_runs.c.run_id.is_not(None))
+        .group_by(top_runs.c.run_id)
+        .cte("history_leader_run_id_counts")
+    )
+    unique_selected_parent_ids = (
+        select(selected_runs.c.run_id)
+        .join(
+            leader_run_id_counts,
+            leader_run_id_counts.c.run_id == selected_runs.c.run_id,
+        )
+        .where(leader_run_id_counts.c.leader_count == 1)
+        .cte("history_unique_selected_parent_ids")
+    )
+    child_runs = (
+        select(
+            all_runs.c.run,
+            all_runs.c.run_index,
+            literal(False).label("is_leader"),
+        )
+        .where(
+            all_runs.c.parent_run_id.in_(select(unique_selected_parent_ids.c.run_id))
+        )
+        .cte("history_child_runs")
+    )
+    payload_runs = union_all(
+        select(
+            selected_runs.c.run,
+            selected_runs.c.run_index,
+            literal(True).label("is_leader"),
+        ),
+        select(
+            child_runs.c.run,
+            child_runs.c.run_index,
+            child_runs.c.is_leader,
+        ),
+    ).cte("history_payload_runs")
+    page_meta = select(
+        select(func.count())
+        .select_from(top_runs)
+        .scalar_subquery()
+        .label("total_runs"),
+        select(func.count())
+        .select_from(eligible_runs)
+        .scalar_subquery()
+        .label("eligible_runs"),
+        select(func.count())
+        .select_from(top_runs)
+        .where(top_runs.c.cursor == before_param)
+        .scalar_subquery()
+        .label("cursor_matches"),
+    ).cte("history_page_meta")
+    stmt = (
+        select(
+            session_row.c.user_id,
+            func.jsonb_typeof(session_row.c.runs).label("runs_type"),
+            payload_runs.c.run,
+            payload_runs.c.run_index,
+            payload_runs.c.is_leader,
+            page_meta.c.total_runs,
+            page_meta.c.eligible_runs,
+            page_meta.c.cursor_matches,
+        )
+        .select_from(
+            session_row.join(page_meta, true()).outerjoin(payload_runs, true())
+        )
+        .order_by(payload_runs.c.is_leader.desc(), payload_runs.c.run_index.asc())
+    )
+
+    parameters: dict[str, object] = {
+        "history_session_id": session_id,
+        "history_before": before,
+        "history_limit": limit,
+    }
+    if owner_user_id is not None:
+        parameters["history_owner_user_id"] = owner_user_id
+
+    async with session_factory() as session:
+        result = await session.execute(
+            stmt,
+            parameters,
+        )
+        rows = list(result.mappings())
+
+    if not rows:
+        return _HistoryPageRows(found=False)
+
+    first = rows[0]
+    top_level_rows: list[tuple[int, dict[str, Any]]] = []
+    sibling_runs: list[dict[str, Any]] = []
+    for row in rows:
+        value = coerce_json_value(row.get("run"))
+        if not isinstance(value, dict):
+            continue
+        run_value = cast(dict[str, Any], value)
+        sibling_runs.append(run_value)
+        if bool(row.get("is_leader")):
+            top_level_rows.append((int(row["run_index"]), run_value))
+
+    return _HistoryPageRows(
+        found=True,
+        owner_user_id=str(first.get("user_id") or ""),
+        top_level_runs=top_level_rows,
+        sibling_runs=sibling_runs,
+        total_runs=int(first.get("total_runs") or 0),
+        eligible_runs=int(first.get("eligible_runs") or 0),
+        cursor_matches=int(first.get("cursor_matches") or 0),
+        # Test doubles predating this projection do not include ``runs_type``;
+        # treat that absence as the ordinary JSONB-array production shape.
+        runs_are_array=first.get("runs_type") in (None, "array"),
+    )
+
+
+async def _get_session_messages(
     session_id: str,
     *,
     actor: Any | None = None,
-) -> list[dict[str, Any]]:
-    """Read chat messages for one session through Agno AsyncPostgresDb."""
+    before: str | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]] | dict[str, Any]:
+    """Read one chat transcript, optionally as a recent-turn window.
+
+    The legacy no-argument form returns a plain full message list.  Supplying
+    ``limit`` returns ``{data, meta}``, where ``next_cursor`` selects an older
+    page.  Cursors operate on top-level runs, so a user/assistant turn is never
+    split across pages.
+    """
     await ensure_agno_postgres_tables_async()
-    row = await get_async_agno_postgres_db().get_session(session_id, deserialize=False)
-    if not isinstance(row, dict):
-        return []
+    db = get_async_agno_postgres_db()
+    safe_limit = _history_page_limit(limit) if limit is not None else None
+    cursor = (before or "").strip()
+    pagination: dict[str, Any] | None = None
+    selected_runs: list[tuple[int, dict[str, Any]]] | None = None
+    dict_runs: list[dict[str, Any]] | None = None
 
-    if actor is not None:
-        assert_owned_resource(
-            actor,
-            owner_user_id=str(row.get("user_id") or ""),
-            resource_name="Session",
+    if safe_limit is not None:
+        # Apply regular-user ownership before JSONB expansion. Admins retain
+        # their cross-user access; an absent actor is the service-only legacy
+        # path and remains unscoped for compatibility.
+        history_owner_user_id = (
+            actor_id(actor)
+            if actor is not None and actor_role(actor) != "admin"
+            else None
         )
+        page_rows = await _query_history_page_rows(
+            db,
+            session_id=session_id,
+            before=cursor,
+            limit=safe_limit,
+            owner_user_id=history_owner_user_id,
+        )
+        if page_rows is not None:
+            if not page_rows.runs_are_array:
+                # Historic Agno rows may hold a JSON-encoded string in the
+                # JSONB column.  The SQL expansion correctly treats it as
+                # non-array, but the established compatibility path can
+                # decode it.  Enforce ownership before that full-row fallback
+                # so an untrusted caller cannot force a foreign JSON payload
+                # to be materialized.
+                if actor is not None:
+                    assert_owned_resource(
+                        actor,
+                        owner_user_id=page_rows.owner_user_id,
+                        resource_name="Session",
+                    )
+                page_rows = None
 
-    runs = coerce_json_value(row.get("runs"))
-    if not isinstance(runs, list):
-        return []
+        if page_rows is not None:
+            if not page_rows.found:
+                return _empty_history_page(limit=safe_limit)
+            if actor is not None:
+                assert_owned_resource(
+                    actor,
+                    owner_user_id=page_rows.owner_user_id,
+                    resource_name="Session",
+                )
+            if cursor and page_rows.cursor_matches == 0:
+                raise ValueError("history cursor is invalid")
+
+            selected_runs = page_rows.top_level_runs or []
+            dict_runs = page_rows.sibling_runs or []
+            has_more = page_rows.eligible_runs > len(selected_runs)
+            pagination = {
+                "limit": safe_limit,
+                "has_more": has_more,
+                "next_cursor": (
+                    _history_page_cursor(selected_runs[0][0])
+                    if has_more and selected_runs
+                    else None
+                ),
+                "total_runs": page_rows.total_runs,
+            }
+
+    # The unpaginated endpoint intentionally keeps its legacy full-session
+    # behavior. Also retain this path for lightweight DB fakes that do not
+    # expose SQLAlchemy access.
+    if selected_runs is None:
+        row = await db.get_session(session_id, deserialize=False)
+        if not isinstance(row, dict):
+            if safe_limit is None:
+                return []
+            return _empty_history_page(limit=safe_limit)
+
+        if actor is not None:
+            assert_owned_resource(
+                actor,
+                owner_user_id=str(row.get("user_id") or ""),
+                resource_name="Session",
+            )
+
+        runs = coerce_json_value(row.get("runs"))
+        if not isinstance(runs, list):
+            if safe_limit is None:
+                return []
+            return _empty_history_page(limit=safe_limit)
+
+        all_dict_runs = [r for r in runs if isinstance(r, dict)]
+        top_level_runs = [
+            (index, cast(dict[str, Any], run))
+            for index, run in enumerate(runs)
+            if isinstance(run, dict) and not _is_child_member_run(run)
+        ]
+        selected_runs = top_level_runs
+        if safe_limit is not None:
+            if cursor:
+                cursor_index = next(
+                    (
+                        position
+                        for position, (index, run) in enumerate(top_level_runs)
+                        if _history_page_cursor(index) == cursor
+                    ),
+                    None,
+                )
+                if cursor_index is None:
+                    raise ValueError("history cursor is invalid")
+                selected_runs = top_level_runs[:cursor_index]
+            selected_runs = selected_runs[-safe_limit:]
+            has_more = len(top_level_runs) > len(selected_runs)
+            if cursor:
+                has_more = cursor_index is not None and cursor_index > len(
+                    selected_runs
+                )
+            pagination = {
+                "limit": safe_limit,
+                "has_more": has_more,
+                "next_cursor": (
+                    _history_page_cursor(selected_runs[0][0])
+                    if has_more and selected_runs
+                    else None
+                ),
+                "total_runs": len(top_level_runs),
+            }
+        dict_runs = _history_page_sibling_runs(all_dict_runs, selected_runs)
 
     chat_settings = await get_chat_settings_async()
     messages: list[dict[str, Any]] = []
-    dict_runs: list[dict[str, Any]] = [r for r in runs if isinstance(r, dict)]
-    for index, run in enumerate(runs):
-        if not isinstance(run, dict):
-            continue
-        # Team sessions may store member Agent runs alongside the leader Team run.
-        # Member tools/thoughts come from leader.member_responses — skip child rows.
-        if _is_child_member_run(run):
-            continue
+    if dict_runs is None:
+        dict_runs = []
+
+    for index, run in selected_runs:
         user_text = _preview_from_runs([run])
-        run_id = str(run.get("run_id") or f"history-{index}")
-        attachments = _history_user_attachments(cast(dict[str, Any], run))
+        run_id = _history_run_id(run, index)
+        history_cursor = _history_page_cursor(index)
+        message_id = _history_message_id(
+            run,
+            index,
+            paginated=pagination is not None,
+        )
+        attachments = _history_user_attachments(run)
         if user_text.strip() or attachments:
             user_msg: dict[str, Any] = {
-                "id": f"{run_id}:user",
+                "id": f"{message_id}:user",
                 "role": "user",
                 "content": user_text.strip(),
                 "final": True,
@@ -929,16 +1411,16 @@ async def get_session_messages_async(
             }
             if attachments:
                 user_msg["attachments"] = attachments
+            if pagination is not None:
+                user_msg["history_cursor"] = history_cursor
             messages.append(user_msg)
 
         content = run.get("content", "")
-        if _history_run_has_assistant_payload(cast(dict[str, Any], run), sibling_runs=dict_runs):
+        if _history_run_has_assistant_payload(run, sibling_runs=dict_runs):
             tools_value = run.get("tools")
             raw_tools: list[Any] = tools_value if isinstance(tools_value, list) else []
             # Include member tools when computing HITL/paused status for Team runs.
-            for member in _member_rows(
-                cast(dict[str, Any], run), sibling_runs=dict_runs
-            ):
+            for member in _member_rows(run, sibling_runs=dict_runs):
                 member_tools = member.get("tools")
                 if isinstance(member_tools, list):
                     raw_tools = [*raw_tools, *member_tools]
@@ -948,13 +1430,13 @@ async def get_session_messages_async(
             )
             if chat_settings.show_thought_chain:
                 tools = _history_team_tools(
-                    cast(dict[str, Any], run),
+                    run,
                     tool_status=tool_status,
                     include_raw_io=chat_settings.show_raw_tool_io,
                     sibling_runs=dict_runs,
                 )
                 thought_chain = _history_team_thoughts(
-                    cast(dict[str, Any], run),
+                    run,
                     tool_status=tool_status,
                     sibling_runs=dict_runs,
                 )
@@ -963,26 +1445,26 @@ async def get_session_messages_async(
                 thought_chain = []
             followups = run.get("followups")
             message: dict[str, Any] = {
-                "id": run_id,
+                "id": message_id,
                 "role": "assistant",
                 "content": (
                     _project_history_content(cast(dict[str, object], run), status)
                     or (content.strip() if isinstance(content, str) else "")
-                    or _history_member_content_fallback(
-                        cast(dict[str, Any], run), sibling_runs=dict_runs
-                    )
+                    or _history_member_content_fallback(run, sibling_runs=dict_runs)
                 ),
                 "final": True,
                 "run_id": run_id,
                 "session_id": session_id,
                 "status": status,
                 "metrics": metric_values(run.get("metrics")),
-                "sources": _history_team_sources(
-                    cast(dict[str, Any], run), sibling_runs=dict_runs
-                ),
+                "sources": _history_team_sources(run, sibling_runs=dict_runs),
                 "tools": tools,
-                "followups": [item for item in followups if isinstance(item, str)] if isinstance(followups, list) else [],
+                "followups": [item for item in followups if isinstance(item, str)]
+                if isinstance(followups, list)
+                else [],
             }
+            if pagination is not None:
+                message["history_cursor"] = history_cursor
             if thought_chain:
                 message["thought_chain"] = thought_chain
             approval_id = _history_approval_id(raw_tools)
@@ -1006,11 +1488,56 @@ async def get_session_messages_async(
                 if isinstance(reasoning, str) and reasoning.strip():
                     message["reasoning"] = reasoning.strip()
                 elif isinstance(reasoning, list):
-                    joined = "".join(str(item) for item in reasoning if isinstance(item, str)).strip()
+                    joined = "".join(
+                        str(item) for item in reasoning if isinstance(item, str)
+                    ).strip()
                     if joined:
                         message["reasoning"] = joined
             messages.append(message)
+    if pagination is not None:
+        return {"data": messages, "meta": pagination}
     return messages
+
+
+async def get_session_messages_async(
+    session_id: str,
+    *,
+    actor: Any | None = None,
+) -> list[dict[str, Any]]:
+    """Read the complete legacy chat transcript for one session."""
+    result = await _get_session_messages(session_id, actor=actor)
+    if isinstance(result, list):
+        return result
+    raise TypeError("unexpected paginated response for unpaginated history request")
+
+
+async def get_session_messages_page_async(
+    session_id: str,
+    *,
+    actor: Any | None = None,
+    before: str | None = None,
+    limit: int = _HISTORY_PAGE_DEFAULT_LIMIT,
+) -> dict[str, Any]:
+    """Return a cursor-paginated recent window of one chat transcript."""
+    result = await _get_session_messages(
+        session_id,
+        actor=actor,
+        before=before,
+        limit=limit,
+    )
+    if isinstance(result, dict):
+        return result
+    # ``limit`` is supplied above; retain a defensive stable result if this
+    # function is ever refactored independently from the compatibility path.
+    return {
+        "data": result,
+        "meta": {
+            "limit": _HISTORY_PAGE_DEFAULT_LIMIT,
+            "has_more": False,
+            "next_cursor": None,
+            "total_runs": 0,
+        },
+    }
 
 
 def _archived_at_metadata(value: Any) -> str:

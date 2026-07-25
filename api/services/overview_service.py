@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast as typing_cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -11,10 +13,18 @@ from loguru import logger
 from sqlalchemy import MetaData, Table, and_, case, cast as sa_cast, func, select
 from sqlalchemy.types import DateTime, Float
 
-from api.auth.claims import ActorLike, has_scope, scope_user_id
+from api.auth.claims import (
+    ActorLike,
+    actor_id,
+    actor_role,
+    actor_scopes,
+    has_scope,
+    scope_user_id,
+)
 from api.services.postgres_store import get_async_agno_postgres_db
 from api.services.trace_lookup_service import batch_traces_by_run_ids
 from api.services.trace_status_service import reconcile_trace_statuses
+from api.utils.ttl_cache import AsyncTtlCache
 
 OverviewRange = Literal["1h", "24h", "7d"]
 OverviewQueryRange = OverviewRange | Literal["custom"]
@@ -27,6 +37,35 @@ _RANGE_WINDOWS: dict[OverviewRange, timedelta] = {
 # Token sample (+ SQL-fallback latency sample). Window KPIs use SQL aggregates.
 _PAGE_LIMIT = 50
 _MAX_OVERVIEW_TRACES = _PAGE_LIMIT
+_OVERVIEW_CACHE_TTL_SEC = 3.0
+_OVERVIEW_CACHE_MAX_ENTRIES = 256
+# Overview construction fans out into several database reads.  Keep detached
+# single-flight work well below the retained-key bound under custom-range load.
+_OVERVIEW_CACHE_MAX_INFLIGHT = 32
+
+
+@dataclass(frozen=True)
+class _OverviewCacheKey:
+    """All request properties that can alter a permission-scoped payload."""
+
+    actor_id: str
+    actor_role: str
+    actor_scopes: tuple[str, ...]
+    owner_user_id: str | None
+    range_name: OverviewQueryRange
+    start_time: str | None
+    end_time: str | None
+    timezone: str
+
+
+# Dashboard polling can issue overlapping requests from multiple widgets/tabs.
+# Keep this deliberately short and bounded; the API process is only one cache
+# scope, so it neither substitutes for invalidation nor shares data across users.
+_OVERVIEW_CACHE: AsyncTtlCache[_OverviewCacheKey, dict[str, Any]] = AsyncTtlCache(
+    ttl_sec=_OVERVIEW_CACHE_TTL_SEC,
+    max_entries=_OVERVIEW_CACHE_MAX_ENTRIES,
+    max_inflight=_OVERVIEW_CACHE_MAX_INFLIGHT,
+)
 
 # ``AsyncPostgresDb`` keeps reflected tables in a process-wide ``MetaData``.
 # A long-lived worker can therefore hold an older/incomplete ``agno_traces``
@@ -874,6 +913,26 @@ async def _audit_summary() -> dict[str, Any] | None:
     }
 
 
+def _overview_cache_key(
+    actor: ActorLike,
+    *,
+    range_name: OverviewQueryRange,
+    custom_range: tuple[datetime, datetime] | None,
+    timezone: ZoneInfo,
+) -> _OverviewCacheKey:
+    """Build a cache key that cannot cross user or capability boundaries."""
+    return _OverviewCacheKey(
+        actor_id=actor_id(actor),
+        actor_role=actor_role(actor),
+        actor_scopes=tuple(actor_scopes(actor)),
+        owner_user_id=scope_user_id(actor, None),
+        range_name=range_name,
+        start_time=custom_range[0].isoformat() if custom_range else None,
+        end_time=custom_range[1].isoformat() if custom_range else None,
+        timezone=getattr(timezone, "key", None) or str(timezone),
+    )
+
+
 async def get_runtime_overview(
     actor: ActorLike,
     *,
@@ -883,7 +942,12 @@ async def get_runtime_overview(
     timezone: str = "UTC",
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """Return a permission-scoped, trace-backed runtime overview."""
+    """Return a permission-scoped, trace-backed runtime overview.
+
+    Production reads have a three-second, process-local cache with single-flight
+    miss coalescing.  A supplied ``now`` is intentionally uncached so tests and
+    deterministic callers retain exact window semantics.
+    """
     if range_name not in {*_RANGE_WINDOWS, "custom"}:
         raise ValueError("range must be one of: 1h, 24h, 7d, custom")
     try:
@@ -897,7 +961,47 @@ async def get_runtime_overview(
     if range_name != "custom" and custom_range is not None:
         raise ValueError("start_time and end_time can only be used when range is custom")
 
-    generated_at = now or datetime.now(UTC)
+    if now is not None:
+        generated_at = now.replace(tzinfo=UTC) if now.tzinfo is None else now.astimezone(UTC)
+        return await _build_runtime_overview(
+            actor,
+            range_name=range_name,
+            custom_range=custom_range,
+            display_timezone=display_timezone,
+            generated_at=generated_at,
+        )
+
+    key = _overview_cache_key(
+        actor,
+        range_name=range_name,
+        custom_range=custom_range,
+        timezone=display_timezone,
+    )
+
+    async def _load() -> dict[str, Any]:
+        # Never expose the retained object itself: nested response payloads are
+        # mutable and must not be able to poison the next cache hit.
+        payload = await _build_runtime_overview(
+            actor,
+            range_name=range_name,
+            custom_range=custom_range,
+            display_timezone=display_timezone,
+            generated_at=datetime.now(UTC),
+        )
+        return copy.deepcopy(payload)
+
+    return copy.deepcopy(await _OVERVIEW_CACHE.get_or_create(key, _load))
+
+
+async def _build_runtime_overview(
+    actor: ActorLike,
+    *,
+    range_name: OverviewQueryRange,
+    custom_range: tuple[datetime, datetime] | None,
+    display_timezone: ZoneInfo,
+    generated_at: datetime,
+) -> dict[str, Any]:
+    """Build one overview payload after the request has been validated."""
     generated_at = generated_at.replace(tzinfo=UTC) if generated_at.tzinfo is None else generated_at.astimezone(UTC)
     if range_name == "custom":
         # The validation above guarantees the custom bounds are present.

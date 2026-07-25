@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import type { ReactNode } from 'react'
 import { Actions, Attachments, Bubble, FileCard, Prompts, Sender, Sources, ThoughtChain } from '@ant-design/x'
 import { Markdown } from '@/shared/ui/Markdown'
@@ -697,6 +697,11 @@ export function ChatPage() {
     },
   })
   const scrollRef = useRef<HTMLDivElement>(null)
+  const historyAnchorRef = useRef<{
+    scrollHeight: number
+    scrollTop: number
+    olderPageVersion: number
+  } | null>(null)
   const senderShellRef = useRef<HTMLDivElement>(null)
   const workspaceRef = useRef<HTMLDivElement>(null)
   const [openAttachments, setOpenAttachments] = useState(false)
@@ -780,6 +785,55 @@ export function ChatPage() {
     node.scrollTo({ top: node.scrollHeight, behavior })
     setFollowLatest(true)
   }, [])
+  const loadOlderHistory = useCallback(() => {
+    if (
+      !chat.history.hasNextPage ||
+      chat.history.isFetchingNextPage ||
+      chat.history.isOperationPending
+    ) {
+      return
+    }
+    const node = scrollRef.current
+    if (node) {
+      historyAnchorRef.current = {
+        scrollHeight: node.scrollHeight,
+        scrollTop: node.scrollTop,
+        olderPageVersion: chat.history.olderPageVersion,
+      }
+    }
+    // Fetching a prepend page must not trigger the regular tail-follow effect.
+    setFollowLatest(false)
+    void chat.history
+      .fetchNextPage()
+      .then((result) => {
+        if (result.isFetchNextPageError) historyAnchorRef.current = null
+      })
+      .catch(() => {
+        // No DOM prepend follows a rejected page request. Do not let a stale
+        // anchor move the viewport on an unrelated later history update.
+        historyAnchorRef.current = null
+      })
+  }, [chat.history])
+
+  // Keep the first previously visible message anchored when older turns prepend.
+  useLayoutEffect(() => {
+    const anchor = historyAnchorRef.current
+    const node = scrollRef.current
+    if (
+      !anchor ||
+      !node ||
+      chat.history.olderPageVersion <= anchor.olderPageVersion ||
+      chat.state.messages.length < (chat.history.data?.length ?? 0)
+    ) {
+      return
+    }
+    node.scrollTop = Math.max(0, anchor.scrollTop + node.scrollHeight - anchor.scrollHeight)
+    historyAnchorRef.current = null
+  }, [
+    chat.history.data?.length,
+    chat.history.olderPageVersion,
+    chat.state.messages.length,
+  ])
 
   // Prefer instant scroll while streaming to avoid smooth-scroll jank on every delta.
   const lastAssistant = [...chat.state.messages].reverse().find((item) => item.role === 'assistant')
@@ -858,7 +912,7 @@ export function ChatPage() {
     !chat.state.requesting
   const showHistoryError =
     Boolean(chat.sessionId) &&
-    chat.history.isError &&
+    (chat.history.isError || chat.history.isFetchNextPageError) &&
     !chat.state.requesting &&
     !showSessionMissing &&
     !showSessionMetaError
@@ -1097,6 +1151,18 @@ export function ChatPage() {
             setFollowLatest(node.scrollHeight - node.scrollTop - node.clientHeight < threshold)
           }}
         >
+          {chat.history.hasNextPage ? (
+            <div className="chat-history-load-more">
+              <Button
+                type="link"
+                size="small"
+                loading={chat.history.isFetchingNextPage || chat.history.isOperationPending}
+                onClick={loadOlderHistory}
+              >
+                {t('historyLoadOlder')}
+              </Button>
+            </div>
+          ) : null}
           {showSessionMetaError ? (
             <div className="chat-error chat-history-error" role="alert">
               <span className="chat-error__message">
@@ -1125,7 +1191,13 @@ export function ChatPage() {
                   size="small"
                   type="primary"
                   loading={chat.history.isFetching}
-                  onClick={() => void chat.history.refetch()}
+                  onClick={() => {
+                    if (chat.history.isFetchNextPageError) {
+                      loadOlderHistory()
+                      return
+                    }
+                    void chat.history.refetch()
+                  }}
                 >
                   {t('common:retry')}
                 </Button>

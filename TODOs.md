@@ -4,7 +4,7 @@
 
 - 本版本收口产品角色为 `admin` / `user`、账户授权版本即时失效、Dashboard Overview 的 trace 反射自恢复，以及与之对应的迁移与回归测试。
 - 每次部署必须先完成 `docs/release.md` 的后端/前端构建门禁；涉及既有数据库时，RBAC 迁移演练仅可在带备份引用的 PostgreSQL 克隆库执行。
-- 性能缓存、资产—漏洞—告警闭环和 Team 的 MCP/HITL 扩展均明确延后至 **1.1+**，不作为 1.0.0 的隐含承诺。
+- 资产—漏洞—告警闭环和 Team 的 MCP/HITL 扩展明确延后至 **1.1+**，不作为 1.0.0 的隐含承诺；Overview/Trace/Chat 的首批性能治理已按下述 1.1 P1 落地。
 
 ## 已完成：CVE / IP 黑名单源配置迁出仓库根
 
@@ -297,11 +297,14 @@
 - `--file README.md` 端到端通过；Docling 文档 Markdown 注入模型消息，原始 `File` 只进入 data-analysis / Team 隔离工作区，避免 DeepSeek Chat Completions 的 `unknown variant file` 400。
 - 取消流改为单一 `security-run-cancel-wait` 生命周期，并在 SSE 退出时 cancel + await，避免 pending task 警告。
 
-## 1.1+：以端点与交付链路为主的性能治理
+## 已完成：1.1 P1 端点与交付链路性能治理
 
-- Dashboard Overview 在同机 6 并发请求下 p95 约 866ms（单并发样本 p50 约 169ms）；先做按用户/时间窗的短 TTL 请求合并或缓存，并用 `EXPLAIN` 验证 trace `(user_id, start_time)` / `(user_id, status, start_time)` 复合索引需求，再考虑扩大 API worker 数。
-- [x] Dashboard 图表已改为 `echarts/core` 按需注册（line / bar / pie + 必需组件），并仅在 Overview 返回趋势或分布数据时加载；生产构建的 ECharts chunk 已由约 1.14MB / 377KB gzip 降至约 567KB / 190KB gzip。生产部署仍应提供 immutable cache + Brotli/gzip。
-- Chat 当前每条 SSE event 都会遍历消息列表，且历史接口没有分页窗口；先补最近消息窗口/向前分页和 SSE rAF 合并，再以 100/500 条真实历史决定是否引入虚拟列表，避免过早改变 Bubble.List 的滚动锚定语义。
+- Dashboard Overview：按 actor 权限投影、时间窗口和时区的 3 秒进程内 TTL + single-flight 合并（最多 256 个缓存键、32 个在途构建）；返回值深拷贝，避免调用方污染。它不跨 API 进程，压测仍须分别观察命中与错峰 miss。
+- Trace：新增 `uv run audit-trace-indexes` 只读 catalog/统计核验和可选的 bounded `EXPLAIN (ANALYZE, BUFFERS)`；只有审阅证据后显式传入 `--apply --confirm CREATE_AGNO_TRACE_INDEXES`，才会以 `CREATE INDEX CONCURRENTLY` 创建批准的 `(user_id, start_time DESC)` 与 `(user_id, status, start_time DESC)` 扩展索引。Agno 表不进入本仓库 Alembic。
+- Chat：历史 API 支持 1–100 个完整 top-level turns 的 cursor 窗口，前端初始载入 40、向前加载保持视口锚点；最新页刷新会级联重分区已加载页面，避免边界丢 turn。重复 leader `run_id` 的 Team child 重建 fail-closed，避免跨页混入成员输出。
+- Chat SSE：高频状态按动画帧批量 reducer 更新，后台标签页 80ms 兜底，终态立即 flush；恢复游标只会在可见事件进入 reducer 后推进，忽略帧也不会越过尚未 flush 的事件。
+- [x] Dashboard 图表使用 `echarts/core` 按需注册（line / bar / pie + 必需组件），仅在 Overview 有趋势或分布时加载；生产 ECharts chunk 约由 1.14MB / 377KB gzip 降至 567KB / 190KB gzip。生产部署仍应提供 immutable cache + Brotli/gzip。
+- 后续以 100/500 条真实历史和预发 Trace `EXPLAIN` 证据决定虚拟列表、索引落地或 API worker 扩容，不预先改变 Bubble.List 的滚动语义。
 
 ## 1.1+：资产—漏洞—告警调查闭环
 
