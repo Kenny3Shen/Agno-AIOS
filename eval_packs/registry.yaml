@@ -1,0 +1,248 @@
+# Safety eval pack registry (design v1).
+# Full design: docs/safety-eval.md
+# Full harmful dumps: eval_packs/_cache (gitignored). Opt-in:
+#   TAIS_EVAL_PACKS_ALLOW_HARMFUL=1 uv run python scripts/eval_packs/fetch_pack.py --all
+
+schema_version: 1
+updated: "2026-07-25"
+
+defaults:
+  # Safety packs are isolated by default. A pack/case must explicitly set
+  # profile: full before it can exercise the product tool surface.
+  profile: tools_off
+  eval_types:
+    - agent_as_judge
+  sample_seed: 42
+
+# status: planned | ready | cached | deprecated
+# source.adapter: maps HF rows → intermediate JSONL (see safety_eval_fetch.ADAPTERS)
+packs:
+  - id: fixture-synthetic
+    layer: L1
+    status: ready
+    title: Synthetic CI fixture (harmless abstracts)
+    license: internal
+    pack_version: "2026.07.1"
+    source:
+      path: eval_packs/fixture-synthetic
+    target: { kind: agent, id: security-operations }
+    suite_name: safety-L1-fixture-synthetic
+    tags: [safety, L1, pack:fixture-synthetic, fixture]
+    sample_size: null
+    expected_behavior: mixed
+    notes: Desensitized fixtures for unit tests and local import smoke; no HF fetch.
+
+  - id: guardrail-regression-v1
+    layer: L0
+    status: ready
+    title: Guardrail regression (PII / injection hard-block)
+    license: internal
+    pack_version: "2026.07.1"
+    source:
+      path: eval_packs/guardrail-regression-v1
+    target: { kind: agent, id: security-operations }
+    suite_name: safety-guardrail-regression
+    tags: [safety, L0, pack:guardrail-regression-v1, guardrail]
+    sample_size: null
+    expected_behavior: guardrail_block
+    notes: Expect GUARDRAIL_* pre-hooks; metrics bucket n_guardrail_blocked separately from ASR.
+
+  - id: do-not-answer
+    layer: L1
+    status: planned
+    title: Do-Not-Answer
+    # The dataset is CC-BY-NC-SA-4.0; Apache-2.0 applies only to source files.
+    license: cc-by-nc-sa-4.0
+    # Compact public baseline: 20 deterministic cases; fetch before import.
+    pack_version: "2026.07.3"
+    source:
+      hf: LibrAI/do-not-answer
+      # Immutable HF dataset commit, verified 2026-07-25.
+      hf_revision: 74e74f2e4507ef256fe536f78a776f4a1ff67955
+      hf_split: train
+      adapter: do-not-answer
+      github: https://github.com/Libr-AI/do-not-answer
+    target: { kind: agent, id: security-operations }
+    suite_name: safety-L1-refusal
+    tags: [safety, L1, pack:do-not-answer, lite]
+    sample_size: 20
+    expected_behavior: refuse
+    notes: Compact L1 public baseline (20 cases). Full set stays in _cache; import uses the deterministic sample.
+
+  - id: strongreject
+    layer: L2
+    status: planned
+    title: StrongREJECT
+    license: mit
+    pack_version: "2026.07.1"
+    source:
+      hf: walledai/StrongREJECT
+      hf_split: train
+      adapter: strongreject
+      # Gated on HF — set HF_TOKEN after accepting the card, or use fallbacks.
+      hf_fallbacks:
+        - declare-lab/HarmfulQA
+    target: { kind: agent, id: security-operations }
+    suite_name: safety-L2-strongreject
+    tags: [safety, L2, pack:strongreject, jailbreak]
+    sample_size: 80
+    expected_behavior: refuse
+    notes: >
+      Primary HF id is gated. Without HF_TOKEN, fetch falls back to
+      declare-lab/HarmfulQA (not identical to StrongREJECT; document in reports).
+
+  - id: advbench-sample
+    layer: L2
+    status: planned
+    title: AdvBench (sample)
+    license: mit
+    pack_version: "2026.07.3"
+    source:
+      hf: walledai/AdvBench
+      # Immutable HF dataset commit; this mirror is gated for many users.
+      hf_revision: 9d4730540082fa4017450b65ca1c0e1d8d30446e
+      hf_split: train
+      adapter: advbench-sample
+      github: https://github.com/llm-attacks/llm-attacks
+      # Public immutable fallback when the HF mirror is gated.
+      csv_revision: a62d1307e38b3a076e614b20781c785fd860d813
+      csv_url: https://raw.githubusercontent.com/llm-attacks/llm-attacks/a62d1307e38b3a076e614b20781c785fd860d813/data/advbench/harmful_behaviors.csv
+      csv_sha256: 6cd1a5c63c07610d7eb67307772ee5606017ee950b5770ab288a2c487489d3e1
+    target: { kind: agent, id: security-operations }
+    suite_name: safety-L2-advbench-sample
+    tags: [safety, L2, pack:advbench-sample, lite]
+    sample_size: 20
+    expected_behavior: refuse
+    notes: Compact L2 public baseline (20 cases). Full set stays in _cache; import uses the deterministic sample.
+
+  - id: prompt-injections
+    layer: L3
+    status: planned
+    title: deepset prompt-injections
+    license: check-card
+    pack_version: "2026.07.3"
+    source:
+      hf: deepset/prompt-injections
+      # Immutable HF dataset commit, verified 2026-07-25.
+      hf_revision: 4f61ecb038e9c3fb77e21034b22511b523772cdd
+      hf_split: train
+      adapter: prompt-injections
+    target: { kind: agent, id: security-operations }
+    suite_name: safety-L3-injection
+    tags: [safety, L3, pack:prompt-injections, injection, lite]
+    sample_size: 20
+    expected_behavior: refuse_injection
+    notes: Compact L3 public baseline (20 cases); includes injection and benign controls. Review the source card before distribution.
+
+  - id: harmbench-behaviors
+    layer: L2
+    status: planned
+    title: HarmBench behaviors
+    license: mit
+    pack_version: "2026.07.1"
+    source:
+      hf: walledai/HarmBench
+      hf_split: train
+      adapter: harmbench-behaviors
+      github: https://github.com/centerforaisafety/HarmBench
+      # Gated primary; public harmful prompts fallback (not official HarmBench):
+      hf_fallbacks:
+        - LLM-LAT/harmful-dataset
+    target: { kind: agent, id: security-operations }
+    suite_name: safety-L2-harmbench
+    tags: [safety, L2, pack:harmbench-behaviors]
+    sample_size: 100
+    expected_behavior: refuse
+    phase: P1
+    notes: >
+      Primary HF id is gated. Without HF_TOKEN, falls back to LLM-LAT/harmful-dataset
+      (document substitute source in eval reports).
+
+  - id: jailbreakbench
+    layer: L2
+    status: planned
+    title: JailbreakBench behaviors
+    license: mit
+    pack_version: "2026.07.1"
+    source:
+      hf: JailbreakBench/JBB-Behaviors
+      hf_config: behaviors
+      hf_split: harmful
+      adapter: jailbreakbench
+      github: https://github.com/JailbreakBench/jailbreakbench
+    target: { kind: agent, id: security-operations }
+    suite_name: safety-L2-jbb
+    tags: [safety, L2, pack:jailbreakbench]
+    sample_size: 100
+    expected_behavior: refuse
+    phase: P1
+
+  - id: safety-prompts-zh
+    layer: L1
+    status: planned
+    title: Chinese Safety-Prompts
+    license: check-card
+    pack_version: "2026.07.1"
+    source:
+      github: https://github.com/thu-coai/Safety-Prompts
+      # No stable HF id in registry — fetch via manual JSONL or future git adapter
+    target: { kind: agent, id: security-operations }
+    suite_name: safety-L1-refusal-zh
+    tags: [safety, L1, pack:safety-prompts-zh, zh]
+    sample_size: 80
+    expected_behavior: refuse
+    phase: P1
+    notes: GitHub-only; place curated cases under _cache or source.path when ready.
+
+  - id: beavertails-eval
+    layer: L1
+    status: planned
+    title: BeaverTails-Evaluation
+    license: cc-by-nc-4.0
+    pack_version: "2026.07.1"
+    source:
+      hf: PKU-Alignment/BeaverTails-Evaluation
+      hf_split: test
+      adapter: beavertails-eval
+    target: { kind: agent, id: security-operations }
+    suite_name: safety-L1-beavertails
+    tags: [safety, L1, pack:beavertails-eval, nc]
+    sample_size: 80
+    expected_behavior: refuse
+    phase: P1
+    notes: Non-commercial license; research environments only (same harmful gate).
+
+  - id: cyberseceval
+    layer: L3
+    status: planned
+    title: CyberSecEval (subset)
+    license: mit
+    pack_version: "2026.07.1"
+    source:
+      github: https://github.com/meta-llama/PurpleLlama
+      hf: walledai/CyberSecEval
+      hf_config: instruct
+      # instruct config uses language splits (python/php/…) not train
+      hf_split: python
+      adapter: cyberseceval
+    target: { kind: agent, id: security-operations }
+    suite_name: safety-L3-cyberseceval
+    tags: [safety, L3, pack:cyberseceval]
+    sample_size: 50
+    expected_behavior: refuse
+    phase: P2
+
+  - id: soc-custom-v1
+    layer: L3
+    status: ready
+    title: T.A.I.S SOC custom v1
+    license: internal
+    pack_version: "2026.07.1"
+    source:
+      path: eval_packs/soc-custom-v1
+    target: { kind: agent, id: security-operations }
+    suite_name: safety-L3-soc-custom
+    tags: [safety, L3, pack:soc-custom-v1, soc]
+    sample_size: null
+    expected_behavior: mixed
+    notes: Desensitized SOC scenarios for Phase 1 import; abstract prompts only.

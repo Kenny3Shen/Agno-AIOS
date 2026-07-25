@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { App, Button, Card, Collapse, Flex, Form, Input, InputNumber, Modal, Popconfirm, Radio, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography } from 'antd'
 import {
   ApiOutlined,
+  AuditOutlined,
   CheckCircleOutlined,
   DatabaseOutlined,
   DeleteOutlined,
@@ -385,6 +386,7 @@ export function SettingsPage() {
     const current: ModelConfigResponse = models.data ?? {
       active_model_id: model.id,
       memory_model_id: null,
+      eval_judge_model_id: null,
       models: [],
     }
     const previous = current.models.find((item) => item.id === model.id)
@@ -408,6 +410,7 @@ export function SettingsPage() {
       await persist({
         active_model_id: current.active_model_id,
         memory_model_id: current.memory_model_id ?? null,
+        eval_judge_model_id: current.eval_judge_model_id ?? null,
         models: next,
       })
       message.success(t('modelSaved'))
@@ -441,6 +444,7 @@ export function SettingsPage() {
         ...current,
         active_model_id: model.id,
         memory_model_id: current.memory_model_id ?? null,
+        eval_judge_model_id: current.eval_judge_model_id ?? null,
       })
       message.success(t('modelActivated', { name: model.name }))
     } catch (error) {
@@ -459,6 +463,7 @@ export function SettingsPage() {
       await persist({
         ...current,
         memory_model_id: already ? null : model.id,
+        eval_judge_model_id: current.eval_judge_model_id ?? null,
       })
       message.success(
         already
@@ -472,6 +477,29 @@ export function SettingsPage() {
     }
   }
 
+  const setEvalJudgeModel = async (model: ModelConfig) => {
+    const current = models.data
+    if (!current) return
+    const already = current.eval_judge_model_id === model.id
+    setUpdatingId(model.id)
+    try {
+      await persist({
+        ...current,
+        memory_model_id: current.memory_model_id ?? null,
+        eval_judge_model_id: already ? null : model.id,
+      })
+      message.success(
+        already
+          ? t('evalJudgeModelCleared', { name: model.name })
+          : t('evalJudgeModelActivated', { name: model.name }),
+      )
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('evalJudgeModelActivateFailed'))
+    } finally {
+      setUpdatingId(null)
+    }
+  }
+
   const setEnabled = async (model: ModelConfig, enabled: boolean) => {
     const current = models.data
     if (!current) return
@@ -480,6 +508,7 @@ export function SettingsPage() {
       await persist({
         ...current,
         memory_model_id: current.memory_model_id ?? null,
+        eval_judge_model_id: current.eval_judge_model_id ?? null,
         models: current.models.map((item) => (item.id === model.id ? { ...item, enabled } : item)),
       })
       message.success(enabled ? t('modelEnabled', { name: model.name }) : t('modelDisabled', { name: model.name }))
@@ -518,9 +547,13 @@ export function SettingsPage() {
     if (memory_model_id === model.id) {
       memory_model_id = null
     }
+    let eval_judge_model_id = current.eval_judge_model_id ?? null
+    if (eval_judge_model_id === model.id) {
+      eval_judge_model_id = null
+    }
     setUpdatingId(model.id)
     try {
-      await persist({ active_model_id, memory_model_id, models: remaining })
+      await persist({ active_model_id, memory_model_id, eval_judge_model_id, models: remaining })
       message.success(t('modelDeleted', { name: model.name }))
       if (editing?.id === model.id) closeEditor()
     } catch (error) {
@@ -558,15 +591,19 @@ export function SettingsPage() {
           dataIndex: 'name',
           width: 220,
           ellipsis: true,
-          render: (value, row) => (
-            <Space wrap size={[4, 4]}>
-              <strong>{value}</strong>
-              {models.data?.active_model_id === row.id && <Tag color="blue">{t('tagActive')}</Tag>}
-              {models.data?.memory_model_id === row.id && (
-                <Tag color="purple">{t('tagMemoryManager')}</Tag>
-              )}
-            </Space>
-          ),
+          render: (value, row) => {
+            const isActive = models.data?.active_model_id === row.id
+            const isMemory = models.data?.memory_model_id === row.id
+            const isEvalJudge = models.data?.eval_judge_model_id === row.id
+            return (
+              <Space wrap size={[4, 4]}>
+                <strong>{value}</strong>
+                {isActive && <Tag color="blue">{t('tagActive')}</Tag>}
+                {isMemory && <Tag color="blue">{t('tagMemoryManager')}</Tag>}
+                {isEvalJudge && <Tag color="blue">{t('tagEvalJudge')}</Tag>}
+              </Space>
+            )
+          },
         },
         { title: t('colModelId'), dataIndex: 'model_id', width: 200, ellipsis: true },
         {
@@ -603,8 +640,13 @@ export function SettingsPage() {
         },
         {
           title: t('colActions'),
-          width: 220,
-          render: (_, row) => (
+          width: 260,
+          render: (_, row) => {
+            const isActive = models.data?.active_model_id === row.id
+            const isMemory = models.data?.memory_model_id === row.id
+            const isEvalJudge = models.data?.eval_judge_model_id === row.id
+            const pinDisabled = !row.enabled || row.configured === false
+            return (
             <Space>
               <Tooltip title={t('testConnection')}>
                 <Button
@@ -617,30 +659,36 @@ export function SettingsPage() {
               <Tooltip title={t('editModel')}>
                 <Button icon={<EditOutlined />} aria-label={t('editModelNamed', { name: row.name })} onClick={() => openEditor(row)} />
               </Tooltip>
-              <Tooltip title={models.data?.active_model_id === row.id ? t('currentModel') : t('setCurrentModel')}>
+              <Tooltip title={isActive ? t('currentModel') : t('setCurrentModel')}>
                 <Button
                   icon={<CheckCircleOutlined />}
-                  disabled={models.data?.active_model_id === row.id}
+                  type={isActive ? 'primary' : 'default'}
+                  ghost={isActive}
                   loading={updatingId === row.id}
                   aria-label={t('setCurrentModelNamed', { name: row.name })}
                   onClick={() => void setActiveModel(row)}
                 />
               </Tooltip>
-              <Tooltip
-                title={
-                  models.data?.memory_model_id === row.id
-                    ? t('memoryModelCurrent')
-                    : t('setMemoryModel')
-                }
-              >
+              <Tooltip title={isMemory ? t('memoryModelCurrent') : t('setMemoryModel')}>
                 <Button
                   icon={<DatabaseOutlined />}
-                  type={models.data?.memory_model_id === row.id ? 'primary' : 'default'}
-                  ghost={models.data?.memory_model_id === row.id}
+                  type={isMemory ? 'primary' : 'default'}
+                  ghost={isMemory}
                   loading={updatingId === row.id}
-                  disabled={!row.enabled || row.configured === false}
+                  disabled={pinDisabled}
                   aria-label={t('setMemoryModelNamed', { name: row.name })}
                   onClick={() => void setMemoryModel(row)}
+                />
+              </Tooltip>
+              <Tooltip title={isEvalJudge ? t('evalJudgeModelCurrent') : t('setEvalJudgeModel')}>
+                <Button
+                  icon={<AuditOutlined />}
+                  type={isEvalJudge ? 'primary' : 'default'}
+                  ghost={isEvalJudge}
+                  loading={updatingId === row.id}
+                  disabled={pinDisabled}
+                  aria-label={t('setEvalJudgeModelNamed', { name: row.name })}
+                  onClick={() => void setEvalJudgeModel(row)}
                 />
               </Tooltip>
               <Tooltip
@@ -675,7 +723,8 @@ export function SettingsPage() {
                 </Popconfirm>
               </Tooltip>
             </Space>
-          ),
+            )
+          },
         },
       ]}
     />
@@ -1037,7 +1086,7 @@ export function SettingsPage() {
     rows: ChatSettingRow[],
     options: { saving: boolean; onResetField: (field: ChatField) => void },
   ) => {
-    const { saving, onResetField } = options
+    const { saving: isSaving, onResetField } = options
     return (
     <Table<ChatSettingRow>
       rowKey="key"
@@ -1118,7 +1167,7 @@ export function SettingsPage() {
                   size="small"
                   icon={<UndoOutlined />}
                   aria-label={t('resetFieldDefaultNamed', { name: row.parameter })}
-                  disabled={chatSettings.isLoading || saving}
+                  disabled={chatSettings.isLoading || isSaving}
                   onClick={() => onResetField(row.field)}
                 />
               </Tooltip>

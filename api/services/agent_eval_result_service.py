@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from typing import Any, cast
 
@@ -7,19 +8,65 @@ from api.services.postgres_store import get_async_agno_postgres_db
 from api.utils.pagination import pagination_meta
 
 
-def _passed_from_data(data: dict[str, Any]) -> bool | None:
+_ACCURACY_PASS_THRESHOLD = 8.0
+
+
+def _number(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    number = float(value)
+    return number if math.isfinite(number) else None
+
+
+def _passed_from_data(data: Mapping[str, Any], *, eval_type: str) -> bool | None:
+    """Project current Agno evaluator result payloads to one UI verdict.
+
+    Agno stores evaluator-specific dataclass payloads rather than a universal
+    top-level ``passed`` field: Accuracy stores ``avg_score``, Agent-as-Judge
+    stores per-result ``passed`` values, and Reliability stores ``eval_status``.
+    Preserve an explicit generic verdict first for non-native/custom rows.
+    """
     for key in ("passed", "success", "is_passed"):
         value = data.get(key)
         if isinstance(value, bool):
             return value
+
+    if eval_type == "accuracy":
+        score = _number(data.get("avg_score"))
+        return score >= _ACCURACY_PASS_THRESHOLD if score is not None else None
+
+    if eval_type == "agent_as_judge":
+        rows = data.get("results")
+        if not isinstance(rows, list) or not rows:
+            return None
+        verdicts: list[bool] = []
+        for row in rows:
+            if not isinstance(row, Mapping):
+                return None
+            verdict = row.get("passed")
+            if not isinstance(verdict, bool):
+                return None
+            verdicts.append(verdict)
+        return all(verdicts)
+
+    if eval_type == "reliability":
+        status = data.get("eval_status")
+        if not isinstance(status, str):
+            return None
+        normalized = status.strip().upper()
+        if normalized == "PASSED":
+            return True
+        if normalized == "FAILED":
+            return False
     return None
 
 
-def _score_from_data(data: dict[str, Any]) -> float | None:
-    for key in ("overall_score", "score", "mean_score"):
-        value = data.get(key)
-        if isinstance(value, int | float) and not isinstance(value, bool):
-            return float(value)
+def _score_from_data(data: Mapping[str, Any]) -> float | None:
+    """Return the evaluator's aggregate score when the native payload has one."""
+    for key in ("overall_score", "score", "avg_score", "mean_score"):
+        score = _number(data.get(key))
+        if score is not None:
+            return score
     return None
 
 
@@ -31,7 +78,8 @@ def _payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _eval_type_key(value: object) -> str:
-    return str(value or "").strip().lower()
+    raw_value = getattr(value, "value", value)
+    return str(raw_value or "").strip().lower()
 
 
 def normalize_agno_eval_run(raw_run: Mapping[str, Any]) -> dict[str, Any]:
@@ -44,18 +92,19 @@ def normalize_agno_eval_run(raw_run: Mapping[str, Any]) -> dict[str, Any]:
     row = dict(raw_run)
     run_id = str(row.get("run_id") or "")
     eval_data = _payload_from_row(row)
+    eval_type = _eval_type_key(row.get("eval_type"))
     raw_input = row.get("eval_input")
     return {
         "id": run_id,
         "name": str(row.get("name") or run_id or "Eval Run"),
-        "eval_type": _eval_type_key(row.get("eval_type")),
+        "eval_type": eval_type,
         "agent_id": row.get("agent_id"),
         "team_id": row.get("team_id"),
         "workflow_id": row.get("workflow_id"),
         "model_id": row.get("model_id"),
         "model_provider": row.get("model_provider"),
         "evaluated_component_name": row.get("evaluated_component_name"),
-        "passed": _passed_from_data(eval_data),
+        "passed": _passed_from_data(eval_data, eval_type=eval_type),
         "score": _score_from_data(eval_data),
         "eval_data": eval_data,
         "eval_input": raw_input if isinstance(raw_input, dict) else {},

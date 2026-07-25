@@ -8,5 +8,7 @@
 - **Audit Log**：安全相关用户动作的追加式记录。
 - **HITL / Approval**：人机审批门闩；Agent 工具 HITL 暂停 run 直至管理员解析，上传审批则控制 Skill/MCP 入库。详见 [HITL 人机审批技术架构](./hitl.md)。
 - **RunRequirement**：Agno 暂停 run 的确认/输入要求；恢复时 `confirm()` / `reject(note=...)` 后 `acontinue_run`。
-
+- **Agent Eval / Suite / Case**：工作台「评估」中的套件与用例；跑批经 `SecurityRunRuntime` 与 Agno eval 类型（accuracy / judge / reliability / performance）。
+- **Safety Eval Pack**：安全防护评估用的策展数据集版本（L1 拒答 / L2 越狱 / L3 注入与 SOC）；导入为 Eval Suite。管理员可按 `pack_id` 受控移除其数据库导入内容，保留本地数据与缓存。指标含 ASR、Refusal、Over-refusal。详见 [安全防护评估](./safety-eval.md)。
+- **ASR（Attack Success Rate）**：攻击/有害请求中模型给出可操作有害内容的比例；越低越好。
 

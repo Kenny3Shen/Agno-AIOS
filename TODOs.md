@@ -4,13 +4,129 @@
 - Settings 默认 `TAIS_CVE_SOURCE_CONFIG_PATH` / `TAIS_IP_BLACKLIST_SOURCE_CONFIG_PATH` 对齐；加载经 `resolve_project_path`。
 - 文档：`docs/operations.md`、`.env.example`；运行时缓存仍在 `.config/cve` / `.config/ip_blacklist`。
 
-
 ## 已完成：技术文档 Mermaid 图例
 
 - 为 `docs/` 核心技术页补充可 diff 的 Mermaid 图：架构运行时 flowchart（既有）、Agents Catalog、HITL Run 状态机、Workflow E2E、运维拓扑、安全授权边界、Safety Eval 被测链路 / L1–L3 / 单 case 判定、开发门禁流水线。
 - `docs/README.md` 索引表增加「图例」列；根 README 指向文档内 Mermaid。
 - 产品级 PNG/SVG 架构图仍保留于 `docs/assets/`（演示用）。
 
+## 已完成：Eval 数据集全量拉取与数据管理
+
+- 依赖：`datasets`（HF）；门禁 `TAIS_EVAL_PACKS_ALLOW_HARMFUL=1`。
+- `api/services/safety_eval_fetch.py`：HF/CSV 拉取、adapter、seed 抽样、`full.jsonl`+`cases.jsonl`+`manifest.json`（sha256）、`_cache`/`_imported` 布局；gated 集 `hf_fallbacks` / `csv_url`。
+- CLI：`scripts/eval_packs/fetch_pack.py`（`--all` / `--pack` / `--cached` / `--validate`）。
+- import 优先读 `_cache/.../cases.jsonl`；catalog 对已缓存 planned 显示 `cached`。
+- 本机清单（gitignore）：11 packs，full≈10k 行，策展 cases≈662；见 `eval_packs/_cache/INVENTORY.json`。
+- 测试：`api/tests/test_safety_eval_fetch.py`。
+
+## 已完成：Eval 前后端持续优化（Agno 对齐 + 操作流 + 性能）
+
+- **Agno 对齐**：Case 一等字段 `judge_mode`（默认 binary；numeric 时使用 threshold）经 `resolve_case_judge_criteria` 映射至 `AgentAsJudgeEval.scoring_strategy`；CaseRun 的一次性 checkpoint 投影为 CaseResult-lite（对齐 `SuiteResult.cases`：name/session_id/passed/skipped/error…），SuiteRun summary 不复制结果。入队同一事务预创建所有有序 CaseRun 工作项，worker 只 claim/完成它们；durable payload 仅为 `suite_run_id`，Suite snapshot 私有冻结 Suite 级 target 与 manifest（actor capability、selector、case_count、超时、judge 配置），Case 定义只在工作项中保留一份。
+- **下钻 API**：`GET /api/agent-evals/suite-runs/{id}/case-runs` 返回 CaseRun 的安全结果投影；报告也从同一来源派生。
+- **操作流**：Suite 运行表 → 用例结果明细（始终请求 CaseRun API）；跑完 suite 自动进入该次明细；`refreshAfterRun` 定向 invalidate（不刷 packs）。
+- **性能**：suite 默认按 Agno 顺序执行；仅在 `TAIS_EVAL_SUITE_CONCURRENCY` 显式设为 2–8 时启用 `asyncio.gather` + `Semaphore`；judge 模型每 suite 只 resolve 一次。
+- **PerformanceEval 可复现性**：`performance_config` 已收口为完整受限契约（warm-up 0–100、采样 1–100、至少一个指标；轻量默认 1/3/runtime-only）；每个 warm-up / 指标采样使用独立 CaseRun 派生会话，避免多轮上下文污染基准数据。
+- **PerformanceEval 可观测性**：CaseRun 的 CaseResult-lite 投影、Suite 明细与 CI JSON 报告均只保留配置及 avg/median/p95 时延/内存聚合；逐次样本、输入、输出与未知字段不落盘或导出，缺少有效聚合会显式记为执行错误。
+- **全量数据正确性**：Pack 导入与 Suite runner 走无页大小上限的内部 Case 读取；`GET /cases`/前端表格改为标准分页（默认 50、API 最大 100），不会再因旧 500 条硬上限漏导入或漏跑样本。
+- 测试：runner/routes/phase1/p2 + frontend evaluations **20**；证据 `{SCRATCH}/eval-optimize-*`。
+
+## 已完成：Eval 作者工作流与严格 Pack 边界
+
+- Evaluations 支持新建/编辑普通 Suite 与 Case：覆盖 Agno 对齐的 eval types、Judge 模式/阈值、expected output、tool contract、performance、profile、tags 与每 Case 超时。
+- ReliabilityEval 的参数子集契约现可在 Case 作者表单中以 JSON 创建/编辑；前后端统一拒绝非对象、空 spec 列表和非 JSON 参数，避免不合法配置在运行期变成 Eval 异常。
+- ReliabilityEval 的六类 Agno 诊断（意外/缺失/匹配工具与参数检查）现写入 CaseResult-lite、报告导出与明细表；全链路只接受有界工具名字符串，防止原始工具参数、Case 输入或模型输出泄露。
+- Pack Suite 以 `pack:<id>` + `pack_version:<version>` 作为唯一身份；这些标签保留给导入器，已导入 Pack 的 Suite/Case 前后端均不可人工修改或混入 Case。
+- 删除严格 Pack 直接级联 Suite 内全部 Case/Run，不再以 Case 历史 `metadata.pack_id` 阻断；`harmbench` 等旧 metadata 不一致不会造成不可移除状态。
+- 每个 Eval Suite 现显式且不可变地绑定一个 `{kind: agent|team, id}` 目标；Case 继承 Suite 目标，未知 ID 不回退。`GET /agent-evals/targets` 驱动作者界面，Team 可用性受 `TAIS_ENABLE_AGNO_TEAM=1` 控制；迁移对未知或 Case/Suite 目标不一致的旧记录 fail closed。
+- 自有 Suite 支持 `evals:delete` 单事务级联删除 Case 与工作台运行历史；自有 Case 可单独删除可编辑定义，并保留历史 CaseRun/Suite 报告证据。Pack 工件仍只能通过版本化 Pack 移除操作清理。
+- 覆盖：后端 strict identity/immutability、前端 API、Playwright 作者流程与 Pack 只读路径。
+
+## 已完成：Eval Suite JSON 报告导出（CI Artifact）
+
+- `POST /api/agent-evals/suite-runs/{id}/report`：输出 `tais.eval-suite-report.v1`，核心字段对齐 Agno Suite `summary` / `cases`；每条 case 从当前 SuiteRun 的 CaseRun checkpoint 投影，无任何证据时显式标记不可用；CI `PASS` 仅在非空 Suite 全部通过时成立。
+- 权限与合规：导出要求 `evals:write`，审计动作 `evals.suite_report_export`；报告不包含原始有害 prompt 或模型 completion。
+- Evaluations 的 Suite 运行列表和明细页均可下载 JSON；后端 report/routes 与前端 API 回归覆盖。
+
+## 已完成：Severity-router Classify 对话优化（Eval Agent Workflow）
+
+- 抽出 `api/services/severity_classify.py`：`SEVERITY_CLASSIFY_INSTRUCTIONS` + 生产 CEL `SEVERITY_ROUTER_SELECTOR_CEL`。
+- Classify 强制 `SEVERITY: critical|high|other`（首行路由信号）、禁止编造、模糊→other；path 步骤补简短 instructions。
+- **CEL 只匹配 SEVERITY 行**（`(?im)^SEVERITY:\s*critical|high$`），不再 `contains("critical")`，避免 rationale 劫持。
+- 离线 Eval 路径：`classify_alert_severity` → `run_classify_step` → `run_classify_and_route`（prompt 驱动，非硬编码 token）。
+- `select_severity_route` = 生产 CEL（与模板同源）；模板 `severity-router` 嵌入上述常量。
+- 测试：`api/tests/test_severity_classify.py` **10 passed**（fixture 分类+CEL、hijack 防护、normalize/compile 入口）。
+
+## 已完成：评估 P0（对比 diff + 脱敏 + 基线笔记）
+
+- Suite 运行：勾选 1～2 行对比 **ASR / 拒答 / 误拒 / 护栏**（current−baseline，pp/次数；绿好红差 + Tooltip）。
+- 用例 input：有害/未知默认 **脱敏**，可「显示全文 / 隐藏」。
+- `docs/eval-baseline-notes.md`：fixture 实跑数字 + guardrail 包说明。
+- 已导入 `guardrail-regression-v1`（3 cases）供后续跑护栏分桶。
+- 测试：evaluations **18** 通过。
+
+## 已完成：评估指标展示 + Tooltip 说明
+
+- 顶部指标卡：ASR / 拒答 / 误拒 / 护栏 / 通过·失败，带 **? Tooltip**（定义、好坏方向、分母 n=）。
+- 数值语义色：ASR/误拒越低越绿，拒答越高越绿；null 仍为 —。
+- Suite 运行表：列头与单元格均有 tip；状态/Profile/Judge 可悬停看说明。
+- i18n：`tipAsr` 等（zh/en）；`safetyRateTone` 单测。
+
+## 已完成：评估页体验打磨
+
+- 运行套件：loading、解析 POST 结果；toast 带 ASR/拒答/误拒/护栏摘要（通过 success / 失败 warning）。
+- 安全套件：顶部 **最近安全指标** 条（Statistic + status/profile/judge）；未跑过时 info 提示。
+- 空状态/状态色：cases/suite-runs/runs Empty；suite 状态 Tag 着色；suite 选择可搜索。
+- 导入后默认打开「用例」Tab（便于确认 cases 再跑）。
+- 测试：evaluations **15** 通过。
+
+## 已完成：评估前端收尾（Eval Judge UI + Suite 运行扩展列）
+
+- Settings 模型表：钉选 **Eval Judge**（`eval_judge_model_id`，样式对齐 MemoryManager）；Tag「Eval Judge」。
+- Evaluations Suite 运行：护栏拦截数、Profile、Judge id（ellipsis + Tooltip）。
+- 类型/i18n：`ModelConfigResponse.eval_judge_model_id`；settings/evaluations zh-CN & en-US。
+- 测试：evaluations 12 + SettingsPage 5 通过。
+
+## 已完成：安全评估 P2（judge / rubric / guardrail / profile）
+
+- 版本化 rubric：`eval_packs/rubrics/rubrics.yaml`；`resolve_case_judge_criteria` → `judge_id`。
+- `eval_judge_model_id`（Alembic `20260722_0013` + `model_configs.eval_judge`）；`AgentAsJudgeEval(model=…)` 与 subject 解耦；空则 Agno 默认 judge。
+- `guardrail_blocked` 分桶：`n_guardrail_blocked` / `guardrail_trip_rate`，不抬高 ASR；pack `guardrail-regression-v1`。
+- `metadata.profile=tools_off|full` → eval `SecurityRunRequest.enable_tools`。
+- 测试：`api/tests/test_safety_eval_p2.py`。
+
+## 已完成：评估页 P1（导入安全包 API + UI）
+
+- `GET /api/agent-evals/packs`、`POST /api/agent-evals/packs/import`（`require_ready` + 本地 cases；审计 `evals.pack_import`）。
+- `list_pack_catalog`：ready/importable 目录，无 case 正文。
+- 评估页「导入安全包」Dropdown（`evals:write`）；导入后选中 suite 并切 **Suite 运行**；Run suite 后同理刷新。
+- 测试：后端 routes/phase1 + 前端 packs MSW。
+
+## 已完成：评估页 P0（Suite 运行 + safety 指标可见）
+
+- 前端 `listSuiteRuns` → `GET /agent-evals/suites/{id}/runs`；解析 `summary.safety`（ASR / refusal / over-refusal；null → `—`）。
+- Evaluations 新 Tab「Suite 运行」；安全 suite 下拉 Tag；Cases 显示 benign/layer。
+- i18n：`evaluations` zh-CN / en-US；单测 `api.test.ts`（含 null OR 与 MSW 列表）。
+
+相关：`frontend/src/features/evaluations/*` · `evaluations.*.json`
+
+## 已完成：安全防护评估 Phase 1（pack 导入 + summary.safety）
+
+- `api/services/safety_eval_pack_service.py`：JSONL normalize → case payload；registry 解析；**幂等** import（`pack_id`+`external_id`）。
+- `api/services/safety_eval_metrics.py`：ASR / refusal_rate / over_refusal_rate（分母为空为 `null`）；MVP 标签映射 pass/fail×benign。
+- 已认领的持久化 Suite 执行器（`run_queued_suite_run`，使用预创建的 CaseRun 工作项）：汇总写入 `summary.safety`。
+- Pack：`eval_packs/fixture-synthetic`、`soc-custom-v1`；CLI `scripts/eval_packs/import_pack.py`。
+- 测试：`api/tests/test_safety_eval_phase1.py`（normalize、双次 import、指标算术、已认领持久化 Suite 执行器的 safety 块）。
+
+## 已完成：安全防护评估设计文档（Safety Eval）
+
+- 设计稿 `docs/safety-eval.md` **v1.1**：L1 拒答 / L2 越狱 ASR / L3 注入与 SOC；**业界/论文锚点**（HarmBench、StrongREJECT、JailbreakBench、Do-Not-Answer、AdvBench）与 ASR/Refusal/Over-refusal 公式；**Agno** `AccuracyEval` / `AgentAsJudgeEval` / `ReliabilityEval` 与 `agent_eval_runner` + `/api/agent-evals` 对照；**Grok 4.5 (xAI)** 被测路径与最小验证流程（§17）；发展路径总表（§18）。
+- 索引：`docs/README.md`、根 README 文档表、`docs/security.md`、`docs/glossary.md`。
+- 骨架：`eval_packs/registry.yaml` + `eval_packs/README.md`（实现导入前不落有害全量）。
+- 结构测试：`api/tests/test_safety_eval_design.py` + `test_docs_readme.py` 收录 `safety-eval.md`。
+
+**后续（非 Phase 1）**：HF 小样 fetch；独立 judge 模型；预发 Grok 4.5 design-validation（§17）。
+
+---
 
 ## 已完成：T.A.I.S 项目介绍 PPT
 
@@ -162,6 +278,7 @@
 
 - 控制面表（认证、`app`、`mcp`）由 Alembic baseline + 后续 revision 管理；API 与 Worker 启动仅校验 revision，运行期不再创建/修改仓库自有表。
 - `uv run job-worker --concurrency 4` 以 PostgreSQL `FOR UPDATE SKIP LOCKED` 租约、心跳、指数重试和幂等键执行 Knowledge、Workflow resume、Security HITL resume 与 cron dispatch。
+- Eval Suite 运行新增 `eval_suite_run` durable job：POST 在同一事务写入 job、`queued` SuiteRun 和全部 `queued` CaseRun 工作项后立即返回 `202`，同一 Suite 拒绝并行 active run；job payload 仅保留 `suite_run_id`，Suite snapshot 私有冻结 actor capability、selector、`case_count`、超时、judge 配置和 target，Case 定义/provenance 仅保留在预创建工作项；durable job 每次 claim 推进 lease epoch，SuiteRun/CaseRun claim、progress、checkpoint 与 terminal write 都按 `(job_id, epoch)` fencing，并锁定验证当前未过期的 `durable_jobs` lease 与 payload 归属，因此旧 worker 不能利用新 epoch 尚未更新 SuiteRun 的窗口写入；每个终态 CaseRun（含 `skipped`）以 write-once CAS 保存私有 evaluator checkpoint，worker 即使在 CaseRun 和 SuiteRun progress 两次写入之间失效也能恢复完整安全指标而不重跑已提交结果；并支持 `cancelling → cancelled`（当前 Case 取消、未启动 Case `skipped`）。
 - Workflow cron 的 workflow-row CAS、durable job 插入和 `last_run_at` 更新处于同一事务；入队异常会回滚，避免永久漏跑。
 - Legacy Grok/xAI 持久化配置通过 `20260720_0002` Alembic 数据迁移一次性规范化；不再在请求路径逐行写回。
 
@@ -1569,7 +1686,7 @@ P0.4 审批值班薄入口        ✅
 
 ## 已完成：Eval suite 单 case 异常可观测
 
-- `agent_eval_runner.run_suite`：单 case 抛错时 `logger.exception` 后计入 `errored` 并继续跑后续 case。
+- 已认领的持久化 Suite 执行器（`run_queued_suite_run`，使用预创建的 CaseRun 工作项）：单 case 抛错时 `logger.exception` 后计入 `errored` 并继续跑后续 case。
 - 单测覆盖 exception → errored 计数。
 
 ## 已完成：Workflow trigger history meta + Chat cancel 可观测

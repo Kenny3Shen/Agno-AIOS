@@ -95,6 +95,8 @@ export type ModelConfigUpdatePayload = {
   active_model_id: string
   /** Dedicated MemoryManager model id; null clears pin (auto-pick). */
   memory_model_id?: string | null
+  /** Dedicated Agent Eval judge model id; null clears pin (Agno default). */
+  eval_judge_model_id?: string | null
   models: ModelConfigInput[]
 }
 

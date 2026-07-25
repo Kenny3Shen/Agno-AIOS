@@ -67,6 +67,67 @@ async def test_list_agno_eval_runs_uses_async_db_api():
     assert "trends" not in result
 
 
+@pytest.mark.parametrize(
+    ("eval_type", "eval_data", "expected_passed", "expected_score"),
+    [
+        (
+            "accuracy",
+            {
+                "results": [{"score": 9.0, "reason": "matches"}],
+                "avg_score": 9.0,
+                "mean_score": 9.0,
+            },
+            True,
+            9.0,
+        ),
+        (
+            "accuracy",
+            {"results": [{"score": 4.0, "reason": "wrong"}], "avg_score": 4.0},
+            False,
+            4.0,
+        ),
+        (
+            "agent_as_judge",
+            {
+                "run_id": "judge-inner-run",
+                "results": [{"passed": False, "score": 2, "reason": "unsafe"}],
+                "avg_score": 2.0,
+                "pass_rate": 0.0,
+            },
+            False,
+            2.0,
+        ),
+        (
+            "reliability",
+            {
+                "eval_status": "FAILED",
+                "failed_tool_calls": ["unapproved_tool"],
+                "passed_tool_calls": [],
+            },
+            False,
+            None,
+        ),
+    ],
+)
+def test_normalize_agno_eval_run_projects_native_agno_payloads(
+    eval_type: str,
+    eval_data: dict[str, object],
+    expected_passed: bool,
+    expected_score: float | None,
+) -> None:
+    """Current Agno result dataclasses do not expose top-level ``passed``."""
+    result = service.normalize_agno_eval_run(
+        {
+            "run_id": f"{eval_type}-run",
+            "eval_type": eval_type,
+            "eval_data": eval_data,
+        }
+    )
+
+    assert result["passed"] is expected_passed
+    assert result["score"] == expected_score
+
+
 @pytest.mark.asyncio
 async def test_get_agno_eval_run_returns_none_for_missing():
     db = FakeEvalDb()

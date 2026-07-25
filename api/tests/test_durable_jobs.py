@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 from argparse import Namespace
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from inspect import Parameter, signature
 from typing import Any, Mapping, cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import CheckConstraint, UniqueConstraint, update
 from sqlalchemy.dialects import postgresql
 
 from api.persistence import durable_jobs
@@ -29,6 +32,7 @@ def _job(
     job_id: str = "job-1",
     kind: JobKind = JobKind.WORKFLOW_RESUME,
     attempt_count: int = 1,
+    lease_epoch: int = 7,
 ) -> DurableJob:
     now = datetime(2026, 7, 20, tzinfo=UTC)
     return DurableJob(
@@ -50,6 +54,7 @@ def _job(
         updated_at=now,
         started_at=now,
         finished_at=None,
+        lease_epoch=lease_epoch,
     )
 
 
@@ -88,12 +93,14 @@ class FakeStore:
         job_id: str,
         *,
         worker_id: str,
+        lease_epoch: int,
         lease_seconds: float,
     ) -> DurableJob:
         self.heartbeats.append(
             {
                 "job_id": job_id,
                 "worker_id": worker_id,
+                "lease_epoch": lease_epoch,
                 "lease_seconds": lease_seconds,
             }
         )
@@ -104,12 +111,18 @@ class FakeStore:
         job_id: str,
         *,
         worker_id: str,
+        lease_epoch: int,
         result: Mapping[str, Any] | None,
     ) -> DurableJob:
         if self.complete_error is not None:
             raise self.complete_error
         self.completed.append(
-            {"job_id": job_id, "worker_id": worker_id, "result": result}
+            {
+                "job_id": job_id,
+                "worker_id": worker_id,
+                "lease_epoch": lease_epoch,
+                "result": result,
+            }
         )
         return replace(_job(job_id=job_id), state=JobState.SUCCEEDED)
 
@@ -118,6 +131,7 @@ class FakeStore:
         job_id: str,
         *,
         worker_id: str,
+        lease_epoch: int,
         error: BaseException | str,
         retryable: bool,
         retry_base_seconds: float,
@@ -127,6 +141,7 @@ class FakeStore:
             {
                 "job_id": job_id,
                 "worker_id": worker_id,
+                "lease_epoch": lease_epoch,
                 "error": str(error),
                 "retryable": retryable,
                 "retry_base_seconds": retry_base_seconds,
@@ -143,6 +158,7 @@ class FakeStore:
         job_id: str,
         *,
         worker_id: str,
+        lease_epoch: int,
         reason: BaseException | str,
         retry_base_seconds: float,
         retry_max_seconds: float,
@@ -151,6 +167,7 @@ class FakeStore:
             {
                 "job_id": job_id,
                 "worker_id": worker_id,
+                "lease_epoch": lease_epoch,
                 "reason": str(reason),
             }
         )
@@ -181,6 +198,7 @@ def test_durable_job_table_has_typed_state_idempotency_and_worker_indexes() -> N
         "idempotency_key",
         "state",
         "attempt_count",
+        "lease_epoch",
         "max_attempts",
         "lease_owner",
         "lease_expires_at",
@@ -193,6 +211,8 @@ def test_durable_job_table_has_typed_state_idempotency_and_worker_indexes() -> N
         and [column.name for column in item.columns] == ["kind", "idempotency_key"]
         for item in unique
     )
+    checks = [item for item in table.constraints if isinstance(item, CheckConstraint)]
+    assert any(item.name == "ck_durable_jobs_lease_epoch" for item in checks)
     assert {index.name for index in table.indexes} >= {
         "idx_durable_jobs_claim",
         "idx_durable_jobs_lease",
@@ -221,6 +241,187 @@ def test_claim_and_lease_recovery_queries_use_skip_locked() -> None:
     assert "lease_expires_at" in recover_sql
 
 
+@pytest.mark.asyncio
+async def test_claim_advances_lease_epoch_with_a_database_expression(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job = _job(lease_epoch=7)
+    row: dict[str, object] = {
+        "id": job.id,
+        "kind": job.kind.value,
+        "payload": job.payload,
+        "idempotency_key": job.idempotency_key,
+        "state": JobState.QUEUED.value,
+        "priority": job.priority,
+        "attempt_count": job.attempt_count,
+        "lease_epoch": job.lease_epoch,
+        "max_attempts": job.max_attempts,
+        "available_at": job.available_at,
+        "lease_owner": None,
+        "lease_expires_at": None,
+        "heartbeat_at": None,
+        "last_error": None,
+        "result": None,
+        "created_at": job.created_at,
+        "updated_at": job.updated_at,
+        "started_at": job.started_at,
+        "finished_at": None,
+    }
+
+    class Result:
+        def mappings(self) -> Result:
+            return self
+
+        def all(self) -> list[dict[str, object]]:
+            return [row]
+
+    class Connection:
+        async def execute(self, _statement: object) -> Result:
+            return Result()
+
+    class Transaction:
+        async def __aenter__(self) -> Connection:
+            return Connection()
+
+        async def __aexit__(
+            self,
+            _exc_type: object,
+            _exc: object,
+            _traceback: object,
+        ) -> None:
+            return None
+
+    class Engine:
+        def begin(self) -> Transaction:
+            return Transaction()
+
+    update_locked = AsyncMock(
+        return_value=replace(
+            job,
+            state=JobState.RUNNING,
+            attempt_count=job.attempt_count + 1,
+            lease_epoch=job.lease_epoch + 1,
+        )
+    )
+    monkeypatch.setattr(durable_jobs, "get_async_control_plane_engine", lambda: Engine())
+    monkeypatch.setattr(
+        durable_jobs,
+        "_recover_expired_jobs_in_transaction",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(durable_jobs, "_update_locked_job", update_locked)
+
+    claimed = await durable_jobs.claim_due_jobs("worker-1")
+
+    assert claimed[0].lease_epoch == 8
+    update_args = update_locked.await_args
+    assert update_args is not None
+    claim_values = update_args.kwargs["values"]
+    lease_epoch_value = claim_values["lease_epoch"]
+    assert not isinstance(lease_epoch_value, int)
+    table = update_args.kwargs["table"]
+    sql = str(
+        update(table)
+        .values(lease_epoch=lease_epoch_value)
+        .compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+    assert "lease_epoch" in sql
+    assert "+ 1" in sql
+    assert " FROM " not in sql
+
+
+def test_lease_epoch_rejects_stale_lease_when_worker_id_is_reused() -> None:
+    job = _job(lease_epoch=8)
+
+    with pytest.raises(JobLeaseLostError, match="Lease epoch changed"):
+        durable_jobs._ensure_owned_running(  # noqa: SLF001
+            job,
+            worker_id="worker-1",
+            lease_epoch=7,
+            now=job.created_at,
+        )
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        durable_jobs.heartbeat_job,
+        durable_jobs.complete_job,
+        durable_jobs.fail_job,
+        durable_jobs.release_job,
+    ],
+)
+def test_lease_epoch_is_required_by_each_ownership_mutation(
+    operation: Callable[..., object],
+) -> None:
+    parameter = signature(operation).parameters["lease_epoch"]
+
+    assert parameter.kind is Parameter.KEYWORD_ONLY
+    assert parameter.default is Parameter.empty
+
+
+@pytest.mark.asyncio
+async def test_explicit_retry_does_not_reset_lease_epoch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job = replace(_job(lease_epoch=9), state=JobState.FAILED)
+
+    class Connection:
+        pass
+
+    class Transaction:
+        async def __aenter__(self) -> Connection:
+            return Connection()
+
+        async def __aexit__(
+            self,
+            _exc_type: object,
+            _exc: object,
+            _traceback: object,
+        ) -> None:
+            return None
+
+    class Engine:
+        def begin(self) -> Transaction:
+            return Transaction()
+
+    update_locked = AsyncMock(return_value=replace(job, state=JobState.QUEUED))
+    monkeypatch.setattr(durable_jobs, "get_async_control_plane_engine", lambda: Engine())
+    monkeypatch.setattr(durable_jobs, "_locked_job", AsyncMock(return_value=job))
+    monkeypatch.setattr(durable_jobs, "_update_locked_job", update_locked)
+
+    await durable_jobs.retry_job(job.id)
+
+    update_args = update_locked.await_args
+    assert update_args is not None
+    assert "lease_epoch" not in update_args.kwargs["values"]
+
+
+@pytest.mark.asyncio
+async def test_execution_context_exposes_and_uses_claim_lease_epoch() -> None:
+    store = FakeStore([])
+    job = _job(lease_epoch=11)
+    context = JobExecutionContext(
+        job=job,
+        worker_id="worker-1",
+        lease_seconds=60.0,
+        lease_lost=asyncio.Event(),
+        _store=store,
+    )
+
+    assert context.lease_epoch == 11
+    await context.heartbeat()
+
+    assert store.heartbeats == [
+        {
+            "job_id": "job-1",
+            "worker_id": "worker-1",
+            "lease_epoch": 11,
+            "lease_seconds": 60.0,
+        }
+    ]
+
+
 @pytest.mark.parametrize(
     ("attempt_count", "expected"),
     [(0, 5.0), (1, 5.0), (2, 10.0), (7, 300.0)],
@@ -235,7 +436,8 @@ def test_retry_backoff_is_capped_and_deterministic(
 async def test_worker_completes_claimed_job_and_passes_result() -> None:
     registry = DurableJobRegistry()
 
-    async def handler(job: DurableJob, _context: object) -> dict[str, str]:
+    async def handler(job: DurableJob, context: JobExecutionContext) -> dict[str, str]:
+        assert context.lease_epoch == job.lease_epoch
         return {"handled": job.id}
 
     registry.register(JobKind.WORKFLOW_RESUME, handler)
@@ -254,7 +456,12 @@ async def test_worker_completes_claimed_job_and_passes_result() -> None:
         }
     ]
     assert store.completed == [
-        {"job_id": "job-1", "worker_id": "worker-1", "result": {"handled": "job-1"}}
+        {
+            "job_id": "job-1",
+            "worker_id": "worker-1",
+            "lease_epoch": 7,
+            "result": {"handled": "job-1"},
+        }
     ]
     assert store.failed == []
 
@@ -285,6 +492,7 @@ async def test_worker_retries_unexpected_handler_exception() -> None:
 
     assert len(store.failed) == 1
     assert store.failed[0]["retryable"] is True
+    assert store.failed[0]["lease_epoch"] == 7
     assert store.failed[0]["error"] == "temporary provider failure"
 
 
@@ -303,6 +511,29 @@ async def test_worker_does_not_overwrite_a_lost_lease() -> None:
 
     assert store.completed == []
     assert store.failed == []
+
+
+@pytest.mark.asyncio
+async def test_worker_releases_cancelled_job_with_its_lease_epoch() -> None:
+    registry = DurableJobRegistry()
+
+    async def cancelled_handler(_job: DurableJob, _context: JobExecutionContext) -> None:
+        raise asyncio.CancelledError
+
+    registry.register(JobKind.WORKFLOW_RESUME, cancelled_handler)
+    store = FakeStore([_job(lease_epoch=13)])
+
+    with pytest.raises(asyncio.CancelledError):
+        await _worker(registry, store)._execute(store.claimed[0])  # noqa: SLF001
+
+    assert store.released == [
+        {
+            "job_id": "job-1",
+            "worker_id": "worker-1",
+            "lease_epoch": 13,
+            "reason": "Worker process cancelled before job completion.",
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -424,6 +655,7 @@ def test_builtin_worker_registry_registers_safe_builtin_handlers() -> None:
         JobKind.WORKFLOW_RESUME,
         JobKind.SECURITY_HITL_RESUME,
         JobKind.WORKFLOW_CRON_DISPATCH,
+        JobKind.EVAL_SUITE_RUN,
     } <= registry.kinds
 
 
@@ -436,6 +668,7 @@ def test_worker_cli_loads_trusted_handler_factory() -> None:
         JobKind.WORKFLOW_RESUME,
         JobKind.SECURITY_HITL_RESUME,
         JobKind.WORKFLOW_CRON_DISPATCH,
+        JobKind.EVAL_SUITE_RUN,
     } <= registry.kinds
 
 

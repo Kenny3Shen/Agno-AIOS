@@ -3,7 +3,10 @@ import react from '@vitejs/plugin-react'
 import UnoCSS from 'unocss/vite'
 import { fileURLToPath, URL } from 'node:url'
 
-const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8000'
+// Keep the zero-config frontend pointed at the documented local API command
+// (`uv run uvicorn ... --port 8001`).  A stale process on 8000 can otherwise
+// make the UI appear to run code that is no longer in this worktree.
+const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8001'
 
 // https://vite.dev/config/
 export default defineConfig({

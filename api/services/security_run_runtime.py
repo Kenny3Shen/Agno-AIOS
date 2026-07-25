@@ -750,6 +750,60 @@ class SecurityRunRequest:
             attachments=tuple(attachments or ()),
         )
 
+    @classmethod
+    def from_eval_args(
+        cls,
+        message: str,
+        *,
+        target: object,
+        session_id: str | None = None,
+        model_id: str | None = None,
+        reasoning_effort: str | None = None,
+        user_id: str | None = None,
+        knowledge_owner_user_id: str | None = None,
+        actor_role: str = "user",
+        actor_is_superuser: bool = False,
+        memory_enabled: bool = False,
+        store_raw_tool_io: bool = False,
+        search_knowledge: bool = False,
+        live_search: bool | None = None,
+        enable_tools: bool = True,
+    ) -> "SecurityRunRequest":
+        """Build an Eval request without Chat's unknown-target fallback.
+
+        Eval contracts are only meaningful if the declared target was the
+        component that actually ran.  The Chat constructor intentionally has a
+        friendlier defaulting rule for a stale browser preference; this strict
+        constructor is deliberately separate so no Eval can inherit it.
+        """
+        from api.services.eval_targets import parse_eval_target
+
+        resolved_target = parse_eval_target(target, require_available=True)
+        attaches_skills = (
+            resolved_target.kind == "agent"
+            and profile_attaches_skills(resolved_target.id)
+        )
+        return cls(
+            message=message,
+            session_id=session_id,
+            model_id=model_id,
+            reasoning_effort=reasoning_effort,
+            user_id=user_id,
+            knowledge_owner_user_id=knowledge_owner_user_id,
+            actor_role=actor_role,
+            actor_is_superuser=actor_is_superuser,
+            memory_enabled=memory_enabled,
+            store_raw_tool_io=store_raw_tool_io,
+            search_knowledge=search_knowledge,
+            live_search=live_search,
+            enable_tools=enable_tools,
+            agent_id=resolved_target.id,
+            # Eval tool availability is explicit and stable: enabled ops
+            # agents receive their entire allowed surface, while Teams and
+            # specialist Agents never receive security Local Skills.
+            skill_names=None if enable_tools and attaches_skills else [],
+        )
+
     @property
     def agent_user_id(self) -> str:
         return (self.user_id or "anonymous").strip() or "anonymous"
@@ -2846,17 +2900,26 @@ class SecurityRunRuntime:
                 )
                 yield security_agent
 
+    @asynccontextmanager
+    async def team_context(self, request: SecurityRunRequest) -> AsyncIterator[Any]:
+        """Build one executable Team for a strict Eval or direct runtime caller.
 
-    async def _stream_team(
-        self,
-        request: SecurityRunRequest,
-        chat_settings: Any | None = None,
-    ) -> AsyncIterator[ChatRunEvent]:
-        """Build and stream an Agno Team run (beta)."""
+        Chat streaming used to own the only Team construction path.  Evals need
+        the actual ``TeamRunOutput`` (not a streamed Chat adapter) so that
+        Accuracy and Reliability can grade the same Team run exactly once.
+        """
+        if not is_team_id(request.agent_id):
+            raise ValueError(f"Eval target is not a Team: {request.agent_id}")
+        if not team_feature_enabled():
+            raise ValueError(
+                "Eval Team target is disabled; set TAIS_ENABLE_AGNO_TEAM=1 before running it"
+            )
+
         # Team members may execute concurrently, so bind before constructing
-        # their File/Csv/Python toolkits and retain the scope until the leader
-        # stream has fully ended.
+        # their File/Csv/Python toolkits and retain the scope until execution
+        # has fully ended.
         with analysis_workspace_context() as _workspace:
+            request = await self._resolve_effective_capabilities(request)
             enable_tools = bool(request.enable_tools)
             search_knowledge = bool(request.search_knowledge) and enable_tools
             # Align with specialist agents: explicit request wins; else team profile prefer_*.
@@ -2873,9 +2936,7 @@ class SecurityRunRuntime:
                 knowledge = await _maybe_await(self.dependencies.get_async_knowledge_base())
                 if request.knowledge_owner_user_id:
                     knowledge_filters = {"user_id": request.knowledge_owner_user_id}
-            memory_ok = (
-                bool(request.memory_enabled) and request.memory_user_id is not None
-            )
+            memory_ok = bool(request.memory_enabled) and request.memory_user_id is not None
             if bool(request.memory_enabled) and request.memory_user_id is None:
                 logger.warning(
                     "memory fail-closed: missing user_id team_id={}",
@@ -2895,6 +2956,15 @@ class SecurityRunRuntime:
                 media_files=request.workspace_files,
                 inject_query=str(request.message or ""),
             )
+            yield team
+
+    async def _stream_team(
+        self,
+        request: SecurityRunRequest,
+        chat_settings: Any | None = None,
+    ) -> AsyncIterator[ChatRunEvent]:
+        """Build and stream an Agno Team run (beta)."""
+        async with self.team_context(request) as team:
             async for event in self._stream_agent_events(team, request, chat_settings):
                 yield event
 

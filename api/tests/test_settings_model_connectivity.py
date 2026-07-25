@@ -180,7 +180,11 @@ async def test_update_models_records_request_context_in_audit_log():
         current_actor,
         action="settings.update",
         resource_type="models",
-        metadata={"active_model_id": "m1"},
+        metadata={
+            "active_model_id": "m1",
+            "memory_model_id": None,
+            "eval_judge_model_id": None,
+        },
         ip_address="10.0.0.9",
         user_agent="settings-browser",
     )

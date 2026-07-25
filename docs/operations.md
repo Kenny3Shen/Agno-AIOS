@@ -13,7 +13,7 @@ flowchart TB
 
     subgraph Process["应用进程"]
         API["FastAPI API<br/>/api · /mcp"]
-        Worker["job-worker<br/>Knowledge · HITL · cron · Memory prune"]
+        Worker["job-worker<br/>Knowledge · HITL · cron · Memory prune · Eval Suite"]
     end
 
     PG[("PostgreSQL<br/>Alembic 控制面 + Agno 引擎库")]
@@ -39,7 +39,7 @@ flowchart TB
 - CVE 情报源配置为 `config/cve_sources.toml`（可用 `TAIS_CVE_SOURCE_CONFIG_PATH` 覆盖，相对路径相对仓库根解析）。IP 黑名单威胁情报源为 `config/ip_blacklist_sources.toml`（默认 FireHOL level1；`TAIS_IP_BLACKLIST_SOURCE_CONFIG_PATH` 可覆盖）；管理员可在「安全情报 → IP 黑名单」更新库，Chat 意图可挂载 `ip-blacklist-skill`。下载缓存仍落在 `.config/cve` / `.config/ip_blacklist`（运行时数据，不入 git）。
 Collect 按 `api/utils/url2md_utils.domain_rules` 源站爬取文章入库（`collect_articles`），页面默认从库检索。标题优先 og:title；可选 `TAIS_COLLECT_USE_PLAYWRIGHT` 浏览器兜底。解析侧用 `resolve_domain_rule_key` 归一化 host/`www` 并安全匹配多 class 正文容器（div/article/section/main）；规则未命中、class 漂移或 domain 正文过短（<200）时回退语义容器（article/main 等）；正文抽取含 h1–h4/pre/blockquote；已停用 botcrawl / The Register / securitylab.ru；源站含 BleepingComputer/Krebs/SecurityWeek/Dark Reading/The Record/Unit 42/Cloudflare 等；文章卡可跳转 CVE。同步时并发发现与抓取；跨源 round-robin 选取 URL 并跳过已入库成功项后补齐预算；重复同步返回 409。列表默认不带正文、可筛失败并 reparse/批量重采；源健康计数与按失败源快捷筛选；同步可按当前筛选源站；发现阶段跟进分页列表页；CVE 关键词走全文索引，页面进入即检索最近条目；库更新与 Collect 源站同步均支持 `stream=true` 阶段进度；Collect 同步与 CVE 库更新均可前端 Abort 停止（发现/抓取 sibling 任务一并取消；已写入变更保留）。
 - `POSTGRES_*` / `POSTGRES_URL`：PostgreSQL 连接。
-- 控制面（认证、`app`、`mcp`）表结构仅由 Alembic 管理；发布阶段先执行 `uv run alembic upgrade head`，API 与 Worker 仅校验数据库 revision，未迁移时会拒绝启动。 当前控制面表（含用户能力偏好、MCP `token_hash`/归属、`workflow_custom_nodes`）由 baseline metadata 创建；`0002` 仅为 xAI 配置数据规范化。Agno 自有的 session/trace/vector 表仍随已锁定的 Agno 版本管理。
+- 控制面（认证、`app`、`mcp`）表结构仅由 Alembic 管理；发布阶段先执行 `uv run alembic upgrade head`，API 与 Worker 仅校验数据库 revision，未迁移时会拒绝启动。`20260720_0001` 是冻结的历史 schema 快照（不是运行时 metadata），后续表/字段均由各自 revision 创建，因此空数据库可完整升级；`0002` 仅为 xAI 配置数据规范化。Agno 自有的 session/trace/vector 表仍随已锁定的 Agno 版本管理。
 - `ENVIRONMENT=production`（或 `prod`）启用 fail-closed 启动校验：`AUTH_JWT_SECRET`、重置/验证/OAuth state secret 必须替换默认或模板值，`CORS_ORIGINS` 与 `TRUSTED_HOSTS` 必须列出明确值而非 `*`；配置 OAuth 时还必须设置 `AUTH_COOKIE_SECURE=true`。
 - `AUTH_JWT_SECRET`：JWT 密钥；生产环境必须替换默认值。
 - `/api/health` 是不依赖下游服务的 liveness probe；`/api/ready` 在启动完成且控制面 PostgreSQL `SELECT 1` 成功后才返回 200，失败时返回 503。
@@ -47,7 +47,8 @@ Collect 按 `api/utils/url2md_utils.domain_rules` 源站爬取文章入库（`co
 - `TAIS_KNOWLEDGE_*`：Knowledge chunk、search、rerank 与 PgVector 配置。
 - 知识库检索：`TAIS_KNOWLEDGE_SIMILARITY_THRESHOLD` 等 PgVector 参数可在 **Settings → 知识库检索** 表内调整（参数/说明/值）；低于阈值的片段丢弃并允许 0 结果。Chat 设置同样用带说明列的参数表。检索试验台与 Trace 展示每条 score；Agent 经 `knowledge_retriever` 共用过滤逻辑。
 - 运行时知识检索配置落在 `app.knowledge_rag_settings`（`alembic upgrade head` 含 `20260720_0003`），API 为 `GET/PATCH /api/settings/knowledge`（admin）。
-- Durable Jobs：Knowledge 入库、Workflow 审批恢复、安全 HITL 恢复、cron dispatch 与 **Memory prune** 均写入 PostgreSQL 队列，发布后另起 Worker：`uv run job-worker --concurrency 4`。Worker 与 API 一样会先校验 Alembic revision；cron 的 claim 与入队在同一事务内完成。当前 Knowledge 上传文件落在配置的本地目录，独立部署 API/Worker 时必须共享该持久卷（或在部署层替换为对象存储）。
+- Durable Jobs：Knowledge 入库、Workflow 审批恢复、安全 HITL 恢复、cron dispatch、**Memory prune** 与 **Eval Suite run** 均写入 PostgreSQL 队列，发布后另起 Worker：`uv run job-worker --concurrency 4`。Worker 与 API 一样会先校验 Alembic revision；cron 的 claim 与入队在同一事务内完成。当前 Knowledge 上传文件落在配置的本地目录，独立部署 API/Worker 时必须共享该持久卷（或在部署层替换为对象存储）。
+- Eval Suite：`POST /api/agent-evals/suites/{id}/runs` 在**同一事务**内创建 `queued` SuiteRun、全部 `queued` CaseRun 工作项与 `eval_suite_run` durable job，并返回 `202`；job payload 只有 `suite_run_id`。私有 SuiteRun snapshot 只保存 actor capability 投影、selector、**case_count**、超时、judge 配置和 Suite 目标；每条 Case 定义与 provenance 只保存在自己的 CaseRun 工作项。不会在 HTTP 请求内等待模型调用，也不会因 API 进程在两次写入之间退出而留下无 job 或无工作项的 queued run。同一 Suite 同时只允许一个 queued/running/cancelling run。Worker 认领后从 snapshot 恢复 Suite 级上下文，再按冻结 `work_item_index` 读取既有 CaseRun；绝不读取当前用户权限或编辑中的 Suite/Case、更不会动态插入 CaseRun。每次 durable claim 都有单调递增的 lease epoch，SuiteRun、CaseRun claim、进度和终态写入都必须匹配 `(job_id, epoch)`，并在同一事务锁定 `durable_jobs`，验证 job 类型/载荷、`running` 状态、epoch 和未过期租约。因此新 epoch 即使尚未写入 SuiteRun，旧 worker 的 checkpoint、partial summary 和最终状态也会被数据库拒绝；每个预创建工作项带顺序索引，数据库保证同一 SuiteRun 内的顺序和 source Case 唯一，manifest 的 `case_count` 同时防止尾部工作项丢失，并以 CAS 保存私有 evaluator checkpoint（包括 `skipped`）。租约恢复会复用已提交 checkpoint 的判定、分数、时延、可靠性诊断和性能聚合；它不保存输入、completion 或 Judge 自由文本。已跨越 Agent/LLM/tool 调用边界但尚未提交 checkpoint 的请求仍是 at-least-once，目标如有外部副作用应支持稳定幂等键。运行中的 Suite 可调用 `POST /api/agent-evals/suite-runs/{run_id}/cancel`；它先显示 `cancelling`，worker 会取消当前 Case、将未启动 Case 标为 `skipped`，最终写为 `cancelled`。升级至此执行模型时，迁移会将没有 durable snapshot 的旧 `queued`/`running`/`cancelling` 记录标为 `error`；它们不能安全恢复，应重新提交 Suite。生产环境必须运行上述 Worker，且应监控没有可用 worker 时长期停留的 `queued` 记录。
 - Workflow cron 轮询（对齐 Agno SchedulePoller 语义，进程内 ticker + durable dispatch）：`TAIS_WORKFLOW_CRON_ENABLED`（默认 true）、`TAIS_WORKFLOW_CRON_POLL_INTERVAL_SEC`（默认 15）、`TAIS_WORKFLOW_CRON_TICK_LIMIT`（每 tick 扫描上限，默认 200）、`TAIS_WORKFLOW_CRON_CATCHUP_MAX`（单工作流每 tick 最多补发 overdue 次数，默认 3）。启用 cron 时服务端校验 5 字段表达式；`last_run_at` 按 **scheduled** 时间推进以便 catch-up。
 - 模型输入护栏（Agno `pre_hooks`，不含 OpenAI Moderation）：运行时优先读控制面表 `app.guardrail_settings`（Alembic `20260721_0006`），可用 **Settings → 模型护栏**（admin）热更新；环境变量 `TAIS_GUARDRAILS_*` 作缺省种子。Chat/Team leader/Workflow 步骤 Agent 共享同一套；SSE 失败码形如 `GUARDRAIL_PII_DETECTED` / `GUARDRAIL_PROMPT_INJECTION`（`retryable=false`）。API：`GET/PATCH /api/settings/guardrails`。
 - Chat 运行参数（Alembic `20260721_0007`–`0011` 扩展 `chat_settings`）：
@@ -59,7 +60,7 @@ Collect 按 `api/utils/url2md_utils.domain_rules` 源站爬取文章入库（`co
 - 真实负载基准：`uv run benchmark-runtime --url https://staging.example --token "$TAIS_BENCHMARK_TOKEN" --model-id configured-model --requests 12 --concurrency 3 --scenario both --output .logs/benchmarks/runtime.json` 会以短期 Bearer token 对预发发送真实 Chat SSE / Dashboard Overview 请求，记录 TTFT、总时延、p50/p95、事件量和失败率；报告不写 token、prompt 或模型输出。附件路径通过 `--file` 可测端到端 Docling + Chat 路径；文档转换后的原始文件只用于 data-analysis / Team 的运行隔离工作区，不会作为模型的 `file` content part 发送。
 - PgVector 索引核验：`uv run verify-pgvector-indexes` 只读检查实际 schema/table、embedding 维度、`pg_indexes` 定义、向量/全文 GIN/JSONB metadata GIN 索引，并输出 JSON 报告；不会调用 Agno `optimize()` 或创建索引。只有明确传入 `--explain-sql "SELECT ..."` 时才捕获非 `ANALYZE` 的 JSON plan。先用真实语料验证 corpus 规模、召回与延迟，再把批准的 HNSW/IVFFlat/GIN 变更写入 Alembic migration。
 - MCP 服务配置以 Settings / PostgreSQL 为准；残留 `.config/mcp/mcp_config.json` 只会归档为 `.migrated`，不会再导入。
-- `VITE_API_PROXY_TARGET`：前端开发代理地址。生产环境应把 `frontend/dist` 交给具备 immutable cache + Brotli/gzip 的反向代理或 CDN；直接由 FastAPI StaticFiles 托管的开发路径不负责资源压缩。
+- `VITE_API_PROXY_TARGET`：前端开发代理地址，默认 `http://127.0.0.1:8001`，与本项目的 Uvicorn 本地启动命令一致。生产环境应把 `frontend/dist` 交给具备 immutable cache + Brotli/gzip 的反向代理或 CDN；直接由 FastAPI StaticFiles 托管的开发路径不负责资源压缩。
 - Dashboard 的趋势与分布图表使用 `echarts/core` 按需注册（line / bar / pie），且只在 Overview 返回可视化数据时动态加载；空窗口显示统一的运行可视化空态，不请求 ECharts 图表 chunk。
 
 ## 模型运行策略
@@ -87,4 +88,3 @@ uv run update-cve
 ```
 
 部署时还应配置生产级数据库、JWT 密钥、MCP token、模型配置和 CORS。
-

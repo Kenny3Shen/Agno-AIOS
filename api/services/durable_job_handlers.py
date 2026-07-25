@@ -12,6 +12,7 @@ import math
 from typing import Any
 
 from api.persistence.durable_jobs import DurableJob, JobKind
+from api.services.agent_eval_suite_jobs import register_eval_suite_run_job_handler
 from api.services.durable_job_service import (
     DurableJobRegistry,
     JobExecutionContext,
@@ -136,4 +137,5 @@ def build_durable_job_registry() -> DurableJobRegistry:
     registry.register(JobKind.WORKFLOW_CRON_DISPATCH, _dispatch_workflow_cron)
     register_knowledge_job_handler(registry)
     register_memory_job_handler(registry)
+    register_eval_suite_run_job_handler(registry)
     return registry

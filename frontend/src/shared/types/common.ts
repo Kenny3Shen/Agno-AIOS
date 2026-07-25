@@ -47,6 +47,8 @@ export interface ModelConfigResponse {
   active_model_id: string
   /** Dedicated MemoryManager model; null/undefined = auto-pick cheap model. */
   memory_model_id?: string | null
+  /** Dedicated Agent Eval judge model; null/undefined = Agno default judge. */
+  eval_judge_model_id?: string | null
   models: ModelConfig[]
 }
 

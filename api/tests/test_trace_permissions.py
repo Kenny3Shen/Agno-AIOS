@@ -1,7 +1,7 @@
 """Critical business tests for trace scope, validation, ownership, and error mark."""
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi import HTTPException

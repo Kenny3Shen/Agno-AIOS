@@ -57,6 +57,7 @@ class DurableJobStore(Protocol):
         job_id: str,
         *,
         worker_id: str,
+        lease_epoch: int,
         lease_seconds: float,
     ) -> DurableJob: ...
 
@@ -65,6 +66,7 @@ class DurableJobStore(Protocol):
         job_id: str,
         *,
         worker_id: str,
+        lease_epoch: int,
         result: Mapping[str, Any] | None,
     ) -> DurableJob: ...
 
@@ -73,6 +75,7 @@ class DurableJobStore(Protocol):
         job_id: str,
         *,
         worker_id: str,
+        lease_epoch: int,
         error: BaseException | str,
         retryable: bool,
         retry_base_seconds: float,
@@ -84,6 +87,7 @@ class DurableJobStore(Protocol):
         job_id: str,
         *,
         worker_id: str,
+        lease_epoch: int,
         reason: BaseException | str,
         retry_base_seconds: float,
         retry_max_seconds: float,
@@ -132,10 +136,16 @@ class JobExecutionContext:
     lease_lost: asyncio.Event
     _store: DurableJobStore
 
+    @property
+    def lease_epoch(self) -> int:
+        """Return the immutable fencing token for this execution attempt."""
+        return self.job.lease_epoch
+
     async def heartbeat(self) -> DurableJob:
         updated = await self._store.heartbeat_job(
             self.job.id,
             worker_id=self.worker_id,
+            lease_epoch=self.lease_epoch,
             lease_seconds=self.lease_seconds,
         )
         return updated
@@ -266,6 +276,7 @@ class DurableJobWorker:
             await self._store.complete_job(
                 job.id,
                 worker_id=self.worker_id,
+                lease_epoch=context.lease_epoch,
                 result=dict(result) if result is not None else None,
             )
             logger.info("Durable job succeeded id={} kind={}", job.id, job.kind.value)
@@ -314,6 +325,7 @@ class DurableJobWorker:
                     await self._store.heartbeat_job(
                         job.id,
                         worker_id=self.worker_id,
+                        lease_epoch=job.lease_epoch,
                         lease_seconds=self.options.lease_seconds,
                     )
                 except JobLeaseLostError:
@@ -336,6 +348,7 @@ class DurableJobWorker:
             stored = await self._store.fail_job(
                 job.id,
                 worker_id=self.worker_id,
+                lease_epoch=job.lease_epoch,
                 error=exc,
                 retryable=retryable,
                 retry_base_seconds=self.options.retry_base_seconds,
@@ -366,6 +379,7 @@ class DurableJobWorker:
             await self._store.release_job(
                 job.id,
                 worker_id=self.worker_id,
+                lease_epoch=job.lease_epoch,
                 reason="Worker process cancelled before job completion.",
                 retry_base_seconds=self.options.retry_base_seconds,
                 retry_max_seconds=self.options.retry_max_seconds,

@@ -19,6 +19,7 @@ TECH_DOCS = (
     "workflows.md",
     "operations.md",
     "security.md",
+    "safety-eval.md",
     "development.md",
     "glossary.md",
     "README.md",

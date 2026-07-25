@@ -17,6 +17,10 @@ const readError = async (response: Response) => {
   if (payload && typeof payload === 'object') {
     const record = payload as Record<string, unknown>
     if (typeof record.detail === 'string') return { message: record.detail, payload }
+    if (record.detail && typeof record.detail === 'object') {
+      const detail = record.detail as Record<string, unknown>
+      if (typeof detail.message === 'string') return { message: detail.message, payload }
+    }
     if (typeof record.message === 'string') return { message: record.message, payload }
   }
   return { message: `Request failed (${response.status})`, payload }

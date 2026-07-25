@@ -42,14 +42,22 @@ cd frontend && bun install
 uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
 ```
 
+另开终端启动 durable job worker（Knowledge、HITL、cron、Memory 与 Eval Suite 异步运行均需要）：
+
+```bash
+uv run job-worker --concurrency 4
+```
+
 另开终端启动前端：
 
 ```bash
 cd frontend
-VITE_API_PROXY_TARGET=http://127.0.0.1:8001 bun run dev
+bun run dev
 ```
 
 访问 [http://localhost:5173](http://localhost:5173)。
+开发代理默认连接 `http://127.0.0.1:8001`；仅在 API 运行于其他地址时设置
+`VITE_API_PROXY_TARGET`。
 
 可通过以下环境变量创建初始管理员：
 
@@ -79,6 +87,8 @@ React 工作台通过共享 API client 携带 JWT 请求 FastAPI；后端校验�
 | 工作流 DSL · 编译 · Studio | [docs/workflows.md](./docs/workflows.md) |
 | 配置、Alembic、Jobs、模型 | [docs/operations.md](./docs/operations.md) |
 | JWT scopes 与审计 | [docs/security.md](./docs/security.md) |
+| 安全防护评估 · 数据集分层与 Pack 生命周期 | [docs/safety-eval.md](./docs/safety-eval.md) |
+| 安全评估 pack 拉取与缓存 | [eval_packs/README.md](./eval_packs/README.md) · `scripts/eval_packs/fetch_pack.py` |
 | 测试与门禁 | [docs/development.md](./docs/development.md) |
 | 术语 | [docs/glossary.md](./docs/glossary.md) |
 

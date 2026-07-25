@@ -55,6 +55,7 @@ class JobKind(StrEnum):
     SECURITY_HITL_RESUME = "security_hitl_resume"
     WORKFLOW_CRON_DISPATCH = "workflow_cron_dispatch"
     MEMORY_PRUNE = "memory_prune"
+    EVAL_SUITE_RUN = "eval_suite_run"
 
 
 class JobState(StrEnum):
@@ -108,6 +109,9 @@ class DurableJob:
     updated_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+    # This is a fencing token, rather than a retry counter.  It must survive
+    # explicit retries so an old lease can never become valid again.
+    lease_epoch: int = 0
 
 
 def _schema() -> str:
@@ -130,6 +134,7 @@ def durable_jobs_table(metadata: MetaData | None = None) -> Table:
         Column("state", String(16), nullable=False, server_default=JobState.QUEUED.value),
         Column("priority", Integer, nullable=False, server_default="0"),
         Column("attempt_count", Integer, nullable=False, server_default="0"),
+        Column("lease_epoch", Integer, nullable=False, server_default="0"),
         Column("max_attempts", Integer, nullable=False, server_default="5"),
         Column(
             "available_at",
@@ -161,6 +166,7 @@ def durable_jobs_table(metadata: MetaData | None = None) -> Table:
             name="ck_durable_jobs_state",
         ),
         CheckConstraint("attempt_count >= 0", name="ck_durable_jobs_attempt_count"),
+        CheckConstraint("lease_epoch >= 0", name="ck_durable_jobs_lease_epoch"),
         CheckConstraint("max_attempts > 0", name="ck_durable_jobs_max_attempts"),
         UniqueConstraint("kind", "idempotency_key", name="uq_durable_jobs_kind_key"),
     )
@@ -277,6 +283,7 @@ def _record(row: Mapping[Any, Any]) -> DurableJob:
             if row.get("finished_at") is not None
             else None
         ),
+        lease_epoch=int(row.get("lease_epoch") or 0),
     )
 
 
@@ -290,6 +297,22 @@ def _validate_worker_id(worker_id: str) -> str:
     if not normalized:
         raise ValueError("worker_id is required")
     return normalized
+
+
+def _validate_lease_epoch(lease_epoch: int) -> int:
+    """Validate the persistent fencing token supplied by a worker.
+
+    ``0`` remains valid for a job that was already running when the migration
+    was applied.  Every claim made by code aware of the token advances it to at
+    least one.
+    """
+    if (
+        isinstance(lease_epoch, bool)
+        or not isinstance(lease_epoch, int)
+        or lease_epoch < 0
+    ):
+        raise ValueError("lease_epoch must be a non-negative integer")
+    return lease_epoch
 
 
 def _validate_positive(name: str, value: int | float) -> int | float:
@@ -360,6 +383,7 @@ async def enqueue_job_in_transaction(
         "state": JobState.QUEUED.value,
         "priority": int(priority),
         "attempt_count": 0,
+        "lease_epoch": 0,
         "max_attempts": int(max_attempts),
         "available_at": scheduled_for,
         "created_at": now,
@@ -434,10 +458,16 @@ def _ensure_owned_running(
     job: DurableJob,
     *,
     worker_id: str,
+    lease_epoch: int,
     now: datetime,
 ) -> None:
     if job.state is not JobState.RUNNING or job.lease_owner != worker_id:
         raise JobLeaseLostError(f"Worker {worker_id} no longer owns durable job {job.id}")
+    if job.lease_epoch != lease_epoch:
+        raise JobLeaseLostError(
+            f"Lease epoch changed for durable job {job.id} "
+            f"(expected={lease_epoch}, current={job.lease_epoch})"
+        )
     if job.lease_expires_at is None or job.lease_expires_at <= now:
         raise JobLeaseLostError(f"Lease expired for durable job {job.id}")
 
@@ -447,11 +477,15 @@ async def _update_locked_job(
     *,
     job_id: str,
     values: Mapping[str, Any],
+    table: Table | None = None,
 ) -> DurableJob:
-    table = durable_jobs_table()
+    target_table = table if table is not None else durable_jobs_table()
     row = (
         await conn.execute(
-            update(table).where(table.c.id == job_id).values(**dict(values)).returning(table)
+            update(target_table)
+            .where(target_table.c.id == job_id)
+            .values(**dict(values))
+            .returning(target_table)
         )
     ).mappings().one()
     return _record(row)
@@ -604,9 +638,14 @@ async def claim_due_jobs(
                 await _update_locked_job(
                     conn,
                     job_id=job.id,
+                    table=table,
                     values={
                         "state": JobState.RUNNING.value,
                         "attempt_count": job.attempt_count + 1,
+                        # Keep this an SQL expression instead of deriving it
+                        # from ``attempt_count``: retries may reset attempts,
+                        # but a fencing token must only move forward.
+                        "lease_epoch": table.c.lease_epoch + 1,
                         "lease_owner": owner,
                         "lease_expires_at": lease_expires_at,
                         "heartbeat_at": now,
@@ -622,15 +661,17 @@ async def heartbeat_job(
     job_id: str,
     *,
     worker_id: str,
+    lease_epoch: int,
     lease_seconds: float = 60.0,
 ) -> DurableJob:
     """Extend a claimed job's lease or reject a stale worker."""
     owner = _validate_worker_id(worker_id)
+    epoch = _validate_lease_epoch(lease_epoch)
     _validate_positive("lease_seconds", lease_seconds)
     now = utc_now()
     async with get_async_control_plane_engine().begin() as conn:
         job = await _locked_job(conn, job_id)
-        _ensure_owned_running(job, worker_id=owner, now=now)
+        _ensure_owned_running(job, worker_id=owner, lease_epoch=epoch, now=now)
         return await _update_locked_job(
             conn,
             job_id=job_id,
@@ -646,17 +687,19 @@ async def complete_job(
     job_id: str,
     *,
     worker_id: str,
+    lease_epoch: int,
     result: Mapping[str, Any] | None = None,
 ) -> DurableJob:
     """Mark an owned running job as succeeded."""
     owner = _validate_worker_id(worker_id)
+    epoch = _validate_lease_epoch(lease_epoch)
     normalized_result = (
         _normalise_json_object(result, field="result") if result is not None else None
     )
     now = utc_now()
     async with get_async_control_plane_engine().begin() as conn:
         job = await _locked_job(conn, job_id)
-        _ensure_owned_running(job, worker_id=owner, now=now)
+        _ensure_owned_running(job, worker_id=owner, lease_epoch=epoch, now=now)
         return await _update_locked_job(
             conn,
             job_id=job_id,
@@ -676,6 +719,7 @@ async def fail_job(
     job_id: str,
     *,
     worker_id: str,
+    lease_epoch: int,
     error: BaseException | str,
     retryable: bool = True,
     retry_base_seconds: float = 5.0,
@@ -683,12 +727,13 @@ async def fail_job(
 ) -> DurableJob:
     """Record a handler failure and either retry it or make it terminal."""
     owner = _validate_worker_id(worker_id)
+    epoch = _validate_lease_epoch(lease_epoch)
     _validate_positive("retry_base_seconds", retry_base_seconds)
     _validate_positive("retry_max_seconds", retry_max_seconds)
     now = utc_now()
     async with get_async_control_plane_engine().begin() as conn:
         job = await _locked_job(conn, job_id)
-        _ensure_owned_running(job, worker_id=owner, now=now)
+        _ensure_owned_running(job, worker_id=owner, lease_epoch=epoch, now=now)
         can_retry = retryable and job.attempt_count < job.max_attempts
         values: dict[str, Any] = {
             "lease_owner": None,
@@ -720,6 +765,7 @@ async def release_job(
     job_id: str,
     *,
     worker_id: str,
+    lease_epoch: int,
     reason: BaseException | str = "Worker stopped before job completion.",
     retry_base_seconds: float = 5.0,
     retry_max_seconds: float = 300.0,
@@ -728,6 +774,7 @@ async def release_job(
     return await fail_job(
         job_id,
         worker_id=worker_id,
+        lease_epoch=lease_epoch,
         error=reason,
         retryable=True,
         retry_base_seconds=retry_base_seconds,

@@ -1,0 +1,6 @@
+_cache/
+_imported/
+*.parquet
+*.arrow
+# Never commit raw harmful dumps pulled from HF
+**/raw_harmful/**

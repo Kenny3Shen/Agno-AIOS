@@ -352,6 +352,7 @@ async def update_models(
         body.models,
         body.active_model_id,
         memory_model_id=body.memory_model_id,
+        eval_judge_model_id=body.eval_judge_model_id,
     )
     await record_audit_event_async(
         user,
@@ -360,6 +361,7 @@ async def update_models(
         metadata={
             "active_model_id": body.active_model_id,
             "memory_model_id": body.memory_model_id,
+            "eval_judge_model_id": body.eval_judge_model_id,
         },
         **audit_request_context(request),
     )

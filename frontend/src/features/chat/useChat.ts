@@ -18,6 +18,8 @@ import type { ChatRunEvent, ChatSession, Message } from './types'
 import type { ReasoningEffort } from '@/shared/types/common'
 import { buildTraceSearch, emptyTraceFilters } from '@/features/trace/utils'
 
+const EMPTY_SESSIONS: ChatSession[] = []
+
 function bestEffortCancelRun(runId: string | null | undefined) {
   if (!runId) return
   void cancelRun(runId).catch((error: unknown) => {
@@ -54,7 +56,7 @@ export function useChat() {
   const prevSessionIdRef = useRef<string | null>(sessionId)
   // Active (non-archived) list only — shares RQ cache with ChatTaskPanel recents.
   const sessionsQueryResult = useQuery(sessionsQuery({}))
-  const sessionItems = sessionsQueryResult.data?.data ?? []
+  const sessionItems = sessionsQueryResult.data?.data ?? EMPTY_SESSIONS
   const sessions = {
     ...sessionsQueryResult,
     data: sessionItems,

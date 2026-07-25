@@ -24,6 +24,8 @@ import { ApiError } from '@/shared/api/client'
 
 type ConversationGroupKey = 'today' | 'yesterday' | 'earlier'
 
+const EMPTY_SESSIONS: ChatSession[] = []
+
 interface ChatTaskPanelProps {
   /** Embedded in Chat page (default) or mobile drawer fallback. */
   variant?: 'page' | 'drawer'
@@ -102,7 +104,7 @@ export function ChatTaskPanel({ variant = 'page', onNavigate, onNewChat }: ChatT
       q: debouncedSessionSearch.trim(),
     }),
   )
-  const sessionItems = sessionsQueryResult.data?.data ?? []
+  const sessionItems = sessionsQueryResult.data?.data ?? EMPTY_SESSIONS
   const sessions = sessionsQueryResult
 
   const conversations = useMemo(

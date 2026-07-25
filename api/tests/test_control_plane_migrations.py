@@ -1,15 +1,416 @@
 from __future__ import annotations
 
 import asyncio
+from importlib.util import module_from_spec, spec_from_file_location
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+from types import ModuleType, SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.dialects import postgresql
 
 from api.persistence import migrations
 from api.config import get_settings
 from api.persistence.schema_metadata import control_plane_metadata
 from api.utils.async_once import AsyncOnce
+
+
+def _eval_run_snapshots_revision() -> ModuleType:
+    revision_path = (
+        Path(__file__).resolve().parents[2]
+        / "alembic"
+        / "versions"
+        / "20260725_0023_eval_run_execution_snapshots.py"
+    )
+    spec = spec_from_file_location("eval_run_snapshots_revision", revision_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _eval_case_terminal_checkpoint_revision() -> ModuleType:
+    revision_path = (
+        Path(__file__).resolve().parents[2]
+        / "alembic"
+        / "versions"
+        / "20260725_0024_eval_case_terminal_checkpoints.py"
+    )
+    spec = spec_from_file_location("eval_case_terminal_checkpoint_revision", revision_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _eval_execution_fencing_revision() -> ModuleType:
+    revision_path = (
+        Path(__file__).resolve().parents[2]
+        / "alembic"
+        / "versions"
+        / "20260725_0026_eval_suite_execution_fencing.py"
+    )
+    spec = spec_from_file_location("eval_execution_fencing_revision", revision_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _eval_case_work_items_revision() -> ModuleType:
+    revision_path = (
+        Path(__file__).resolve().parents[2]
+        / "alembic"
+        / "versions"
+        / "20260725_0027_eval_case_work_items.py"
+    )
+    spec = spec_from_file_location("eval_case_work_items_revision", revision_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _terminalize_legacy_eval_runs_revision() -> ModuleType:
+    revision_path = (
+        Path(__file__).resolve().parents[2]
+        / "alembic"
+        / "versions"
+        / "20260725_0028_terminalize_legacy_active_eval_runs.py"
+    )
+    spec = spec_from_file_location("terminalize_legacy_eval_runs_revision", revision_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_fresh_baseline_does_not_include_future_control_plane_schema() -> None:
+    """Keep the initial revision frozen before the first later table migration.
+
+    Rendering through 20260720_0003 is enough to catch the historical failure:
+    a live ``control_plane_metadata()`` import put ``knowledge_rag_settings``
+    into 0001, then 0003 tried to create it a second time on every fresh DB.
+    """
+    repository_root = Path(__file__).resolve().parents[2]
+    app_schema = "alembic_frozen_baseline_app"
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "TAIS_APP_SCHEMA": app_schema,
+            "AGNO_DB_SCHEMA": "alembic_frozen_baseline_db",
+            "TAIS_MCP_SCHEMA": "alembic_frozen_baseline_mcp",
+            "TAIS_KNOWLEDGE_SCHEMA": "alembic_frozen_baseline_knowledge",
+        }
+    )
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "alembic",
+            "upgrade",
+            "20260720_0003",
+            "--sql",
+        ],
+        cwd=repository_root,
+        env=environment,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    sql = completed.stdout
+    assert sql.count(f"CREATE TABLE {app_schema}.knowledge_rag_settings") == 1
+
+    case_definition = re.search(
+        rf'CREATE TABLE IF NOT EXISTS "{app_schema}"\.agent_eval_cases \((.*?)\n\);',
+        sql,
+        flags=re.DOTALL,
+    )
+    assert case_definition is not None
+    initial_case_columns = case_definition.group(1)
+    assert "target_agent_id" in initial_case_columns
+    assert "judge_mode" not in initial_case_columns
+    assert "additional_guidelines" not in initial_case_columns
+    assert "timeout_seconds" not in initial_case_columns
+    assert "tags JSONB" not in initial_case_columns
+
+
+def test_eval_run_snapshot_migration_adds_private_json_columns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    revision = _eval_run_snapshots_revision()
+    added: list[tuple[str, Any, str | None]] = []
+    removed: list[tuple[str, str, str | None]] = []
+
+    class Operations:
+        def add_column(self, table: str, column: Any, *, schema: str | None) -> None:
+            added.append((table, column, schema))
+
+        def drop_column(self, table: str, column: str, *, schema: str | None) -> None:
+            removed.append((table, column, schema))
+
+    monkeypatch.setattr(revision, "op", Operations())
+    monkeypatch.setattr(
+        revision,
+        "get_settings",
+        lambda: SimpleNamespace(agno_app_schema="eval_test"),
+    )
+
+    revision.upgrade()
+
+    assert revision.down_revision == "20260724_0022"
+    assert [(table, column.name, schema) for table, column, schema in added] == [
+        ("agent_eval_suite_runs", "execution_snapshot", "eval_test"),
+        ("agent_eval_case_runs", "definition_snapshot", "eval_test"),
+        ("agent_eval_case_runs", "execution_provenance", "eval_test"),
+    ]
+    for _, column, _ in added:
+        assert getattr(column, "nullable") is False
+        assert "JSONB" in str(getattr(column, "type")).upper()
+        default = getattr(column, "server_default")
+        assert default is not None
+        assert str(default.arg) == "'{}'::jsonb"
+
+    revision.downgrade()
+
+    assert removed == [
+        ("agent_eval_case_runs", "execution_provenance", "eval_test"),
+        ("agent_eval_case_runs", "definition_snapshot", "eval_test"),
+        ("agent_eval_suite_runs", "execution_snapshot", "eval_test"),
+    ]
+
+
+def test_eval_case_terminal_checkpoint_migration_adds_private_json_column(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    revision = _eval_case_terminal_checkpoint_revision()
+    added: list[tuple[str, Any, str | None]] = []
+    removed: list[tuple[str, str, str | None]] = []
+
+    class Operations:
+        def add_column(self, table: str, column: Any, *, schema: str | None) -> None:
+            added.append((table, column, schema))
+
+        def drop_column(self, table: str, column: str, *, schema: str | None) -> None:
+            removed.append((table, column, schema))
+
+    monkeypatch.setattr(revision, "op", Operations())
+    monkeypatch.setattr(
+        revision,
+        "get_settings",
+        lambda: SimpleNamespace(agno_app_schema="eval_test"),
+    )
+
+    revision.upgrade()
+
+    assert revision.down_revision == "20260725_0023"
+    assert [(table, column.name, schema) for table, column, schema in added] == [
+        ("agent_eval_case_runs", "terminal_checkpoint", "eval_test"),
+    ]
+    column = added[0][1]
+    assert getattr(column, "nullable") is False
+    assert "JSONB" in str(getattr(column, "type")).upper()
+    default = getattr(column, "server_default")
+    assert default is not None
+    assert str(default.arg) == "'{}'::jsonb"
+
+    revision.downgrade()
+
+    assert removed == [("agent_eval_case_runs", "terminal_checkpoint", "eval_test")]
+
+
+def test_eval_execution_fencing_migration_adds_private_lease_columns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    revision = _eval_execution_fencing_revision()
+    added: list[tuple[str, Any, str | None]] = []
+    removed: list[tuple[str, str, str | None]] = []
+    indexes: list[tuple[str, str, list[str], dict[str, Any]]] = []
+    dropped_indexes: list[tuple[str, str, str | None]] = []
+
+    class Operations:
+        def add_column(self, table: str, column: Any, *, schema: str | None) -> None:
+            added.append((table, column, schema))
+
+        def drop_column(self, table: str, column: str, *, schema: str | None) -> None:
+            removed.append((table, column, schema))
+
+        def create_index(
+            self,
+            name: str,
+            table: str,
+            columns: list[str],
+            **kwargs: Any,
+        ) -> None:
+            indexes.append((name, table, columns, kwargs))
+
+        def drop_index(
+            self,
+            name: str,
+            *,
+            table_name: str,
+            schema: str | None,
+        ) -> None:
+            assert table_name == "agent_eval_case_runs"
+            dropped_indexes.append((name, table_name, schema))
+
+    monkeypatch.setattr(revision, "op", Operations())
+    monkeypatch.setattr(
+        revision,
+        "get_settings",
+        lambda: SimpleNamespace(agno_app_schema="eval_test"),
+    )
+
+    revision.upgrade()
+
+    assert revision.down_revision == "20260725_0025"
+    assert [(table, column.name, schema) for table, column, schema in added] == [
+        ("agent_eval_suite_runs", "active_job_id", "eval_test"),
+        ("agent_eval_suite_runs", "active_lease_epoch", "eval_test"),
+        ("agent_eval_case_runs", "lease_job_id", "eval_test"),
+        ("agent_eval_case_runs", "lease_epoch", "eval_test"),
+    ]
+    assert indexes[0][0:3] == (
+        "uq_agent_eval_case_runs_fenced_suite_case",
+        "agent_eval_case_runs",
+        ["suite_run_id", "case_id"],
+    )
+    assert indexes[0][3]["unique"] is True
+
+    revision.downgrade()
+
+    assert dropped_indexes == [
+        ("uq_agent_eval_case_runs_fenced_suite_case", "agent_eval_case_runs", "eval_test")
+    ]
+    assert removed == [
+        ("agent_eval_case_runs", "lease_epoch", "eval_test"),
+        ("agent_eval_case_runs", "lease_job_id", "eval_test"),
+        ("agent_eval_suite_runs", "active_lease_epoch", "eval_test"),
+        ("agent_eval_suite_runs", "active_job_id", "eval_test"),
+    ]
+
+
+def test_eval_case_work_items_migration_adds_ordered_unique_work_items(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    revision = _eval_case_work_items_revision()
+    added: list[tuple[str, Any, str | None]] = []
+    removed: list[tuple[str, str, str | None]] = []
+    indexes: list[tuple[str, str, list[str], dict[str, Any]]] = []
+    dropped_indexes: list[tuple[str, str, str | None]] = []
+
+    class Operations:
+        def add_column(self, table: str, column: Any, *, schema: str | None) -> None:
+            added.append((table, column, schema))
+
+        def drop_column(self, table: str, column: str, *, schema: str | None) -> None:
+            removed.append((table, column, schema))
+
+        def create_index(
+            self,
+            name: str,
+            table: str,
+            columns: list[str],
+            **kwargs: Any,
+        ) -> None:
+            indexes.append((name, table, columns, kwargs))
+
+        def drop_index(
+            self,
+            name: str,
+            *,
+            table_name: str,
+            schema: str | None,
+        ) -> None:
+            dropped_indexes.append((name, table_name, schema))
+
+    monkeypatch.setattr(revision, "op", Operations())
+    monkeypatch.setattr(
+        revision,
+        "get_settings",
+        lambda: SimpleNamespace(agno_app_schema="eval_test"),
+    )
+
+    revision.upgrade()
+
+    assert revision.down_revision == "20260725_0026"
+    assert [(table, column.name, schema) for table, column, schema in added] == [
+        ("agent_eval_case_runs", "work_item_index", "eval_test"),
+    ]
+    assert [(name, table, columns) for name, table, columns, _ in indexes] == [
+        (
+            "uq_agent_eval_case_runs_work_item_order",
+            "agent_eval_case_runs",
+            ["suite_run_id", "work_item_index"],
+        ),
+        (
+            "uq_agent_eval_case_runs_work_item_case",
+            "agent_eval_case_runs",
+            ["suite_run_id", "case_id"],
+        ),
+    ]
+    assert all(kwargs["unique"] is True for *_, kwargs in indexes)
+
+    revision.downgrade()
+
+    assert dropped_indexes == [
+        (
+            "uq_agent_eval_case_runs_work_item_case",
+            "agent_eval_case_runs",
+            "eval_test",
+        ),
+        (
+            "uq_agent_eval_case_runs_work_item_order",
+            "agent_eval_case_runs",
+            "eval_test",
+        ),
+    ]
+    assert removed == [("agent_eval_case_runs", "work_item_index", "eval_test")]
+
+
+def test_terminalize_legacy_active_eval_runs_migration_only_updates_empty_snapshots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    revision = _terminalize_legacy_eval_runs_revision()
+    executed: list[Any] = []
+
+    class Operations:
+        def execute(self, statement: Any) -> None:
+            executed.append(statement)
+
+    monkeypatch.setattr(revision, "op", Operations())
+    monkeypatch.setattr(
+        revision,
+        "get_settings",
+        lambda: SimpleNamespace(agno_app_schema="eval_test"),
+    )
+
+    revision.upgrade()
+
+    assert revision.down_revision == "20260725_0027"
+    assert len(executed) == 1
+    compiled = executed[0].compile(dialect=postgresql.dialect())
+    sql = str(compiled)
+    assert "UPDATE eval_test.agent_eval_suite_runs" in sql
+    assert "status IN" in sql
+    assert "execution_snapshot IS NULL" in sql
+    assert "execution_snapshot = '{}'::jsonb" in sql
+    assert "completed_at=now()" in sql
+    assert compiled.params["status"] == "error"
+    assert compiled.params["error_summary"] == revision._LEGACY_ACTIVE_RUN_ERROR
 
 
 class _RevisionConnection:

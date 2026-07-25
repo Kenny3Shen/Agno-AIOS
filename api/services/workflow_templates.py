@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from api.services.severity_classify import (
+    SEVERITY_CLASSIFY_INSTRUCTIONS,
+    SEVERITY_ROUTER_SELECTOR_CEL,
+)
+
 
 def list_workflow_templates() -> list[dict[str, Any]]:
     """Return copy-ready draft definitions (not persisted until Save)."""
@@ -24,8 +29,10 @@ def list_workflow_templates() -> list[dict[str, Any]]:
                         "name": "Triage alert",
                         "executor": {"kind": "agent", "ref": "security-operations"},
                         "instructions": (
-                            "Summarize the alert, list IOCs, and state severity as one of: "
-                            "critical, high, medium, low. Put severity token in the reply."
+                            "Summarize the alert and list only IOCs present in the input. "
+                            "Then classify severity using tokens critical, high, medium, or low. "
+                            "End with a line exactly: SEVERITY: <token>. "
+                            "Do not invent facts; if unsure use medium or low."
                         ),
                         "skills": ["cve-intel-skill"],
                         "position": {"x": 80, "y": 80},
@@ -147,31 +154,32 @@ def list_workflow_templates() -> list[dict[str, Any]]:
         {
             "id": "severity-router",
             "name": "Severity router",
-            "description": "Router CEL picks path_a / path_b / path_c by severity keyword.",
+            "description": (
+                "Classify agent emits SEVERITY: critical|high|other; "
+                "router CEL selects path_a / path_b / path_c."
+            ),
             "category": "routing",
-            "tags": ["security", "router"],
+            "tags": ["security", "router", "classify", "eval"],
             "definition": {
                 "name": "Severity router",
-                "description": "Route by severity token in input",
+                "description": (
+                    "Eval-friendly severity classification → CEL route. "
+                    "Classify dialogue must stay router-compatible."
+                ),
                 "steps": [
                     {
                         "id": "classify",
                         "type": "step",
                         "name": "Classify",
                         "executor": {"kind": "agent", "ref": "security-operations"},
-                        "instructions": "Echo severity as critical, high, or other.",
+                        "instructions": SEVERITY_CLASSIFY_INSTRUCTIONS,
                         "position": {"x": 60, "y": 120},
                     },
                     {
                         "id": "route",
                         "type": "router",
                         "name": "Route",
-                        "selector": {
-                            "cel": (
-                                'input.contains("critical") ? "path_a" : '
-                                '(input.contains("high") ? "path_b" : "path_c")'
-                            )
-                        },
+                        "selector": {"cel": SEVERITY_ROUTER_SELECTOR_CEL},
                         "position": {"x": 280, "y": 120},
                         "choices": [
                             {
@@ -182,9 +190,19 @@ def list_workflow_templates() -> list[dict[str, Any]]:
                                         "id": "crit_act",
                                         "type": "step",
                                         "name": "Critical action",
-                                        "executor": {"kind": "agent", "ref": "security-operations"},
+                                        "executor": {
+                                            "kind": "agent",
+                                            "ref": "security-operations",
+                                        },
+                                        "instructions": (
+                                            "Operator chose critical path. Propose immediate "
+                                            "containment steps grounded only in the alert text. "
+                                            "Do not invent systems or credentials."
+                                        ),
                                         "requires_confirmation": True,
-                                        "confirmation_message": "Proceed with this critical workflow action?",
+                                        "confirmation_message": (
+                                            "Proceed with this critical workflow action?"
+                                        ),
                                         "position": {"x": 520, "y": 20},
                                     }
                                 ],
@@ -197,7 +215,14 @@ def list_workflow_templates() -> list[dict[str, Any]]:
                                         "id": "high_act",
                                         "type": "step",
                                         "name": "High priority",
-                                        "executor": {"kind": "agent", "ref": "security-operations"},
+                                        "executor": {
+                                            "kind": "agent",
+                                            "ref": "security-operations",
+                                        },
+                                        "instructions": (
+                                            "High severity path: outline urgent investigation "
+                                            "and containment options without inventing facts."
+                                        ),
                                         "position": {"x": 520, "y": 140},
                                     }
                                 ],
@@ -210,7 +235,14 @@ def list_workflow_templates() -> list[dict[str, Any]]:
                                         "id": "low_act",
                                         "type": "step",
                                         "name": "Standard queue",
-                                        "executor": {"kind": "agent", "ref": "safe-fallback"},
+                                        "executor": {
+                                            "kind": "agent",
+                                            "ref": "safe-fallback",
+                                        },
+                                        "instructions": (
+                                            "Standard queue: write a short triage note and "
+                                            "suggested next checks. Prefer caution over urgency."
+                                        ),
                                         "position": {"x": 520, "y": 260},
                                     }
                                 ],
