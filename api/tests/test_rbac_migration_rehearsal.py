@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from argparse import Namespace
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
+from sqlalchemy.engine import Connection as SqlAlchemyConnection
 
 from api.tasks import rehearse_rbac_migration as rehearsal
 
@@ -69,7 +71,9 @@ def test_rehearsal_preflight_reports_account_snapshot_and_active_work_counts() -
             return next(values)
 
     connection = Connection()
-    report = rehearsal.collect_preflight(connection, app_schema="app")
+    report = rehearsal.collect_preflight(
+        cast(SqlAlchemyConnection, connection), app_schema="app"
+    )
 
     assert report == {
         "database_revision": "20260725_0028",
@@ -102,7 +106,9 @@ def test_rehearsal_postflight_checks_head_and_account_invariant(
         def scalar(self, _statement):
             return 0
 
-    report = rehearsal.collect_postflight(Connection(), app_schema="app")
+    report = rehearsal.collect_postflight(
+        cast(SqlAlchemyConnection, Connection()), app_schema="app"
+    )
 
     assert report["accounts_violating_final_access_invariant"] == 0
     assert report["expected_head_revision"] == "head"

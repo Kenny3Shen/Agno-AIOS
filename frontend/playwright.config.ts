@@ -9,7 +9,10 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // Rendering the large Ant Design application in one worker per CPU causes
+  // local browser smoke to time out before the UI becomes interactive. Keep
+  // CI serial and cap local runs at two independent browser contexts.
+  workers: process.env.CI ? 1 : 2,
   reporter: process.env.CI ? 'github' : 'list',
   timeout: 30_000,
   expect: { timeout: 10_000 },

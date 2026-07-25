@@ -14,10 +14,17 @@ from typing import Any
 
 from dotenv import load_dotenv
 
+psycopg: Any | None = None
+sql: Any | None = None
+
 try:
-    import psycopg
-except Exception:  # pragma: no cover
-    psycopg = None  # type: ignore[assignment]
+    import psycopg as _psycopg
+    from psycopg import sql as _sql
+except Exception:  # pragma: no cover - optional runtime dependency guard
+    pass
+else:
+    psycopg = _psycopg
+    sql = _sql
 
 
 def _repo_root() -> Path:
@@ -56,7 +63,7 @@ def _schema() -> str:
 
 
 async def search_async(query: str, limit: int) -> dict[str, Any]:
-    if psycopg is None:
+    if psycopg is None or sql is None:
         return {
             "query": query,
             "matched_total": 0,
@@ -68,50 +75,55 @@ async def search_async(query: str, limit: int) -> dict[str, Any]:
         return {"query": q, "matched_total": 0, "hits": [], "error": "empty query"}
 
     schema = _schema()
-    table = f'"{schema}"."ip_blacklist"'
+    table = sql.Identifier(schema, "ip_blacklist")
     # Exact first for IP/CIDR-shaped input; otherwise ILIKE.
     exact = bool(_IP_RE.match(q.split()[0]))
     async with await psycopg.AsyncConnection.connect(_dsn()) as conn:
         async with conn.cursor() as cur:
             if exact:
                 await cur.execute(
-                    f"""
+                    sql.SQL(
+                        """
                     SELECT indicator, indicator_type, source, list_name, description,
                            last_seen::text, updated_at::text
-                    FROM {table}
+                    FROM {}
                     WHERE indicator = %s
                     ORDER BY updated_at DESC
                     LIMIT %s
-                    """,
+                    """
+                    ).format(table),
                     (q.split()[0], limit),
                 )
             else:
                 pattern = f"%{q}%"
                 await cur.execute(
-                    f"""
+                    sql.SQL(
+                        """
                     SELECT indicator, indicator_type, source, list_name, description,
                            last_seen::text, updated_at::text
-                    FROM {table}
+                    FROM {}
                     WHERE indicator ILIKE %s
                        OR description ILIKE %s
                        OR list_name ILIKE %s
                        OR source ILIKE %s
                     ORDER BY updated_at DESC
                     LIMIT %s
-                    """,
+                    """
+                    ).format(table),
                     (pattern, pattern, pattern, pattern, limit),
                 )
             rows = await cur.fetchall()
             await cur.execute(
-                f"SELECT COUNT(*) FROM {table}"
-                + (
+                sql.SQL("SELECT COUNT(*) FROM {}").format(table)
+                + sql.SQL(
                     " WHERE indicator = %s"
                     if exact
                     else " WHERE indicator ILIKE %s OR description ILIKE %s OR list_name ILIKE %s OR source ILIKE %s"
                 ),
                 (q.split()[0],) if exact else (pattern, pattern, pattern, pattern),
             )
-            total = int((await cur.fetchone())[0])
+            total_row = await cur.fetchone()
+            total = int(total_row[0]) if total_row else 0
 
     hits = [
         {

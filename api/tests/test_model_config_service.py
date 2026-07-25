@@ -179,6 +179,7 @@ async def test_save_model_config_sets_memory_manager_flag():
         )
 
     replace.assert_awaited_once()
+    assert replace.await_args is not None
     rows = replace.await_args.args[0]
     mm_rows = [row for row in rows if row.get("memory_manager")]
     assert len(mm_rows) == 1

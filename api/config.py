@@ -9,7 +9,9 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Single source: pyproject.toml [project].version (via importlib.metadata after install/uv sync).
-_PACKAGE_NAME = "agno-aios"
+# Keep this as the distribution name, rather than the repository name: Python
+# packaging normalizes ``T.A.I.S`` to ``t-a-i-s`` when it resolves metadata.
+_PACKAGE_NAME = "T.A.I.S"
 
 _PRODUCTION_ENVIRONMENTS = frozenset({"prod", "production"})
 _DEFAULT_AUTH_SECRETS = {

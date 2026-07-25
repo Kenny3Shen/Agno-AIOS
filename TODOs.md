@@ -1,3 +1,11 @@
+# 当前计划
+
+## 1.0.0 发布边界
+
+- 本版本收口产品角色为 `admin` / `user`、账户授权版本即时失效、Dashboard Overview 的 trace 反射自恢复，以及与之对应的迁移与回归测试。
+- 每次部署必须先完成 `docs/release.md` 的后端/前端构建门禁；涉及既有数据库时，RBAC 迁移演练仅可在带备份引用的 PostgreSQL 克隆库执行。
+- 性能缓存、资产—漏洞—告警闭环和 Team 的 MCP/HITL 扩展均明确延后至 **1.1+**，不作为 1.0.0 的隐含承诺。
+
 ## 已完成：CVE / IP 黑名单源配置迁出仓库根
 
 - 默认源配置：`config/cve_sources.toml`、`config/ip_blacklist_sources.toml`（不再放在项目根）。
@@ -289,13 +297,13 @@
 - `--file README.md` 端到端通过；Docling 文档 Markdown 注入模型消息，原始 `File` 只进入 data-analysis / Team 隔离工作区，避免 DeepSeek Chat Completions 的 `unknown variant file` 400。
 - 取消流改为单一 `security-run-cancel-wait` 生命周期，并在 SSE 退出时 cancel + await，避免 pending task 警告。
 
-## 下一步：以端点与交付链路为主的性能治理
+## 1.1+：以端点与交付链路为主的性能治理
 
 - Dashboard Overview 在同机 6 并发请求下 p95 约 866ms（单并发样本 p50 约 169ms）；先做按用户/时间窗的短 TTL 请求合并或缓存，并用 `EXPLAIN` 验证 trace `(user_id, start_time)` / `(user_id, status, start_time)` 复合索引需求，再考虑扩大 API worker 数。
 - [x] Dashboard 图表已改为 `echarts/core` 按需注册（line / bar / pie + 必需组件），并仅在 Overview 返回趋势或分布数据时加载；生产构建的 ECharts chunk 已由约 1.14MB / 377KB gzip 降至约 567KB / 190KB gzip。生产部署仍应提供 immutable cache + Brotli/gzip。
 - Chat 当前每条 SSE event 都会遍历消息列表，且历史接口没有分页窗口；先补最近消息窗口/向前分页和 SSE rAF 合并，再以 100/500 条真实历史决定是否引入虚拟列表，避免过早改变 Bubble.List 的滚动锚定语义。
 
-## 下一步：资产—漏洞—告警调查闭环
+## 1.1+：资产—漏洞—告警调查闭环
 
 - [ ] 定义租户/owner 隔离的安全对象模型：`asset`、`asset_service`、`finding`、`evidence`、`case` 与 `case_task`；每条记录保留来源、外部 ID、时间戳、可信度与审计字段，并通过 Alembic 管理。
 - [ ] 建设资产与暴露面中心：支持 CSV/API 导入和后续 CMDB、云资产、EDR、扫描器连接器；展示负责人、关键性、标签、互联网暴露、服务与最近观测时间。
@@ -438,7 +446,7 @@
 - [x] Workflow executor refs 同步 catalog（含 safe-fallback）
 - [x] Agno Team beta：feature flag `TAIS_ENABLE_AGNO_TEAM`；Chat SSE 挂载 coordinate/route/broadcast/tasks 团队
 - [x] Team 成员事件 → ThoughtChain；队长 content → 最终回答
-- [ ] Team：HITL/审批只绑 security 成员（当前 team 不挂 MCP/HITL）
+- [ ] **1.1+** Team：HITL/审批只绑 security 成员（当前 team 不挂 MCP/HITL）
 - [x] Team 成员 tool 事件前缀 `[成员名]` + member_id 字段（ThoughtChain 可辨识）
 - [x] Team/Agent 流式取消：`stream_cancel` 等待 + `cancel_run` 多形态调用
 - [x] Team SSE 集成测试：成员 thought/tool、队长 content、tools-off、cancel

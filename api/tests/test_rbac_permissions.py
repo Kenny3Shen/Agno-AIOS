@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -8,10 +9,12 @@ from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
 import pytest
+from starlette.requests import Request
 
 from api.auth import router as auth_router
 from api.auth import claims
 from api.auth.claims import actor_role, has_scope, scope_claims, scope_user_id
+from api.auth.models import User
 from api.tests.route_fakes import route_dependency
 
 ADMIN_SCOPE = "agent_os:admin"
@@ -238,7 +241,7 @@ async def test_fastapi_users_jwt_rejects_stale_or_legacy_authorization_versions(
         async def get(self, _user_id: str):
             return actor
 
-    manager = UserManager()
+    manager = cast(Any, UserManager())
     current_token = await strategy.write_token(actor)
     assert await strategy.read_token(current_token, manager) is actor
 
@@ -283,8 +286,10 @@ async def test_password_update_advances_authorization_version(
     assert result is target
     assert target.auth_version == 8
     assert captured == {"password": "new-secure-password", "auth_version": 8}
-    assert on_after_update.await_args.args[0] is target
-    assert on_after_update.await_args.args[1] == captured
+    assert on_after_update.await_args is not None
+    update_args = on_after_update.await_args
+    assert update_args.args[0] is target
+    assert update_args.args[1] == captured
 
 
 @pytest.mark.asyncio
@@ -379,8 +384,8 @@ async def test_admin_role_update_promotes_and_revokes_prior_tokens(
     result = await auth_router.set_user_role(
         target.id,
         auth_router.AdminRoleUpdate(role="admin"),
-        SimpleNamespace(),
-        admin=user("admin", is_superuser=True),
+        cast(Request, SimpleNamespace()),
+        admin=cast(User, user("admin", is_superuser=True)),
     )
 
     assert session.locked and session.committed and session.refreshed
@@ -388,9 +393,11 @@ async def test_admin_role_update_promotes_and_revokes_prior_tokens(
     assert target.is_superuser is True
     assert target.auth_version == 8
     assert result.role == "admin"
-    assert audit.await_args.kwargs["metadata"]["from"] == "user"
-    assert audit.await_args.kwargs["metadata"]["to"] == "admin"
-    assert audit.await_args.kwargs["metadata"]["auth_version"] == 8
+    assert audit.await_args is not None
+    audit_args = audit.await_args
+    assert audit_args.kwargs["metadata"]["from"] == "user"
+    assert audit_args.kwargs["metadata"]["to"] == "admin"
+    assert audit_args.kwargs["metadata"]["auth_version"] == 8
 
 
 @pytest.mark.asyncio
@@ -406,8 +413,8 @@ async def test_admin_role_update_can_demote_nonfinal_admin_and_revokes_tokens(
     await auth_router.set_user_role(
         target.id,
         auth_router.AdminRoleUpdate(role="user"),
-        SimpleNamespace(),
-        admin=user("admin", is_superuser=True),
+        cast(Request, SimpleNamespace()),
+        admin=cast(User, user("admin", is_superuser=True)),
     )
 
     assert target.role == "user"
@@ -427,8 +434,8 @@ async def test_admin_role_update_protects_self_and_last_active_admin(
         await auth_router.set_user_role(
             target.id,
             auth_router.AdminRoleUpdate(role="user"),
-            SimpleNamespace(),
-            admin=user("admin", is_superuser=True),
+            cast(Request, SimpleNamespace()),
+            admin=cast(User, user("admin", is_superuser=True)),
         )
     assert final_admin.value.status_code == 409
 
@@ -436,8 +443,11 @@ async def test_admin_role_update_protects_self_and_last_active_admin(
         await auth_router.set_user_role(
             target.id,
             auth_router.AdminRoleUpdate(role="user"),
-            SimpleNamespace(),
-            admin=SimpleNamespace(id=target.id, role="admin", is_superuser=True),
+            cast(Request, SimpleNamespace()),
+            admin=cast(
+                User,
+                SimpleNamespace(id=target.id, role="admin", is_superuser=True),
+            ),
         )
     assert self_change.value.status_code == 403
 

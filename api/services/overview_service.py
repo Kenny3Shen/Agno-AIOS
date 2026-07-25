@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
-from sqlalchemy import and_, case, cast as sa_cast, func, select
+from sqlalchemy import MetaData, Table, and_, case, cast as sa_cast, func, select
 from sqlalchemy.types import DateTime, Float
 
 from api.auth.claims import ActorLike, has_scope, scope_user_id
@@ -27,6 +27,129 @@ _RANGE_WINDOWS: dict[OverviewRange, timedelta] = {
 # Token sample (+ SQL-fallback latency sample). Window KPIs use SQL aggregates.
 _PAGE_LIMIT = 50
 _MAX_OVERVIEW_TRACES = _PAGE_LIMIT
+
+# ``AsyncPostgresDb`` keeps reflected tables in a process-wide ``MetaData``.
+# A long-lived worker can therefore hold an older/incomplete ``agno_traces``
+# object even after the physical table has been repaired or migrated.  The
+# three SQL overview aggregates run concurrently, so serialize the exceptional
+# refresh path rather than racing to mutate that shared metadata.
+_TRACE_TABLE_REFRESH_LOCK = asyncio.Lock()
+_OVERVIEW_TRACE_SQL_COLUMNS = frozenset(
+    {
+        "start_time",
+        "end_time",
+        "duration_ms",
+        "status",
+        "user_id",
+        "agent_id",
+        "workflow_id",
+        "team_id",
+    }
+)
+_WARNED_TRACE_SQL_SCHEMA_GAPS: set[tuple[str, ...]] = set()
+
+
+def _missing_trace_columns(table: Any, required_columns: frozenset[str]) -> set[str]:
+    """Return required columns absent from a reflected trace table."""
+    if table is None:
+        return set(required_columns)
+    try:
+        existing_columns = set(table.c.keys())
+    except (AttributeError, TypeError):
+        return set(required_columns)
+    return set(required_columns) - existing_columns
+
+
+def _warn_trace_sql_schema_gap(table: Any, required_columns: frozenset[str]) -> None:
+    """Emit one concise warning for an unsupported trace-table reflection."""
+    missing = _missing_trace_columns(table, _OVERVIEW_TRACE_SQL_COLUMNS)
+    if not missing:
+        missing = _missing_trace_columns(table, required_columns)
+    key = tuple(sorted(missing))
+    if key in _WARNED_TRACE_SQL_SCHEMA_GAPS:
+        return
+    _WARNED_TRACE_SQL_SCHEMA_GAPS.add(key)
+    logger.warning(
+        "overview SQL aggregates skipped; reflected agno_traces is missing columns: {}",
+        ", ".join(key),
+    )
+
+
+async def _refresh_trace_table_reflection(
+    db: Any, *, required_columns: frozenset[str]
+) -> Any | None:
+    """Refresh Agno's cached trace reflection once when its columns are stale.
+
+    ``AsyncPostgresDb._get_table()`` normally reuses its ``MetaData`` entry.
+    ``extend_existing`` forces SQLAlchemy to reload that same entry from the
+    physical table, avoiding a process restart after a schema repair.
+    """
+    async with _TRACE_TABLE_REFRESH_LOCK:
+        cached = getattr(db, "traces_table", None)
+        if not _missing_trace_columns(cached, required_columns):
+            return cached
+
+        try:
+            schema = getattr(db, "db_schema", None)
+            table_name = getattr(db, "trace_table_name", None) or "agno_traces"
+            metadata = getattr(db, "metadata", None) or MetaData(schema=schema)
+
+            async with db.db_engine.connect() as connection:
+
+                def _reflect(sync_connection: Any) -> Table:
+                    return Table(
+                        table_name,
+                        metadata,
+                        schema=schema,
+                        autoload_with=sync_connection,
+                        extend_existing=True,
+                        autoload_replace=True,
+                    )
+
+                table = await connection.run_sync(_reflect)
+            db.traces_table = table
+            return table
+        except Exception:
+            logger.warning(
+                "overview SQL trace-table reflection refresh failed; using sample path"
+            )
+            return None
+
+
+async def _trace_table_for_sql(
+    *, required_columns: frozenset[str]
+) -> tuple[Any, Any | None]:
+    """Get a trace table that is safe for a specific overview SQL aggregate."""
+    db = get_async_agno_postgres_db()
+    lookup_failed = False
+    try:
+        table = await db._get_table(table_type="traces")
+    except Exception:
+        # A stale Agno metadata object can also fail validation.  Try one
+        # explicit reflection before falling back to the capped sample path.
+        lookup_failed = True
+        table = None
+
+    if table is None and not lookup_failed:
+        return db, None
+    if _missing_trace_columns(table, required_columns):
+        table = await _refresh_trace_table_reflection(
+            db, required_columns=required_columns
+        )
+    if _missing_trace_columns(table, required_columns):
+        _warn_trace_sql_schema_gap(table, required_columns)
+        return db, None
+    return db, table
+
+
+def _trace_sql_required_columns(*columns: str, user_id: str | None) -> frozenset[str]:
+    """Build the minimum trace-table schema needed by one SQL aggregate."""
+    required = {"start_time", *columns}
+    if user_id:
+        # Without this column a scoped request must never query an unscoped
+        # aggregate, even if the underlying table is otherwise usable.
+        required.add("user_id")
+    return frozenset(required)
 
 
 def _as_datetime(value: Any) -> datetime | None:
@@ -431,8 +554,11 @@ async def _sql_window_latency(
     *, start: datetime, end: datetime, user_id: str | None
 ) -> dict[str, Any] | None:
     """Full-window p50/p95 over duration_ms (no row materialization)."""
-    db = get_async_agno_postgres_db()
-    table = await db._get_table(table_type="traces")
+    db, table = await _trace_table_for_sql(
+        required_columns=_trace_sql_required_columns(
+            "end_time", "duration_ms", user_id=user_id
+        )
+    )
     if table is None:
         return None
 
@@ -477,8 +603,11 @@ async def _sql_series(
     timezone: ZoneInfo,
 ) -> list[dict[str, Any]] | None:
     """Bucket runs/failures/latency with SQL (tokens filled later from sample)."""
-    db = get_async_agno_postgres_db()
-    table = await db._get_table(table_type="traces")
+    db, table = await _trace_table_for_sql(
+        required_columns=_trace_sql_required_columns(
+            "end_time", "duration_ms", "status", user_id=user_id
+        )
+    )
     if table is None:
         return None
 
@@ -541,8 +670,11 @@ async def _sql_distributions(
     *, start: datetime, end: datetime, user_id: str | None
 ) -> dict[str, list[dict[str, Any]]] | None:
     """Full-window agent/workflow/team counts via SQL GROUP BY."""
-    db = get_async_agno_postgres_db()
-    table = await db._get_table(table_type="traces")
+    db, table = await _trace_table_for_sql(
+        required_columns=_trace_sql_required_columns(
+            "agent_id", "workflow_id", "team_id", user_id=user_id
+        )
+    )
     if table is None:
         return None
 

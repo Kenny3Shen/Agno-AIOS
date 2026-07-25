@@ -39,7 +39,8 @@ def test_workflow_executors_include_builtin_agents():
     assert by_ref["security-operations"]["name"]
     assert by_ref["security-operations"]["description"]
     assert by_ref["security-operations"]["category"] == "operations"
-    assert "hitl" in by_ref["security-operations"]["capabilities"]
+    capabilities = str(by_ref["security-operations"]["capabilities"]).split(",")
+    assert "hitl" in capabilities
     assert by_ref["safe-fallback"]["category"] == "lite"
     assert by_ref["safe-fallback"]["recommended_for"]
 

@@ -28,5 +28,8 @@ dataset/
 # Playwright
 .playwright*
 
+# Local PPTX inspection output; the deck source and published PPTX stay tracked.
+/docs/unpacked_tais/
+
 
 /frontend-react

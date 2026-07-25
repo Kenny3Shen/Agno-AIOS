@@ -64,7 +64,7 @@ test.describe('approvals critical path', () => {
 
     await page.goto('/#/approvals', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { name: '审批' })).toBeVisible()
-    await expect(page.getByText('仅显示工作流步骤暂停')).toBeVisible()
+    await expect(page.getByText('仅 pending 工作流步骤；通知可深链打开。')).toBeVisible()
 
     // Segmented default is 工作流 HITL; row shows step tool name + pending tag.
     await expect(page.getByText('workflow.step:confirm')).toBeVisible()

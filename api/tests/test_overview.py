@@ -2,10 +2,12 @@
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import BigInteger, Column, MetaData, String, Table, create_engine
 
 from api.auth import claims
 from api.routes import overview
@@ -15,6 +17,18 @@ from api.tests.route_fakes import route_dependency
 
 def actor(user_id: str, role: str = "user"):
     return SimpleNamespace(id=user_id, role=role, is_superuser=False)
+
+
+def trace_sql_table(*columns: str) -> Table:
+    """Build only the columns needed to exercise overview SQL guards."""
+    column_types = {
+        "duration_ms": BigInteger,
+    }
+    return Table(
+        "agno_traces",
+        MetaData(),
+        *(Column(column, column_types.get(column, String)) for column in columns),
+    )
 
 
 @pytest.mark.asyncio
@@ -231,3 +245,148 @@ async def test_overview_token_sample_stops_at_first_page_when_window_exceeds_cap
     assert calls == [1]
     assert [trace["trace_id"] for trace in traces] == ["first"]
     assert meta == {"sample_size": 1, "window_total": 1001, "truncated": True}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("aggregate", "kwargs", "required_columns"),
+    [
+        (
+            overview_service._sql_window_latency,
+            {
+                "start": datetime(2026, 7, 12, 11, tzinfo=UTC),
+                "end": datetime(2026, 7, 12, 12, tzinfo=UTC),
+                "user_id": "u1",
+            },
+            frozenset({"start_time", "end_time", "duration_ms", "user_id"}),
+        ),
+        (
+            overview_service._sql_series,
+            {
+                "start": datetime(2026, 7, 12, 11, tzinfo=UTC),
+                "end": datetime(2026, 7, 12, 12, tzinfo=UTC),
+                "user_id": "u1",
+                "range_name": "1h",
+                "timezone": ZoneInfo("UTC"),
+            },
+            frozenset({"start_time", "end_time", "duration_ms", "status", "user_id"}),
+        ),
+        (
+            overview_service._sql_distributions,
+            {
+                "start": datetime(2026, 7, 12, 11, tzinfo=UTC),
+                "end": datetime(2026, 7, 12, 12, tzinfo=UTC),
+                "user_id": "u1",
+            },
+            frozenset({"start_time", "agent_id", "workflow_id", "team_id", "user_id"}),
+        ),
+    ],
+)
+async def test_sql_aggregates_skip_incomplete_trace_reflection(
+    aggregate, kwargs, required_columns
+):
+    db = MagicMock()
+    db._get_table = AsyncMock(return_value=trace_sql_table("trace_id"))
+    refresh = AsyncMock(return_value=trace_sql_table("trace_id"))
+
+    with (
+        patch.object(overview_service, "get_async_agno_postgres_db", return_value=db),
+        patch.object(overview_service, "_refresh_trace_table_reflection", refresh),
+    ):
+        result = await aggregate(**kwargs)
+
+    assert result is None
+    refresh.assert_awaited_once_with(db, required_columns=required_columns)
+    db.async_session_factory.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_trace_table_for_sql_refreshes_a_stale_reflection_once():
+    required_columns = frozenset({"start_time", "end_time", "duration_ms", "user_id"})
+    stale = trace_sql_table("trace_id")
+    refreshed = trace_sql_table(*required_columns)
+    db = MagicMock()
+    db._get_table = AsyncMock(return_value=stale)
+    refresh = AsyncMock(return_value=refreshed)
+
+    with (
+        patch.object(overview_service, "get_async_agno_postgres_db", return_value=db),
+        patch.object(overview_service, "_refresh_trace_table_reflection", refresh),
+    ):
+        result_db, table = await overview_service._trace_table_for_sql(
+            required_columns=required_columns
+        )
+
+    assert result_db is db
+    assert table is refreshed
+    refresh.assert_awaited_once_with(db, required_columns=required_columns)
+
+
+@pytest.mark.asyncio
+async def test_trace_table_for_sql_keeps_a_complete_reflection():
+    required_columns = frozenset({"start_time", "end_time", "duration_ms", "user_id"})
+    table = trace_sql_table(*required_columns)
+    db = MagicMock()
+    db._get_table = AsyncMock(return_value=table)
+    refresh = AsyncMock()
+
+    with (
+        patch.object(overview_service, "get_async_agno_postgres_db", return_value=db),
+        patch.object(overview_service, "_refresh_trace_table_reflection", refresh),
+    ):
+        result_db, result_table = await overview_service._trace_table_for_sql(
+            required_columns=required_columns
+        )
+
+    assert result_db is db
+    assert result_table is table
+    refresh.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_refresh_trace_table_reflection_reloads_cached_metadata():
+    engine = create_engine("sqlite://")
+    physical_metadata = MetaData()
+    Table(
+        "agno_traces",
+        physical_metadata,
+        Column("trace_id", String),
+        Column("start_time", String),
+        Column("end_time", String),
+        Column("duration_ms", BigInteger),
+        Column("user_id", String),
+    )
+    physical_metadata.create_all(engine)
+
+    stale_metadata = MetaData()
+    stale = Table("agno_traces", stale_metadata, Column("trace_id", String))
+
+    class AsyncConnection:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def run_sync(self, callback):
+            with engine.connect() as connection:
+                return callback(connection)
+
+    db = SimpleNamespace(
+        db_schema=None,
+        trace_table_name="agno_traces",
+        metadata=stale_metadata,
+        traces_table=stale,
+        db_engine=SimpleNamespace(connect=AsyncConnection),
+    )
+    required_columns = frozenset({"start_time", "end_time", "duration_ms", "user_id"})
+
+    try:
+        refreshed = await overview_service._refresh_trace_table_reflection(
+            db, required_columns=required_columns
+        )
+    finally:
+        engine.dispose()
+
+    assert refreshed is stale
+    assert required_columns.issubset(refreshed.c.keys())

@@ -2,6 +2,8 @@
 
 T.A.I.S（Trinity AI Security）是一个面向安全运营的 AI 工作台。它将 Agent 对话、可观测性、MCP 工具、本地 Skills、知识库检索、CVE 情报、URL 采集、审计和访问控制收敛到一个需要认证的工作台中。
 
+当前版本为 **1.0.0**。变更摘要见 [CHANGELOG.md](./CHANGELOG.md)，发版前后的核对步骤见 [发布核对](./docs/release.md)。
+
 旧版 Vue + Element Plus 位于 `vue` 分支；`master` 是 React 主线。
 
 本地 GPU：默认从 PyTorch **cu124** 索引安装 `torch`/`torchvision`（适配 GTX 1070 Ti 等 Pascal，驱动 CUDA ≥12.x）。Knowledge/Chat 的 Docling 依赖该栈。
@@ -90,6 +92,7 @@ React 工作台通过共享 API client 携带 JWT 请求 FastAPI；后端校验�
 | 安全防护评估 · 数据集分层与 Pack 生命周期 | [docs/safety-eval.md](./docs/safety-eval.md) |
 | 安全评估 pack 拉取与缓存 | [eval_packs/README.md](./eval_packs/README.md) · `scripts/eval_packs/fetch_pack.py` |
 | 测试与门禁 | [docs/development.md](./docs/development.md) |
+| 1.0.0 变更与发布核对 | [CHANGELOG.md](./CHANGELOG.md) · [docs/release.md](./docs/release.md) |
 | 术语 | [docs/glossary.md](./docs/glossary.md) |
 
 ## 开发速览

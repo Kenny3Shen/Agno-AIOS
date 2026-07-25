@@ -16,6 +16,7 @@ from sqlalchemy import (
     select,
     update,
 )
+from sqlalchemy.engine import RowMapping
 
 from api.config import get_settings
 from api.persistence.database import get_async_control_plane_engine
@@ -82,7 +83,9 @@ def _env_defaults() -> dict[str, Any]:
     }
 
 
-def _row_payload(row: Mapping[str, Any] | None = None) -> dict[str, Any]:
+def _row_payload(
+    row: RowMapping | Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     defaults = _env_defaults()
     if row is None:
         return dict(defaults)

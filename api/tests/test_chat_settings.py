@@ -167,6 +167,7 @@ async def test_update_memory_mode_sets_derived_bools() -> None:
     assert result["memory_enabled"] is True
     assert result["enable_agentic_memory"] is True
     update_row.assert_awaited_once()
+    assert update_row.await_args is not None
     sent = update_row.await_args.args[0]
     assert sent["memory_mode"] == "agentic"
     assert sent["memory_enabled"] is True

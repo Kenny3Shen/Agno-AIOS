@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import cast
 
 from api.services import knowledge_document_service, knowledge_runtime_service
 from api.services.knowledge_rag_settings_service import normalize_similarity_threshold
@@ -49,4 +50,6 @@ def test_project_document_for_agent_includes_score() -> None:
     )
     payload = knowledge_runtime_service.project_document_for_agent(document)
     assert payload["score"] == 0.66
-    assert payload["meta_data"]["score"] == 0.66
+    metadata = payload["meta_data"]
+    assert isinstance(metadata, dict)
+    assert cast(dict[str, object], metadata)["score"] == 0.66
