@@ -54,7 +54,6 @@ def model_configs_table(metadata: MetaData | None = None) -> Table:
         Column("api_key", Text, nullable=False, server_default=""),
         Column("description", Text, nullable=False, server_default=""),
         Column("enabled", Boolean, nullable=False, server_default="true"),
-        Column("builtin", Boolean, nullable=False, server_default="false"),
         Column("active", Boolean, nullable=False, server_default="false"),
         # Exclusive flag: at most one row should be true (enforced in app layer).
         Column("memory_manager", Boolean, nullable=False, server_default="false"),

@@ -14,7 +14,7 @@ def _clear_model_config_cache():
 
 
 @pytest.mark.asyncio
-async def test_load_model_config_store_seeds_defaults_when_empty():
+async def test_load_model_config_store_returns_empty_store_without_persisting():
     replace = AsyncMock()
 
     with (
@@ -23,8 +23,9 @@ async def test_load_model_config_store_seeds_defaults_when_empty():
     ):
         store = await model_config_service.load_model_config_store()
 
-    assert store.models
-    replace.assert_awaited_once()
+    assert store.models == []
+    assert store.active_model_id == ""
+    replace.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -40,7 +41,7 @@ async def test_save_model_config_writes_postgres_rows_and_preserves_masked_secre
                 api_key="saved-secret",
             )
         ],
-    ).with_defaults()
+    )
     existing_rows = model_config_service._store_to_rows(existing_store)
     replace = AsyncMock()
 
@@ -77,10 +78,17 @@ async def test_save_model_config_writes_postgres_rows_and_preserves_masked_secre
 
 @pytest.mark.asyncio
 async def test_save_model_config_sets_memory_manager_flag():
+    model = model_config_service.ModelConfig(
+        id="memory-model",
+        name="Memory model",
+        model_id="model-name",
+        base_url="https://api.example.com/v1",
+        api_key="saved-secret",
+    )
     existing_store = model_config_service.ModelConfigStore(
-        active_model_id="deepseek-v4-flash",
+        active_model_id=model.id,
         memory_model_id="",
-        models=list(model_config_service.DEFAULT_MODELS),
+        models=[model],
     )
     existing_rows = model_config_service._store_to_rows(existing_store)
     replace = AsyncMock()
@@ -94,9 +102,9 @@ async def test_save_model_config_sets_memory_manager_flag():
         patch.object(model_config_service, "replace_model_config_rows", replace),
     ):
         public = await model_config_service.save_model_config(
-            list(model_config_service.DEFAULT_MODELS),
-            "deepseek-v4-flash",
-            memory_model_id="deepseek-v4-flash",
+            [model],
+            model.id,
+            memory_model_id=model.id,
         )
 
     replace.assert_awaited_once()
@@ -104,8 +112,8 @@ async def test_save_model_config_sets_memory_manager_flag():
     rows = replace.await_args.args[0]
     mm_rows = [row for row in rows if row.get("memory_manager")]
     assert len(mm_rows) == 1
-    assert mm_rows[0]["id"] == "deepseek-v4-flash"
-    assert public["memory_model_id"] == "deepseek-v4-flash"
+    assert mm_rows[0]["id"] == model.id
+    assert public["memory_model_id"] == model.id
 
 
 def test_model_config_normalizes_new_compatible_models_to_chat_completions_json():
@@ -126,6 +134,25 @@ def test_model_config_normalizes_new_compatible_models_to_chat_completions_json(
 def test_model_config_requires_explicit_id():
     with pytest.raises(ValueError, match="model config id is required"):
         model_config_service.ModelConfig.from_row({"model_id": "model-name"})
+
+
+def test_model_config_rejects_the_retired_builtin_field():
+    with pytest.raises(ValidationError, match="builtin"):
+        model_config_service.ModelConfig.model_validate(
+            {
+                "id": "custom",
+                "model_id": "model-name",
+                "base_url": "https://api.example.com/v1",
+                "builtin": True,
+            }
+        )
+
+
+def test_model_config_store_rejects_retired_fields() -> None:
+    with pytest.raises(ValidationError, match="builtin"):
+        model_config_service.ModelConfigStore.model_validate(
+            {"models": [], "builtin": False}
+        )
 
 
 def test_model_config_rejects_retired_structured_output_mode():
@@ -239,7 +266,21 @@ def test_model_config_strips_reasoning_effort_for_unsupported_providers():
 
 @pytest.mark.asyncio
 async def test_load_model_config_store_rewrites_multiple_active_rows():
-    store = model_config_service.ModelConfigStore.default()
+    store = model_config_service.ModelConfigStore(
+        active_model_id="first",
+        models=[
+            model_config_service.ModelConfig(
+                id="first",
+                model_id="first-model",
+                base_url="https://api.example.com/v1",
+            ),
+            model_config_service.ModelConfig(
+                id="second",
+                model_id="second-model",
+                base_url="https://api.example.com/v1",
+            ),
+        ],
+    )
     rows = model_config_service._store_to_rows(store)
     rows[1]["active"] = True
     replace = AsyncMock()
@@ -333,13 +374,65 @@ def test_xai_provider_defaults_and_strips_reasoning_effort():
     assert stripped.default_reasoning_effort is None
 
 
-def test_default_models_include_xai_grok():
+def test_default_model_store_is_intentionally_empty():
     store = model_config_service.ModelConfigStore.default()
-    ids = {model.id for model in store.models}
-    assert "xai-grok-4.5" in ids
-    grok = next(model for model in store.models if model.id == "xai-grok-4.5")
-    assert grok.provider == "xai"
-    assert grok.builtin is True
+    assert store.models == []
+    assert store.active_model_id == ""
+
+
+def test_empty_submitted_models_stay_empty_and_clear_stale_selection():
+    existing = model_config_service.ModelConfigStore(
+        active_model_id="configured",
+        memory_model_id="configured",
+        eval_judge_model_id="configured",
+        models=[
+            model_config_service.ModelConfig(
+                id="configured",
+                model_id="model-name",
+                base_url="https://api.example.com/v1",
+                api_key="saved-secret",
+            )
+        ],
+    )
+
+    store = model_config_service.ModelConfigStore.from_submitted(
+        [],
+        active_model_id="configured",
+        memory_model_id="configured",
+        eval_judge_model_id="configured",
+        existing=existing,
+    )
+
+    assert store.models == []
+    assert store.active_model_id == ""
+    assert store.memory_model_id == ""
+    assert store.eval_judge_model_id == ""
+
+
+def test_model_for_run_explains_when_administrator_has_not_configured_any_model():
+    with pytest.raises(ValueError, match="请先在设置中添加并启用模型"):
+        model_config_service.ModelConfigStore.default().model_for_run()
+
+
+@pytest.mark.asyncio
+async def test_eval_judge_uses_active_model_when_no_dedicated_model_is_pinned():
+    store = model_config_service.ModelConfigStore(
+        active_model_id="active",
+        models=[
+            model_config_service.ModelConfig(
+                id="active",
+                model_id="model-name",
+                base_url="https://api.example.com/v1",
+                api_key="configured-secret",
+            )
+        ],
+    )
+    with patch.object(
+        model_config_service,
+        "load_model_config_store",
+        AsyncMock(return_value=store),
+    ):
+        assert await model_config_service.get_eval_judge_model_id() == "active"
 
 
 
@@ -384,7 +477,16 @@ def test_capability_profiles_resolve_optimal_and_fallback():
 async def test_load_model_config_store_uses_short_ttl_cache():
     model_config_service._invalidate_model_config_cache()
     rows = model_config_service._store_to_rows(
-        model_config_service.ModelConfigStore.default()
+        model_config_service.ModelConfigStore(
+            active_model_id="custom",
+            models=[
+                model_config_service.ModelConfig(
+                    id="custom",
+                    model_id="model-name",
+                    base_url="https://api.example.com/v1",
+                )
+            ],
+        )
     )
     list_rows = AsyncMock(return_value=rows)
 

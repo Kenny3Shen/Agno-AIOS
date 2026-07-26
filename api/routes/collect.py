@@ -1,4 +1,4 @@
-"""Collect / URL→Markdown HTTP routes (security news library + crawl SSE)."""
+"""Collect HTTP routes (security news library + crawl SSE)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ from sse_starlette.sse import EventSourceResponse
 from api.auth.claims import ADMIN_SCOPE
 from api.auth.models import User
 from api.auth.scopes import require_scope
-from api.models.schemas import Url2MdRequest
 from api.services.audit_service import audit_request_context, record_audit_event_async
 from api.services.collect_service import (
     get_article,
@@ -28,12 +27,10 @@ from api.services.collect_service import (
 from api.services.collect_crawl_service import (
     CollectCrawlAlreadyRunningError,
     crawl_and_persist,
-    extract_cve_ids,
-    parse_and_store_url,
 )
 from api.utils.pagination import pagination_meta
 
-router = APIRouter(prefix="/api/url2md", tags=["URL2MD"])
+router = APIRouter(prefix="/api/collect", tags=["Collect"])
 
 
 class CollectSearchRequest(BaseModel):
@@ -337,56 +334,3 @@ async def _crawl_collect_stream(
                     pass
 
     return EventSourceResponse(event_generator())
-
-
-@router.post("/parse")
-async def parse_url_to_markdown(
-    request_ctx: Request,
-    request: Url2MdRequest,
-    user: User = Depends(require_scope("collect:write")),
-) -> dict:
-    """Parse a URL to Markdown and persist it for the Collect library."""
-    try:
-        record = await parse_and_store_url(request.url)
-        await record_audit_event_async(
-            user,
-            action="collect.parse",
-            resource_type="url2md",
-            resource_id=request.url,
-            metadata={"status": record.get("status"), "article_id": record.get("id")},
-            **audit_request_context(request_ctx),
-        )
-        markdown = record.get("markdown") or ""
-        if record.get("status") != "ok":
-            raise HTTPException(
-                status_code=400,
-                detail=record.get("error_message") or "parse failed",
-            )
-        cve_ids = record.get("cve_ids") or extract_cve_ids(
-            str(record.get("title") or ""),
-            str(record.get("summary") or ""),
-            str(markdown or ""),
-        )
-        return {
-            "url": request.url,
-            "markdown": markdown,
-            "title": record.get("title"),
-            "source_domain": record.get("source_domain"),
-            "id": record.get("id"),
-            "cve_ids": cve_ids,
-            "summary": record.get("summary") or "",
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("URL to Markdown parsing error: {}", e)
-        await record_audit_event_async(
-            user,
-            action="collect.parse",
-            resource_type="url2md",
-            resource_id=request.url,
-            status="failure",
-            metadata={"error": str(e)},
-            **audit_request_context(request_ctx),
-        )
-        raise HTTPException(status_code=400, detail=f"错误:{e}") from e

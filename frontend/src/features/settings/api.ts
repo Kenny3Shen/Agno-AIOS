@@ -76,7 +76,7 @@ export const SERVER_DEFAULTED_MODEL_FIELDS = [
   'http_max_retries',
 ] as const
 
-type ServerManagedModelField = (typeof SERVER_DEFAULTED_MODEL_FIELDS)[number] | 'description' | 'builtin'
+type ServerManagedModelField = (typeof SERVER_DEFAULTED_MODEL_FIELDS)[number] | 'description'
 
 export type ModelConfigInput = Omit<ModelConfig, ServerManagedModelField | 'capabilities' | 'configured'> &
   Partial<Pick<ModelConfig, ServerManagedModelField>>
@@ -85,7 +85,7 @@ export type ModelConfigUpdatePayload = {
   active_model_id: string
   /** Dedicated MemoryManager model id; null clears pin (auto-pick). */
   memory_model_id?: string | null
-  /** Dedicated Agent Eval judge model id; null clears pin (Agno default). */
+  /** Dedicated Agent Eval judge model id; null clears pin (uses current model). */
   eval_judge_model_id?: string | null
   models: ModelConfigInput[]
 }

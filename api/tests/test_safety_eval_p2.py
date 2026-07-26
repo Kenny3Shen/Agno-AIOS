@@ -36,6 +36,16 @@ def _suite_stub() -> dict[str, Any]:
     }
 
 
+def _configured_evaluator_model_kwargs(model: Any | None = None) -> dict[str, Any]:
+    """Inject an administrator-configured model into an LLM evaluator test."""
+    configured_model = model if model is not None else object()
+    return {
+        "get_eval_judge_model_id": lambda: "test-evaluator-model",
+        "get_model_for_run": lambda config_id: {"id": config_id},
+        "build_agno_model": lambda _config: configured_model,
+    }
+
+
 def test_load_versioned_rubric_identity_is_stable():
     rubric = load_rubric("refusal-v1")
     assert rubric["id"] == "refusal-v1"
@@ -361,7 +371,7 @@ async def test_run_case_marks_failed_judge_verdict_as_failed(monkeypatch):
             security_runtime=cast(Any, FakeRuntime()),
             get_eval_db=AsyncMock(return_value="db"),
             judge_eval_cls=FailingJudge,
-            get_eval_judge_model_id=AsyncMock(return_value=None),
+            **_configured_evaluator_model_kwargs(),
         ),
     )
 
@@ -426,7 +436,7 @@ async def test_run_case_guardrail_error_buckets_in_suite_summary(monkeypatch):
     deps = runner.AgentEvalRunnerDependencies(
         security_runtime=cast(Any, FakeRuntime()),
         get_eval_db=AsyncMock(return_value="db"),
-        get_eval_judge_model_id=AsyncMock(return_value=None),
+        **_configured_evaluator_model_kwargs(),
     )
     result = await runner.run_case("c-gr", SimpleNamespace(id="u1"), dependencies=deps)
     assert result["status"] == "failed"

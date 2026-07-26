@@ -20,7 +20,7 @@ Memory API 仅使用 `/api/memories`（Agno 风格 `data`/`meta`，查询参数 
 
 Trace 列表/会话 `GET /api/traces` 与 `GET /api/traces/sessions` 使用 Agno 风格 `data`/`meta`（status 走 Agno SQL 过滤；sessions 通过 SQL 按 `session_id` 聚合分页；仅 Trace 列表在状态 reconciliation 收窄当前页时以 `meta.truncated` 标注近似总数）；list/detail 对外只暴露 Agno 风格 `duration`（由存储层 `duration_ms` 投影，不改 Agno 表结构），list 尽量附带 root `input`（页面内一次 spans 批量查询，避免 per-trace N+1）。detail 仍为工作台自研契约。 Trace 深链 query 仅使用 `session_id`/`run_id`/`selected_session`/`trace`（不再识别 `session`/`run`）；Dashboard 最近失败亦走该契约。
 
-Approvals HITL 列表 `GET /api/approvals` 使用 Agno 风格 `data`/`meta`；详情/resolve/resume 与 Skill/MCP `submissions` 仍为工作台自研契约（身份 enrich、拒绝理由、Run 恢复）。HITL 响应仅 enrich `submitted_by`/`resolved_by` 对象（无 `*_email` 双字段）；拒绝理由写入 `resolution_data.note`（Agno 约定），请求体仍用 `rejection_reason`。 审批中心表格对 HITL 与上传审批 submissions 均走服务端 `page`/`limit`；`kind=all` 时按「submissions 在前」虚拟合并两路分页结果。Audit `GET /api/audit/logs` 同样使用 `data`/`meta`。 CVE `POST /api/cve/search` 与 Collect `POST /api/url2md/articles/search`（及 sources）亦同。 Knowledge `GET /api/knowledge` 列表行为 `data`/`meta`（`meta.ingest_defaults` 只提供入库表单默认值；不暴露进度或运行状态）。 Skills `GET /api/skills` 与 Notifications `GET /api/notifications`（`meta.unread_count`）亦同。 Agent Eval suites/cases 与 MCP components/tokens 列表亦同。
+Approvals HITL 列表 `GET /api/approvals` 使用 Agno 风格 `data`/`meta`；详情/resolve/resume 与 Skill/MCP `submissions` 仍为工作台自研契约（身份 enrich、拒绝理由、Run 恢复）。HITL 响应仅 enrich `submitted_by`/`resolved_by` 对象（无 `*_email` 双字段）；拒绝理由写入 `resolution_data.note`（Agno 约定），请求体仍用 `rejection_reason`。 审批中心表格对 HITL 与上传审批 submissions 均走服务端 `page`/`limit`；`kind=all` 时按「submissions 在前」虚拟合并两路分页结果。Audit `GET /api/audit/logs` 同样使用 `data`/`meta`。 CVE `POST /api/cve/search` 与 Collect `POST /api/collect/articles/search`（及 sources）亦同。 Knowledge `GET /api/knowledge` 列表行为 `data`/`meta`（`meta.ingest_defaults` 只提供入库表单默认值；不暴露进度或运行状态）。 Skills `GET /api/skills` 与 Notifications `GET /api/notifications`（`meta.unread_count`）亦同。 Agent Eval suites/cases 与 MCP components/tokens 列表亦同。
 
 `GET /api/approvals/count` 返回 Agno 风格 `{ count }`（pending HITL），供导航 badge 与 dashboard 快照复用。 Dashboard `snapshots.approvals` 提供 `{ pending, approved, rejected }`（不再输出 `pending_approvals` 别名）。
 
@@ -113,5 +113,4 @@ flowchart LR
 - 更新采用安全切换：新内容先写入临时 shadow ID，成功后再切换到原文档 ID；失败时保留旧文档与旧向量，避免检索空窗。
 - 按文件后缀自动选择 Reader/分块策略，支持 Markdown、文本、JSON、CSV、代码、PDF、DOCX（Docling）。
 - 相关实现见 `api/routes/knowledge.py`（`_schedule_knowledge_ingest`）与 `frontend/src/features/knowledge/`。入库路径为后台 Task，直接绑定当前 ASGI event loop；前端不维护进度 SSE 状态，也无 job 轮询 API。
-
 

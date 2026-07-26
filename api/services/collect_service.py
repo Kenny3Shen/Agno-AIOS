@@ -15,7 +15,7 @@ from api.persistence.collect_articles import (
 )
 from api.services.collect_crawl_service import (
     configured_source_domains,
-    parse_and_store_url,
+    refresh_collect_article_url,
 )
 from api.utils.url2md_utils import active_domain_rules
 
@@ -72,7 +72,7 @@ async def reparse_article(article_id: int) -> dict[str, Any]:
     url = str(existing.get("url") or "").strip()
     if not url:
         raise ValueError("article has no URL")
-    record = await parse_and_store_url(url)
+    record = await refresh_collect_article_url(url)
     return record
 
 

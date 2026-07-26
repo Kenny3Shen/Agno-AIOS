@@ -38,7 +38,6 @@ const models = {
       api_key: 'masked',
       description: '',
       enabled: true,
-      builtin: true,
       configured: true,
     },
     {
@@ -59,20 +58,37 @@ const models = {
       api_key: 'masked',
       description: '',
       enabled: true,
-      builtin: false,
       configured: true,
     },
   ],
 } satisfies ModelConfigResponse
 
-const mockSettings = (currentUser: AuthUser = admin) =>
+const emptyModels = {
+  active_model_id: '',
+  memory_model_id: null,
+  eval_judge_model_id: null,
+  models: [],
+} satisfies ModelConfigResponse
+
+const mockSettings = (currentUser: AuthUser = admin, modelConfig: ModelConfigResponse = models) =>
   server.use(
     http.get('/api/auth/users/me', () => HttpResponse.json(currentUser)),
-    http.get('/api/models', () => HttpResponse.json(models)),
+    http.get('/api/models', () => HttpResponse.json(modelConfig)),
     http.get('/api/settings/chat', () => HttpResponse.json(chatSettings))
   )
 
 describe('model settings editor', () => {
+  it('supports an intentionally empty model configuration', async () => {
+    mockSettings(admin, emptyModels)
+    renderWithQuery(<SettingsPage />)
+
+    expect(await screen.findByText('尚未配置模型连接。添加模型后即可运行 Chat 和工作流。')).toBeTruthy()
+    const addModelButton = (await screen.findByText('添加模型', {}, { timeout: 5_000 })).closest('button')
+    expect(addModelButton).toBeTruthy()
+    fireEvent.click(addModelButton!)
+    expect(await screen.findByLabelText('显示名称')).toBeTruthy()
+  })
+
   it('separates model and chat operations into tabs', async () => {
     mockSettings()
     renderWithQuery(<SettingsPage />)
@@ -298,9 +314,9 @@ describe('model settings editor', () => {
     expect(((await screen.findByLabelText('显示名称')) as HTMLInputElement).value).toBe('Second model')
   })
 
-  it('submits connection fields without hardcoding provider runtime defaults', async () => {
+  it('submits the first model from an empty configuration without hardcoding provider runtime defaults', async () => {
     let saved: ModelConfigUpdatePayload | undefined
-    mockSettings()
+    mockSettings(admin, emptyModels)
     server.use(
       http.put('/api/models', async ({ request }) => {
         saved = (await request.json()) as ModelConfigUpdatePayload
@@ -332,8 +348,8 @@ describe('model settings editor', () => {
       base_url: 'https://api.example.com/v1',
       api_key: 'gateway-key',
       enabled: true,
-      builtin: false,
     })
+    expect(saved!.active_model_id).toBe(created?.id)
     ;[
       'api_protocol',
       'structured_output_mode',
@@ -370,10 +386,32 @@ describe('model settings editor', () => {
     })
   })
 
-  it('does not allow deleting built-in models', async () => {
-    mockSettings()
+  it('allows deleting the only custom model and clears model selections', async () => {
+    let saved: ModelConfigResponse | undefined
+    const onlyCustomModel = {
+      ...models,
+      active_model_id: 'second',
+      models: [models.models[1]],
+    } satisfies ModelConfigResponse
+    mockSettings(admin, onlyCustomModel)
+    server.use(
+      http.put('/api/models', async ({ request }) => {
+        saved = (await request.json()) as ModelConfigResponse
+        return HttpResponse.json(saved)
+      })
+    )
     renderWithQuery(<SettingsPage />)
-    const btn = await screen.findByLabelText('删除 First model')
-    expect(btn.hasAttribute('disabled') || btn.getAttribute('disabled') === '').toBe(true)
+
+    fireEvent.click(await screen.findByLabelText('删除 Second model'))
+    fireEvent.click(await screen.findByRole('button', { name: '删除模型' }))
+
+    await waitFor(() => {
+      expect(saved).toMatchObject({
+        active_model_id: '',
+        memory_model_id: null,
+        eval_judge_model_id: null,
+        models: [],
+      })
+    })
   })
 })

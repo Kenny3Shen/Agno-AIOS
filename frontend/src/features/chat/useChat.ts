@@ -449,11 +449,11 @@ export function useChat() {
   }, [hasPausedRun, isWorkflowSession, refreshLatestHistory, sessionId])
   useEffect(() => {
     if (!models.data?.models.length) return
+    const runnable = models.data.models.filter((model) => model.enabled && model.configured)
     const selected =
-      models.data.models.find((model) => model.id === state.selectedModelId) ??
-      models.data.models.find((model) => model.id === models.data.active_model_id && model.enabled) ??
-      models.data.models.find((model) => model.enabled) ??
-      models.data.models[0]
+      runnable.find((model) => model.id === state.selectedModelId) ??
+      runnable.find((model) => model.id === models.data.active_model_id) ??
+      runnable[0]
     if (!selected) return
     const effort = defaultReasoningEffort(selected)
     if (state.selectedModelId !== selected.id) dispatch({ type: 'model', value: selected.id, reasoningEffort: effort })

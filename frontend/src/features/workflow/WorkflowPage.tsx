@@ -481,6 +481,8 @@ export function WorkflowPage() {
     return map
   }, [executors])
   const models = workflow.modelsQuery.data?.models ?? []
+  const runnableModels = models.filter((model) => model.enabled && model.configured)
+  const hasRunnableModel = runnableModels.length > 0
   const saved = workflow.workflowRecords
   const workflowListMeta = workflow.workflowListMeta
   const versions = workflow.versionsQuery.data ?? []
@@ -693,9 +695,8 @@ export function WorkflowPage() {
             style={{ minWidth: 180 }}
             placeholder={t('modelPlaceholder')}
             value={workflow.state.modelId ?? undefined}
-            disabled={!canWrite || workflow.state.running}
-            options={models
-              .filter((model) => model.enabled)
+            disabled={!canWrite || workflow.state.running || !hasRunnableModel}
+            options={runnableModels
               .map((model) => ({ value: model.id, label: model.name || model.model_id }))}
             onChange={(value) =>
               workflow.patchMeta({ modelId: value, dirty: workflow.state.dirty })
@@ -845,6 +846,8 @@ export function WorkflowPage() {
               title={
                 !canRun
                   ? t('runScopeHint')
+                  : !hasRunnableModel
+                    ? t('errorRunNeedsModel')
                   : !workflow.state.workflowId
                     ? t('errorRunNeedsSave')
                     : workflow.state.dirty
@@ -859,6 +862,7 @@ export function WorkflowPage() {
                 disabled={
                   workflow.state.running ||
                   !canRun ||
+                  !hasRunnableModel ||
                   !workflow.state.workflowId ||
                   workflow.state.dirty
                 }

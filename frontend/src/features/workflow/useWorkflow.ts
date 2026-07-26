@@ -173,11 +173,17 @@ export function useWorkflow() {
   })
 
   useEffect(() => {
-    const active = modelsQuery.data?.active_model_id
-    if (active && !state.modelId) {
-      setState((current) => ({ ...current, modelId: active }))
+    const available = (modelsQuery.data?.models ?? []).filter(
+      (model) => model.enabled && model.configured,
+    )
+    const currentIsAvailable = available.some((model) => model.id === state.modelId)
+    if (currentIsAvailable) return
+    const active = available.find((model) => model.id === modelsQuery.data?.active_model_id)
+    const nextModelId = active?.id ?? available[0]?.id ?? null
+    if (state.modelId !== nextModelId) {
+      setState((current) => ({ ...current, modelId: nextModelId }))
     }
-  }, [modelsQuery.data?.active_model_id, state.modelId])
+  }, [modelsQuery.data, state.modelId])
 
   const bumpHistory = () => setHistoryTick((n) => n + 1)
 
@@ -1197,6 +1203,11 @@ export function useWorkflow() {
     }
     if (state.dirty) {
       setState((current) => ({ ...current, error: t('errorRunNeedsClean') }))
+      return
+    }
+    const runModel = modelsQuery.data?.models.find((model) => model.id === state.modelId)
+    if (!runModel?.enabled || !runModel.configured) {
+      setState((current) => ({ ...current, error: t('errorRunNeedsModel') }))
       return
     }
     // Re-validate before streaming so empty/invalid graphs fail in Studio, not as opaque 422.

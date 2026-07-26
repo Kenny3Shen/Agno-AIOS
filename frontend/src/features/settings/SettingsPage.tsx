@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   Collapse,
+  Empty,
   Flex,
   Form,
   Input,
@@ -391,7 +392,6 @@ export function SettingsPage() {
       model_id: model.model_id.trim(),
       base_url: (model.base_url ?? '').trim(),
       enabled: model.enabled ?? true,
-      builtin: previous?.builtin ?? model.builtin ?? false,
     }
     const submitted = !previous || previous.provider !== model.provider ? omitProviderManagedFields(normalized) : normalized
     const next: ModelConfigInput[] = current.models.some((item) => item.id === submitted.id)
@@ -400,7 +400,9 @@ export function SettingsPage() {
     setSaving(true)
     try {
       await persist({
-        active_model_id: current.active_model_id,
+        active_model_id: current.models.some((item) => item.id === current.active_model_id)
+          ? current.active_model_id
+          : submitted.id,
         memory_model_id: current.memory_model_id ?? null,
         eval_judge_model_id: current.eval_judge_model_id ?? null,
         models: next,
@@ -423,7 +425,6 @@ export function SettingsPage() {
       base_url: '',
       api_key: '',
       enabled: true,
-      builtin: false,
     })
   }
 
@@ -506,25 +507,13 @@ export function SettingsPage() {
   const deleteModel = async (model: ModelConfig) => {
     const current = models.data
     if (!current) return
-    if (model.builtin) {
-      message.warning(t('cannotDeleteBuiltin'))
-      return
-    }
-    if (current.models.length <= 1) {
-      message.warning(t('cannotDeleteLastModel'))
-      return
-    }
     const remaining = current.models.filter((item) => item.id !== model.id)
-    if (!remaining.length) {
-      message.warning(t('cannotDeleteLastModel'))
-      return
-    }
-    let active_model_id = current.active_model_id
-    if (active_model_id === model.id) {
-      const next =
-        remaining.find((item) => item.enabled && item.configured !== false) ?? remaining.find((item) => item.enabled) ?? remaining[0]
-      active_model_id = next.id
-    }
+    const nextActive =
+      remaining.find((item) => item.id === current.active_model_id) ??
+      remaining.find((item) => item.enabled && item.configured !== false) ??
+      remaining.find((item) => item.enabled) ??
+      remaining[0]
+    const active_model_id = nextActive?.id ?? ''
     let memory_model_id = current.memory_model_id ?? null
     if (memory_model_id === model.id) {
       memory_model_id = null
@@ -561,11 +550,29 @@ export function SettingsPage() {
     }
   }
 
+  const hasModelConnections = (models.data?.models.length ?? 0) > 0
   const modelConnections = (
     <Table<ModelConfig>
       rowKey="id"
       dataSource={models.data?.models ?? []}
       loading={models.isLoading}
+      locale={{
+        emptyText: (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={
+              <Flex vertical align="center" gap="small">
+                <span>{t('noModelsConfigured')}</span>
+                {canManageModels && (
+                  <Button type="primary" icon={<PlusOutlined />} onClick={addModel}>
+                    {t('addModel')}
+                  </Button>
+                )}
+              </Flex>
+            }
+          />
+        ),
+      }}
       scroll={{ x: 960 }}
       columns={[
         {
@@ -632,6 +639,7 @@ export function SettingsPage() {
                   const isActive = models.data?.active_model_id === row.id
                   const isMemory = models.data?.memory_model_id === row.id
                   const isEvalJudge = models.data?.eval_judge_model_id === row.id
+                  const isOnlyModel = (models.data?.models.length ?? 0) === 1
                   const pinDisabled = !row.enabled || row.configured === false
                   return (
                     <Space>
@@ -682,28 +690,20 @@ export function SettingsPage() {
                           onClick={() => void setEvalJudgeModel(row)}
                         />
                       </Tooltip>
-                      <Tooltip
-                        title={
-                          row.builtin
-                            ? t('cannotDeleteBuiltin')
-                            : (models.data?.models.length ?? 0) <= 1
-                              ? t('cannotDeleteLastModel')
-                              : t('deleteModel')
-                        }
-                      >
+                      <Tooltip title={t('deleteModel')}>
                         <Popconfirm
                           title={t('deleteModelConfirm', { name: row.name })}
-                          description={models.data?.active_model_id === row.id ? t('deleteActiveModelHint') : undefined}
+                          description={
+                            isActive ? (isOnlyModel ? t('deleteOnlyModelHint') : t('deleteActiveModelHint')) : undefined
+                          }
                           okText={t('deleteModel')}
                           cancelText={t('common:cancel')}
                           okButtonProps={{ danger: true }}
-                          disabled={row.builtin || (models.data?.models.length ?? 0) <= 1}
                           onConfirm={() => void deleteModel(row)}
                         >
                           <Button
                             danger
                             icon={<DeleteOutlined />}
-                            disabled={row.builtin || (models.data?.models.length ?? 0) <= 1}
                             loading={updatingId === row.id}
                             aria-label={t('deleteModelNamed', { name: row.name })}
                           />
@@ -1782,7 +1782,7 @@ export function SettingsPage() {
           onChange={setActiveTab}
           destroyOnHidden
           tabBarExtraContent={
-            activeTab === 'models' && canManageModels ? (
+            activeTab === 'models' && canManageModels && hasModelConnections ? (
               <Button type="primary" icon={<PlusOutlined />} onClick={addModel}>
                 {t('addModel')}
               </Button>

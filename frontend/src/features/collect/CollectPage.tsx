@@ -1,5 +1,5 @@
 /**
- * Collect / 安全情报 page: search the article library, sync sources, parse URLs.
+ * Collect / 安全情报 page: search the article library and sync sources.
  * CVE tags deep-link to the CVE workspace when ids are present on a row.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -8,7 +8,6 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { App, Button, Card, Empty, Input, Pagination, Progress, Select, Space, Splitter, Tag, Typography } from 'antd'
 import { Markdown } from '@/shared/ui/Markdown'
 import {
-  CloudDownloadOutlined,
   ReloadOutlined,
   SearchOutlined,
   StopOutlined,
@@ -21,7 +20,6 @@ import {
   getArticle,
   getLibraryStats,
   listSources,
-  parseUrl,
   reparseArticle,
   reparseFailedArticles,
   searchArticles,
@@ -125,7 +123,6 @@ export function CollectPage() {
   const isAdmin = roleOf(currentUser.data) === 'admin'
   const canWrite = hasScope(currentUser.data, 'collect:write')
 
-  const [url, setUrl] = useState('')
   const [query, setQuery] = useState('')
   const debouncedQuery = useDebouncedValue(query, 300)
   const [sourceDomain, setSourceDomain] = useState<string>()
@@ -208,29 +205,6 @@ export function CollectPage() {
       cancelled = true
     }
   }, [selected?.id, selected?.markdown, previewReloadToken, t])
-
-  const parseMutation = useMutation({
-    mutationFn: () => parseUrl(url),
-    onSuccess: async (data) => {
-      message.success(t('parseOk'))
-      setUrl('')
-      await Promise.all([articlesQuery.refetch(), statsQuery.refetch(), sourcesQuery.refetch()])
-      const markdown = data.markdown || ''
-      if (data.id) {
-        setSelected({
-          id: data.id,
-          url,
-          source_domain: data.source_domain || '',
-          title: data.title || url,
-          markdown,
-          summary: data.summary || '',
-          status: 'ok',
-          cve_ids: data.cve_ids || [],
-        })
-      }
-    },
-    onError: (err: Error) => message.error(err.message || t('parseFailed')),
-  })
 
   const crawlMutation = useMutation({
     mutationFn: async () => {
@@ -542,27 +516,6 @@ export function CollectPage() {
               })}
             </Space>
           </div>
-        ) : null}
-
-
-        {canWrite ? (
-          <Space.Compact className="collect-toolbar" style={{ width: '100%', marginBottom: 12 }}>
-            <Input
-              value={url}
-              onChange={(event) => setUrl(event.target.value)}
-              onPressEnter={() => url && parseMutation.mutate()}
-              placeholder={t('urlPlaceholder')}
-            />
-            <Button
-              type="default"
-              icon={<CloudDownloadOutlined />}
-              disabled={!url}
-              loading={parseMutation.isPending}
-              onClick={() => parseMutation.mutate()}
-            >
-              {t('action')}
-            </Button>
-          </Space.Compact>
         ) : null}
 
         <Splitter className="workbench-splitter collect-splitter" orientation="horizontal">

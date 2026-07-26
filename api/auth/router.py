@@ -9,7 +9,7 @@ from httpx_oauth.clients.github import GitHubOAuth2
 from httpx_oauth.clients.google import GoogleOAuth2
 from httpx_oauth.clients.microsoft import MicrosoftGraphOAuth2
 from pydantic import BaseModel
-from sqlalchemy import ColumnElement, func, or_, select, text
+from sqlalchemy import ColumnElement, func, select, text
 
 from api.auth.claims import (
     ADMIN_SCOPE,

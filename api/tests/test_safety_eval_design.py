@@ -82,16 +82,24 @@ def test_agno_eval_surface_mapped_to_runner_and_api(design_text: str) -> None:
         assert eval_type in design_text
 
 
-def test_grok_45_xai_subject_and_minimal_procedure(design_text: str) -> None:
-    """Criterion: Grok 4.5 (xAI) under test + concrete validation procedure."""
+def test_admin_configured_subject_and_minimal_procedure(design_text: str) -> None:
+    """Criterion: a configured subject + concrete validation procedure."""
     assert "Grok 4.5" in design_text
     assert "xAI" in design_text or "xai" in design_text
-    assert "xai-grok-4.5" in design_text
     assert "grok-4.5" in design_text
+    assert "管理员" in design_text
+    assert "Settings" in design_text
+    assert "YOUR_GROK_CONFIG_ID" in design_text
+    assert "xai-grok-4.5" not in design_text
+    assert "DEFAULT_MODELS" not in design_text
+    assert "工作台内置模型连接" not in design_text
 
     # Subject vs judge roles
     assert re.search(r"Subject|被测", design_text)
     assert re.search(r"Judge|判定", design_text)
+    assert "eval_judge_model_id" in design_text
+    assert "active_model_id" in design_text
+    assert "Agno 进程默认" in design_text
 
     # Minimal procedure: suite/case/run path
     assert "design-validation" in design_text or "设计验证" in design_text

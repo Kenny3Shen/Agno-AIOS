@@ -357,6 +357,16 @@ class InvokingPerformanceEval:
         )
 
 
+def _configured_evaluator_model_kwargs(model: Any | None = None) -> dict[str, Any]:
+    """Inject an administrator-configured model into an LLM evaluator test."""
+    configured_model = model if model is not None else object()
+    return {
+        "get_eval_judge_model_id": lambda: "test-evaluator-model",
+        "get_model_for_run": lambda config_id: {"id": config_id},
+        "build_agno_model": lambda _config: configured_model,
+    }
+
+
 def test_performance_evidence_keeps_only_finite_aggregate_metrics() -> None:
     from api.services import agent_eval_runner as runner
 
@@ -558,6 +568,81 @@ async def test_run_case_reuses_one_agent_output_for_response_based_evals(monkeyp
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("eval_type", ["accuracy", "agent_as_judge"])
+async def test_run_case_requires_a_configured_model_for_llm_evaluators(
+    monkeypatch: pytest.MonkeyPatch,
+    eval_type: str,
+) -> None:
+    """LLM evaluators must never instantiate Agno's implicit default model."""
+    from api.services import agent_eval_runner as runner
+
+    case = {
+        "id": f"case-missing-evaluator-{eval_type}",
+        "suite_id": "suite-1",
+        "name": "missing evaluator model",
+        "input": "probe",
+        "expected_output": "safe",
+        "criteria": "Must be safe",
+        "eval_types": [eval_type],
+        "enabled": True,
+    }
+    create_case_run = AsyncMock()
+    evaluator_constructed = False
+
+    class MustNotConstructEvaluator:
+        def __init__(self, **_kwargs: Any) -> None:
+            nonlocal evaluator_constructed
+            evaluator_constructed = True
+            raise AssertionError("an LLM evaluator must not use an implicit model")
+
+    get_model_for_run = AsyncMock()
+    get_eval_judge_model_id = AsyncMock(return_value=None)
+    dependency_kwargs: dict[str, Any] = {
+        "security_runtime": cast(Any, object()),
+        "get_eval_db": lambda: "agno-db",
+        "get_eval_judge_model_id": get_eval_judge_model_id,
+        "get_model_for_run": get_model_for_run,
+        "build_agno_model": lambda _config: pytest.fail(
+            "an empty evaluator configuration must not build a fallback model"
+        ),
+    }
+    evaluator_key = (
+        "accuracy_eval_cls" if eval_type == "accuracy" else "judge_eval_cls"
+    )
+    dependency_kwargs[evaluator_key] = MustNotConstructEvaluator
+    monkeypatch.setattr(runner.case_store, "get_case", AsyncMock(return_value=case))
+    monkeypatch.setattr(runner.case_store, "create_case_run", create_case_run)
+
+    with pytest.raises(ValueError, match="尚未配置评测模型"):
+        await runner.run_case(
+            case["id"],
+            actor=SimpleNamespace(id="user-1"),
+            dependencies=runner.AgentEvalRunnerDependencies(**dependency_kwargs),
+        )
+
+    get_eval_judge_model_id.assert_awaited_once()
+    get_model_for_run.assert_not_awaited()
+    create_case_run.assert_not_awaited()
+    assert evaluator_constructed is False
+
+
+@pytest.mark.asyncio
+async def test_non_llm_evaluators_do_not_resolve_an_eval_judge() -> None:
+    """Reliability/performance cases have no Judge dependency to resolve."""
+    from api.services import agent_eval_runner as runner
+
+    judge_lookup = AsyncMock(
+        side_effect=AssertionError("non-LLM evaluators must not resolve a judge")
+    )
+    deps = runner.AgentEvalRunnerDependencies(
+        get_eval_judge_model_id=judge_lookup,
+    )
+
+    assert await runner._resolve_judge_model(deps, required=False) == (None, "")
+    judge_lookup.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_performance_samples_use_isolated_sessions_and_canonical_config(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -609,7 +694,7 @@ async def test_performance_samples_use_isolated_sessions_and_canonical_config(
         get_eval_db=lambda: "agno-db",
         accuracy_eval_cls=FakeAccuracyEval,
         performance_eval_cls=InvokingPerformanceEval,
-        get_eval_judge_model_id=lambda: "",
+        **_configured_evaluator_model_kwargs(),
     )
 
     result = await runner.run_case(
@@ -869,7 +954,7 @@ async def test_run_case_rejects_non_completed_subject_output_before_evaluators(
             security_runtime=cast(Any, Runtime()),
             get_eval_db=lambda: "agno-db",
             accuracy_eval_cls=MustNotEvaluate,
-            get_eval_judge_model_id=lambda: None,
+            **_configured_evaluator_model_kwargs(),
         ),
     )
 
@@ -945,7 +1030,7 @@ async def test_run_case_associates_agent_as_judge_result_run_id(
             security_runtime=cast(Any, Runtime()),
             get_eval_db=lambda: "agno-db",
             judge_eval_cls=ResultOnlyJudge,
-            get_eval_judge_model_id=lambda: None,
+            **_configured_evaluator_model_kwargs(),
         ),
     )
 
@@ -1023,7 +1108,7 @@ async def test_run_case_uses_team_context_and_team_agno_evaluators(
             get_eval_db=lambda: "agno-db",
             accuracy_eval_cls=FakeAccuracyEval,
             reliability_eval_cls=FakeReliabilityEval,
-            get_eval_judge_model_id=lambda: None,
+            **_configured_evaluator_model_kwargs(),
         ),
     )
 
@@ -1083,7 +1168,7 @@ async def test_run_case_marks_disabled_team_target_as_error_without_agent_fallba
         dependencies=runner.AgentEvalRunnerDependencies(
             security_runtime=cast(Any, Runtime()),
             get_eval_db=lambda: "agno-db",
-            get_eval_judge_model_id=lambda: None,
+            **_configured_evaluator_model_kwargs(),
         ),
     )
 
@@ -1167,7 +1252,7 @@ async def test_run_case_marks_low_accuracy_score_as_failed(
             security_runtime=cast(Any, Runtime()),
             get_eval_db=lambda: "agno-db",
             accuracy_eval_cls=LowAccuracy,
-            get_eval_judge_model_id=lambda: None,
+            **_configured_evaluator_model_kwargs(),
         ),
     )
 
@@ -1249,7 +1334,7 @@ async def test_run_case_marks_empty_accuracy_result_as_error(
             security_runtime=cast(Any, Runtime()),
             get_eval_db=lambda: "agno-db",
             accuracy_eval_cls=EmptyAccuracy,
-            get_eval_judge_model_id=lambda: None,
+            **_configured_evaluator_model_kwargs(),
         ),
     )
 
@@ -1375,7 +1460,7 @@ async def test_run_case_combines_accuracy_judge_and_reliability_failures(
             accuracy_eval_cls=LowAccuracy,
             judge_eval_cls=FailedJudge,
             reliability_eval_cls=FailedReliability,
-            get_eval_judge_model_id=lambda: None,
+            **_configured_evaluator_model_kwargs(),
         ),
     )
 
@@ -1525,7 +1610,7 @@ async def test_run_case_marks_execution_exceptions_as_error(
         dependencies=runner.AgentEvalRunnerDependencies(
             security_runtime=cast(Any, Runtime()),
             get_eval_db=lambda: "agno-db",
-            get_eval_judge_model_id=lambda: None,
+            **_configured_evaluator_model_kwargs(),
         ),
     )
 
@@ -2120,7 +2205,7 @@ async def test_run_case_passes_judge_mode_to_agno_judge(monkeypatch):
         security_runtime=cast(Any, Runtime()),
         get_eval_db=lambda: "db",
         judge_eval_cls=FakeJudgeEval,
-        get_eval_judge_model_id=AsyncMock(return_value=None),
+        **_configured_evaluator_model_kwargs(),
     )
     await runner.run_case("case-1", actor=SimpleNamespace(id="u1"), dependencies=deps)
     assert FakeJudgeEval.calls[0]["scoring_strategy"] == "numeric"
@@ -2140,12 +2225,15 @@ async def test_claimed_suite_summary_is_aggregate_only_and_reuses_judge():
         _case_stub("case-3", name="C", enabled=False),
     ]
     resolve_calls = 0
+    configured_model = object()
 
-    async def tracking_resolve(deps, config_id):
-        del deps, config_id
+    async def tracking_resolve(deps, config_id, *, required):
+        del deps
+        assert config_id == "test-evaluator-model"
+        assert required is True
         nonlocal resolve_calls
         resolve_calls += 1
-        return None, ""
+        return configured_model, config_id
 
     async def fake_run_case(
         case_id,
@@ -2156,6 +2244,7 @@ async def test_claimed_suite_summary_is_aggregate_only_and_reuses_judge():
         judge_model_bundle=None,
         **_kwargs,
     ):
+        assert judge_model_bundle == (configured_model, "test-evaluator-model")
         await asyncio.sleep(0.01)
         return {
             "id": f"cr-{case_id}",
@@ -2179,12 +2268,16 @@ async def test_claimed_suite_summary_is_aggregate_only_and_reuses_judge():
                 if case_id == "case-2"
                 else None
             ),
-            "judge_id": "agent_as_judge:inline+model:default",
+            "judge_id": "agent_as_judge:inline+model:test-evaluator-model",
             "eval_profile": "full",
             "error_summary": "nope" if case_id == "case-2" else "",
         }
 
-    snapshot = _execution_snapshot(*cases, tags=["safety"])
+    snapshot = _execution_snapshot(
+        *cases,
+        tags=["safety"],
+        judge_model_config_id="test-evaluator-model",
+    )
     work_items = _case_work_items(snapshot, *cases)
     disabled_claim = runner.case_store.SuiteCaseRunClaim(
         case_run={**work_items[2], "status": "running"},
@@ -3264,11 +3357,12 @@ async def test_newer_epoch_wins_when_an_old_worker_finishes_after_takeover(
     subject_sessions: list[str] = []
     private_reads: list[str] = []
     terminal_case_run: dict[str, Any] | None = None
+    configured_model = object()
     provenance = {
         "target": {"kind": "agent", "id": "security-operations"},
         "timeout_seconds": 120,
         "eval_profile": "full",
-        "judge_model_config_id": "",
+        "judge_model_config_id": "test-evaluator-model",
     }
 
     def claimed_case_run(epoch: int) -> dict[str, Any]:
@@ -3395,7 +3489,7 @@ async def test_newer_epoch_wins_when_an_old_worker_finishes_after_takeover(
         security_runtime=cast(Any, Runtime()),
         get_eval_db=lambda: "agno-db",
         accuracy_eval_cls=Accuracy,
-        get_eval_judge_model_id=lambda: "",
+        **_configured_evaluator_model_kwargs(configured_model),
     )
 
     old_task = asyncio.create_task(
@@ -3405,7 +3499,7 @@ async def test_newer_epoch_wins_when_an_old_worker_finishes_after_takeover(
             suite_run_id="suite-run-1",
             definition_snapshot=case,
             frozen_target=provenance["target"],
-            judge_model_bundle=(None, ""),
+            judge_model_bundle=(configured_model, "test-evaluator-model"),
             dependencies=dependencies,
             execution_lease=old_lease,
         )
@@ -3418,7 +3512,7 @@ async def test_newer_epoch_wins_when_an_old_worker_finishes_after_takeover(
             suite_run_id="suite-run-1",
             definition_snapshot=case,
             frozen_target=provenance["target"],
-            judge_model_bundle=(None, ""),
+            judge_model_bundle=(configured_model, "test-evaluator-model"),
             dependencies=dependencies,
             execution_lease=new_lease,
         )

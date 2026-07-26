@@ -68,6 +68,7 @@ _MAX_RELIABILITY_EVIDENCE_ITEM_CHARS = 500
 _SUPPORTED_EVAL_TYPES = frozenset(
     {"accuracy", "agent_as_judge", "reliability", "performance"}
 )
+_LLM_EVALUATOR_TYPES = frozenset({"accuracy", "agent_as_judge"})
 
 SuiteRunCancellationEvent = asyncio.Event | None
 
@@ -814,31 +815,42 @@ async def _complete_case_result(
 
 async def _resolve_judge_model(
     deps: AgentEvalRunnerDependencies,
+    *,
+    required: bool,
 ) -> tuple[Any | None, str]:
-    """Return (agno Model or None, config id used in judge_id)."""
+    """Resolve the configured evaluator model when this case needs one."""
+    if not required:
+        return None, ""
     mid = await _maybe_await(deps.get_eval_judge_model_id())
     config_id = str(mid or "").strip()
-    return await _resolve_judge_model_config(deps, config_id)
+    return await _resolve_judge_model_config(deps, config_id, required=required)
 
 
 async def _resolve_judge_model_config(
     deps: AgentEvalRunnerDependencies,
     config_id: str,
+    *,
+    required: bool,
 ) -> tuple[Any | None, str]:
-    """Resolve one already-frozen evaluator model configuration id."""
+    """Resolve one already-frozen evaluator model configuration id.
+
+    Accuracy and AgentAsJudge must never fall back to an SDK/Agno process
+    default: their model connection is part of the persisted evaluation
+    contract.  Non-LLM evaluator-only cases can omit it.
+    """
     config_id = str(config_id or "").strip()
     if not config_id:
+        if required:
+            raise ValueError(
+                "尚未配置评测模型，请先在设置中添加并启用模型"
+            )
         return None, ""
     try:
         config = await _maybe_await(deps.get_model_for_run(config_id))
         model = deps.build_agno_model(config)
         return model, config_id
-    except Exception:
-        logger.exception(
-            "eval judge model {} unavailable; falling back to Agno default judge",
-            config_id,
-        )
-        return None, ""
+    except Exception as exc:
+        raise ValueError(f"评测模型不可用: {config_id}") from exc
 
 
 def _security_request_for_case(
@@ -1436,6 +1448,7 @@ async def run_case(
     # malformed stored definition before allocating it, rather than silently
     # defaulting to Accuracy or leaving a queued row after validation fails.
     enabled_eval_types = _eval_types(case)
+    requires_evaluator_model = bool(enabled_eval_types & _LLM_EVALUATOR_TYPES)
     # A performance Case is an intentionally repeated target invocation.
     # Validate its complete bounded contract before creating a durable run so a
     # corrupt historical row cannot become a queued execution error.
@@ -1452,7 +1465,10 @@ async def run_case(
     if judge_model_bundle is not None:
         judge_model, judge_model_config_id = judge_model_bundle
     else:
-        judge_model, judge_model_config_id = await _resolve_judge_model(deps)
+        judge_model, judge_model_config_id = await _resolve_judge_model(
+            deps,
+            required=requires_evaluator_model,
+        )
 
     execution_provenance = _case_execution_provenance(
         target=target,
@@ -1507,6 +1523,7 @@ async def run_case(
                 judge_model, judge_model_config_id = await _resolve_judge_model_config(
                     deps,
                     frozen_judge_model_config_id,
+                    required=requires_evaluator_model,
                 )
     case_run_id = str(case_run["id"])
     session_id = _case_session_id(
@@ -1608,8 +1625,9 @@ async def run_case(
                 # evaluator model. Otherwise Accuracy silently falls back to
                 # Agno's process default while Agent-as-Judge uses the
                 # explicitly selected eval judge.
-                if judge_model is not None:
-                    accuracy_kwargs["model"] = judge_model
+                if judge_model is None:
+                    raise RuntimeError("评测模型未解析")
+                accuracy_kwargs["model"] = judge_model
                 accuracy_eval = deps.accuracy_eval_cls(**accuracy_kwargs)
                 accuracy_result = await accuracy_eval.arun_with_output(
                     output=_response_value(response, "content"),
@@ -1659,8 +1677,9 @@ async def run_case(
                     judge_kwargs["additional_guidelines"] = judge_resolved[
                         "additional_guidelines"
                     ]
-                if judge_model is not None:
-                    judge_kwargs["model"] = judge_model
+                if judge_model is None:
+                    raise RuntimeError("评测模型未解析")
+                judge_kwargs["model"] = judge_model
                 judge_eval = deps.judge_eval_cls(**judge_kwargs)
                 judge_result = await judge_eval.arun(
                     input=case.get("input", ""),
@@ -2235,9 +2254,18 @@ async def _execute_claimed_suite_run(
     pending_enabled_case_indexes = [
         index for index in pending_indexes if bool(cases[index].get("enabled", True))
     ]
+    requires_evaluator_model = any(
+        bool(_eval_types(cases[index]) & _LLM_EVALUATOR_TYPES)
+        for index in pending_enabled_case_indexes
+    )
     judge_model_bundle = (
-        await _resolve_judge_model_config(deps, judge_model_config_id)
-        if pending_enabled_case_indexes
+        await _resolve_judge_model_config(
+            deps,
+            judge_model_config_id,
+            required=requires_evaluator_model,
+        )
+        if requires_evaluator_model
+        and pending_enabled_case_indexes
         and not (cancellation_event and cancellation_event.is_set())
         else None
     )

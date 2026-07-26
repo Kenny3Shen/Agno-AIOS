@@ -1,4 +1,4 @@
-/** Collect (安全情报) client: article library search, parse, crawl SSE. */
+/** Collect (安全情报) client: article library search and crawl SSE. */
 import { ApiError, apiFetch, jsonInit, requestJson } from '@/shared/api/client'
 import { consumeSse } from '@/features/chat/utils'
 import type { ListPaginationMeta } from '@/shared/lib/pagination'
@@ -39,17 +39,6 @@ interface CollectLibraryStats {
   total: number
 }
 
-export const parseUrl = (url: string) =>
-  requestJson<{
-    markdown?: string
-    title?: string
-    source_domain?: string
-    id?: number
-    url?: string
-    summary?: string
-    cve_ids?: string[]
-  }>('/url2md/parse', jsonInit('POST', { url }))
-
 export const searchArticles = async (payload: {
   query?: string
   source_domain?: string
@@ -60,7 +49,7 @@ export const searchArticles = async (payload: {
   const page = payload.page ?? 1
   const size = payload.size ?? 20
   return requestJson<CollectListResponse<CollectArticle>>(
-    '/url2md/articles/search',
+    '/collect/articles/search',
     jsonInit('POST', {
       query: payload.query ?? '',
       source_domain: payload.source_domain,
@@ -71,7 +60,7 @@ export const searchArticles = async (payload: {
   )
 }
 
-export const listSources = () => requestJson<CollectListResponse<CollectSource>>('/url2md/sources')
+export const listSources = () => requestJson<CollectListResponse<CollectSource>>('/collect/sources')
 
 export type CollectCrawlStats = {
   message?: string
@@ -114,7 +103,7 @@ export const crawlSourcesStream = async (
   signal?: AbortSignal,
 ): Promise<CollectCrawlStats> => {
   const init = jsonInit('POST', payload ?? {})
-  const response = await apiFetch('/url2md/crawl?stream=true', {
+  const response = await apiFetch('/collect/crawl?stream=true', {
     ...init,
     signal,
     headers: {
@@ -172,10 +161,10 @@ export const crawlSourcesStream = async (
 
 
 export const getArticle = (articleId: number) =>
-  requestJson<CollectArticle>(`/url2md/articles/${articleId}`)
+  requestJson<CollectArticle>(`/collect/articles/${articleId}`)
 
 export const reparseArticle = (articleId: number) =>
-  requestJson<CollectArticle>(`/url2md/articles/${articleId}/reparse`, jsonInit('POST', {}))
+  requestJson<CollectArticle>(`/collect/articles/${articleId}/reparse`, jsonInit('POST', {}))
 
 
 export const reparseFailedArticles = (payload?: {
@@ -187,9 +176,9 @@ export const reparseFailedArticles = (payload?: {
     requested?: number
     ok?: number
     error?: number
-  }>('/url2md/articles/reparse-failed', jsonInit('POST', payload ?? {}))
+  }>('/collect/articles/reparse-failed', jsonInit('POST', payload ?? {}))
 
 export const getLibraryStats = (sourceDomain?: string) => {
   const q = sourceDomain ? `?source_domain=${encodeURIComponent(sourceDomain)}` : ''
-  return requestJson<CollectLibraryStats>(`/url2md/stats${q}`)
+  return requestJson<CollectLibraryStats>(`/collect/stats${q}`)
 }

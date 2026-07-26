@@ -1,3 +1,5 @@
+"""Internal HTML-to-Markdown parser used exclusively by Collect crawling."""
+
 import asyncio
 import importlib
 import ipaddress
@@ -52,11 +54,11 @@ URL2MD_HEADERS = {
 
 
 def create_url2md_http_client() -> httpx.AsyncClient:
-    """Create the client used by URL→Markdown parsing.
+    """Create the client used by Collect's internal HTML parser.
 
     Callers that parse multiple URLs can own one client for the batch and
-    reuse its connection pool. The legacy ``fetch_and_parse_url`` API still
-    creates and closes a client for one-off calls.
+    reuse its connection pool. One-off article refreshes create and close
+    their own client through ``fetch_and_parse_url``.
     """
     return httpx.AsyncClient(
         headers=URL2MD_HEADERS,
@@ -612,6 +614,6 @@ async def fetch_and_parse_url_with_client(
 
 
 async def fetch_and_parse_url(urls: list[str]) -> list[str]:
-    """Parse URLs with a one-off client (legacy public API)."""
+    """Parse Collect article URLs with a one-off client."""
     async with create_url2md_http_client() as client:
         return await fetch_and_parse_url_with_client(client, urls)

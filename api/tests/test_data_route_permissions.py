@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 from fastapi import HTTPException
+from fastapi.routing import APIRoute
 import pytest
 from api.auth.claims import has_scope
 from api.routes import collect, cve
@@ -20,6 +21,27 @@ def test_normal_user_has_security_data_permissions():
 def test_user_can_run_collect():
     assert has_scope(user("user"), "collect:read")
     assert has_scope(user("user"), "collect:write")
+
+
+def test_collect_routes_do_not_expose_arbitrary_url_parsing():
+    paths = {
+        route.path
+        for route in collect.router.routes
+        if isinstance(route, APIRoute)
+    }
+
+    assert collect.router.prefix == "/api/collect"
+    assert "/api/collect/parse" not in paths
+    assert all(not path.startswith("/api/url2md") for path in paths)
+    assert {
+        "/api/collect/sources",
+        "/api/collect/stats",
+        "/api/collect/crawl",
+        "/api/collect/articles/search",
+        "/api/collect/articles/reparse-failed",
+        "/api/collect/articles/{article_id}",
+        "/api/collect/articles/{article_id}/reparse",
+    } <= paths
 
 
 def test_collect_search_allows_user():

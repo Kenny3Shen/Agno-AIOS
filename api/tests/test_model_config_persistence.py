@@ -33,6 +33,30 @@ def _canonicalization_statement(table: Table) -> Update:
     return cast(Callable[[Table], Update], statement)(table)
 
 
+@lru_cache(maxsize=1)
+def _remove_builtin_model_seeds_revision() -> ModuleType:
+    revision_path = (
+        Path(__file__).resolve().parents[2]
+        / "alembic"
+        / "versions"
+        / "20260726_0032_remove_builtin_model_seeds.py"
+    )
+    spec = spec_from_file_location("remove_builtin_model_seeds_revision", revision_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _delete_unconfigured_local_models_statement(table: Table):
+    statement = getattr(
+        _remove_builtin_model_seeds_revision(),
+        "_delete_unconfigured_local_models_statement",
+    )
+    return statement(table)
+
+
 def _row(
     row_id: str,
     *,
@@ -120,3 +144,41 @@ def test_xai_alembic_migration_updates_only_legacy_rows() -> None:
     assert rows["compatible"]["provider"] == "openai-compatible"
     assert rows["compatible"]["api_protocol"] == "responses"
     assert rows["compatible"]["default_reasoning_effort"] == "high"
+
+
+def test_local_model_seed_migration_deletes_only_blank_legacy_entries() -> None:
+    metadata = MetaData()
+    table = Table(
+        "model_configs",
+        metadata,
+        Column("id", String, primary_key=True),
+        Column("api_key", Text),
+    )
+    engine = create_engine("sqlite://")
+    try:
+        metadata.create_all(engine)
+        with engine.begin() as connection:
+            connection.execute(
+                insert(table),
+                [
+                    {"id": "deepseek-v4-flash", "api_key": "real-secret"},
+                    {"id": "deepseek-v4-pro", "api_key": "   "},
+                    {"id": "xai-grok-4.5", "api_key": None},
+                    {"id": "deepseek-v4-flash-configured", "api_key": ""},
+                ],
+            )
+            connection.execute(_delete_unconfigured_local_models_statement(table))
+            rows = {
+                str(row["id"]): dict(row)
+                for row in connection.execute(select(table)).mappings()
+            }
+    finally:
+        engine.dispose()
+
+    assert rows == {
+        "deepseek-v4-flash": {"id": "deepseek-v4-flash", "api_key": "real-secret"},
+        "deepseek-v4-flash-configured": {
+            "id": "deepseek-v4-flash-configured",
+            "api_key": "",
+        },
+    }

@@ -6,6 +6,13 @@
 - 每次部署必须先完成 `docs/release.md` 的后端/前端构建门禁；涉及既有数据库时，RBAC 迁移演练仅可在带备份引用的 PostgreSQL 克隆库执行。
 - 资产—漏洞—告警闭环和 Team 的 MCP/HITL 扩展明确延后至 **1.1+**，不作为 1.0.0 的隐含承诺；Overview/Trace/Chat 的首批性能治理已按下述 1.1 P1 落地。
 
+## 已完成：模型配置正式化（无内置测试模型）
+
+- 空模型表是正式的一等首启状态：不再 seed `DEFAULT_MODELS`、不再提供 `builtin` 字段或捆绑供应商密钥；管理员须在 Settings 添加、补全并启用自己的连接。
+- Chat、Workflow 与 Eval 的 LLM 调用都会拒绝无配置/未启用/不完整的模型；删除最后一个模型会回到合法空状态。
+- `eval_judge_model_id` 是可选的专用 Judge；未钉选时 Accuracy / Agent-as-Judge 使用已配置的当前模型，绝不回退到 Agno 进程默认模型。
+- Alembic `20260726_0032` 删除空密钥的历史本地测试行、删除 `model_configs.builtin`，同时保留已有真实 API Key 的管理员连接。
+
 ## 已完成：CVE / IP 黑名单源配置迁出仓库根
 
 - 默认源配置：`config/cve_sources.toml`、`config/ip_blacklist_sources.toml`（不再放在项目根）。
@@ -97,7 +104,7 @@
 ## 已完成：安全评估 P2（judge / rubric / guardrail / profile）
 
 - 版本化 rubric：`eval_packs/rubrics/rubrics.yaml`；`resolve_case_judge_criteria` → `judge_id`。
-- `eval_judge_model_id`（Alembic `20260722_0013` + `model_configs.eval_judge`）；`AgentAsJudgeEval(model=…)` 与 subject 解耦；空则 Agno 默认 judge。
+- `eval_judge_model_id`（Alembic `20260722_0013` + `model_configs.eval_judge`）；`AgentAsJudgeEval(model=…)` 与 subject 解耦；未钉选时使用已配置的当前模型，绝不使用 Agno 默认 Judge。
 - `guardrail_blocked` 分桶：`n_guardrail_blocked` / `guardrail_trip_rate`，不抬高 ASR；pack `guardrail-regression-v1`。
 - `metadata.profile=tools_off|full` → eval `SecurityRunRequest.enable_tools`。
 - 测试：`api/tests/test_safety_eval_p2.py`。
@@ -127,12 +134,12 @@
 
 ## 已完成：安全防护评估设计文档（Safety Eval）
 
-- 设计稿 `docs/safety-eval.md` **v1.1**：L1 拒答 / L2 越狱 ASR / L3 注入与 SOC；**业界/论文锚点**（HarmBench、StrongREJECT、JailbreakBench、Do-Not-Answer、AdvBench）与 ASR/Refusal/Over-refusal 公式；**Agno** `AccuracyEval` / `AgentAsJudgeEval` / `ReliabilityEval` 与 `agent_eval_runner` + `/api/agent-evals` 对照；**Grok 4.5 (xAI)** 被测路径与最小验证流程（§17）；发展路径总表（§18）。
+- 设计稿 `docs/safety-eval.md` **v1.2**：L1 拒答 / L2 越狱 ASR / L3 注入与 SOC；**业界/论文锚点**（HarmBench、StrongREJECT、JailbreakBench、Do-Not-Answer、AdvBench）与 ASR/Refusal/Over-refusal 公式；**Agno** `AccuracyEval` / `AgentAsJudgeEval` / `ReliabilityEval` 与 `agent_eval_runner` + `/api/agent-evals` 对照；管理员配置模型的 Grok 4.5 (xAI) 示例路径与最小验证流程（§17）；发展路径总表（§18）。
 - 索引：`docs/README.md`、根 README 文档表、`docs/security.md`、`docs/glossary.md`。
 - 骨架：`eval_packs/registry.yaml` + `eval_packs/README.md`（实现导入前不落有害全量）。
 - 结构测试：`api/tests/test_safety_eval_design.py` + `test_docs_readme.py` 收录 `safety-eval.md`。
 
-**后续（非 Phase 1）**：HF 小样 fetch；独立 judge 模型；预发 Grok 4.5 design-validation（§17）。
+**后续（非 Phase 1）**：预发中由管理员配置目标模型与独立 Judge 后，执行 Grok 4.5（或等价已记录模型）design-validation（§17）。
 
 ---
 
@@ -624,10 +631,10 @@
 - `applyPositions` 增加 `rejectIfRunning` 防御（画布已 `nodesDraggable=false`）。
 - CVE DB 同步透传 `CancelledError`。
 
-## 已完成：useChat 瘦身 + url2md 取消透传
+## 已完成：useChat 瘦身 + Collect 解析取消透传
 
 - `useChat` 不再维护侧栏搜索/归档状态；会话列表只拉 active 页并与侧栏 RQ 缓存对齐。
-- `fetch_and_parse_url` 透传 `CancelledError`，避免停止同步时被记成 Unexpected error。
+- Collect 解析器透传 `CancelledError`，避免停止同步时被记成 Unexpected error。
 
 ## 已完成：Studio 运行前校验 + Run 按钮门闩
 
@@ -727,7 +734,7 @@
 
 ## 已完成：Collect 同步进度 SSE
 
-- `POST /api/url2md/crawl?stream=true`：阶段进度（start → discover → select → fetch → database → done）。
+- `POST /api/collect/crawl?stream=true`：阶段进度（start → discover → select → fetch → database → done）。
 - 同步 JSON 路径保留；冲突仍 409。前端 Progress 展示阶段文案与同步结果。
 - `crawl_and_persist(on_progress=…)` / 发现源与抓取完成度回调。
 
@@ -741,12 +748,12 @@
 ## 已完成：Dashboard 失败行键盘可达 + Collect 卫生
 
 - Dashboard 最近失败行：`tabIndex` / Enter·Space 打开 Trace，focus-visible 高亮。
-- Collect：`asyncio` 顶层导入；单 URL 采集成功后同步刷新 stats/sources。
+- Collect：`asyncio` 顶层导入；源站同步与文章重采后同步刷新 stats/sources。
 
 ## 已完成：Collect 失败批量重采 + 源健康计数
 
-- `POST /api/url2md/articles/reparse-failed`：按源/全局重采最近失败文章（默认 10、并发 3）。
-- `GET /api/url2md/stats` + sources 附带 `ok_count/error_count`；UI 失败徽章与「重采失败」按钮。
+- `POST /api/collect/articles/reparse-failed`：按源/全局重采最近失败文章（默认 10、并发 3）。
+- `GET /api/collect/stats` + sources 附带 `ok_count/error_count`；UI 失败徽章与「重采失败」按钮。
 - 路由顺序：静态 `reparse-failed` 在 `{article_id}` 之前。
 
 ## 已完成：Studio 运行中结构锁 e2e
@@ -1735,12 +1742,12 @@ P0.4 审批值班薄入口        ✅
 ## 已完成：Knowledge 列表 data/meta + Collect 错误收口
 
 - `GET /api/knowledge`：`documents`/`pagination` → `data`/`meta`（`pagination_meta`，保留 query/sort 与仅供表单使用的 `ingest_defaults`）；不提供进度状态旁路字段。
-- Collect：`GET articles/{id}` 直接返回行或 404；`crawl`/`parse` 失败改 `HTTPException`，成功体去掉包一层 `status`。
+- Collect：`GET articles/{id}` 直接返回行或 404；`crawl`/文章重采失败改 `HTTPException`，成功体去掉包一层 `status`。
 - 前端 Knowledge/Collect 与 e2e mock 同步；无旧 envelope 兼容。
 
 ## 已完成：CVE / Collect 列表 data/meta 对齐
 
-- `POST /api/cve/search`、`POST /api/url2md/articles/search`、`GET /api/url2md/sources` 改为 `{data, meta}`；错误改 HTTPException（不再 `{status:400,message}` 包一层）。
+- `POST /api/cve/search`、`POST /api/collect/articles/search`、`GET /api/collect/sources` 改为 `{data, meta}`；错误改 HTTPException（不再 `{status:400,message}` 包一层）。
 - 前端 CVE/Collect 页与 api 类型同步；无旧 envelope 兼容。
 
 ## 已完成：Audit 列表 data/meta 对齐
@@ -1852,8 +1859,8 @@ P0.4 审批值班薄入口        ✅
 
 ## 已完成：model_config 空表不再 JSON 导入
 
-- 空表只 seed `DEFAULT_MODELS`；存在 `model_config.json` 仅归档为 `*.imported`（warning），不写进 Postgres
-- 去掉 `_load_legacy_or_default_store`；密钥与连接以 Settings/DB 为准
+- 空表保持合法的空配置，不 seed `DEFAULT_MODELS`；不再读取或导入 `model_config.json`
+- 去掉 `_load_legacy_or_default_store`；密钥与连接只以 Settings/DB 为准
 - MCP：无 external 条目且库中已有 server 时直接归档 leftover，不重放 builtin flags
 - skills_config / front matter：解析异常类型收窄 + YAML 错误 debug 日志
 
@@ -1886,7 +1893,7 @@ P0.4 审批值班薄入口        ✅
 
 - 删除 `api/services/chat_settings.py` re-export；运行时仅 `chat_settings_service`
 - `load_model_config_store` 不再因 Grok→xai / reasoning 启发式触发 `replace_model_config_rows`
-- 读路径仍 `ModelConfig.normalized` 纠正 provider；显式 save / 完整性（多 active、非法 output mode、缺 builtin）仍会写库
+- 读路径仍 `ModelConfig.normalized` 纠正 provider；显式 save / 完整性（多 active、非法 output mode、非空表缺 active）仍会写库
 
 相关：`chat_settings_service.py` / `model_config_service.py` / `test_model_config_service.py`
 
@@ -1949,10 +1956,9 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
-## 已完成：model_config 一次性导入归档 + Overview 采样 50 + SSE after 上限
+## 已完成：model_config 兼容导入移除 + Overview 采样 50 + SSE after 上限
 
-- 空表 bootstrap：从 `model_config.json` 导入后重命名为 `model_config.json.imported`，避免反复空表回灌
-- 无 legacy 文件时直接种子 defaults 并写库
+- 已删除 `model_config.json` 的空表导入与 defaults seed；空配置由管理员在 Settings 显式建立
 - Overview token 样本 `_PAGE_LIMIT` 100→50
 - `list_notifications_after` 单次上限与列表一致（max 200）
 
@@ -2030,8 +2036,8 @@ P0.4 审批值班薄入口        ✅
 ## 已完成：Collect 源站爬虫入库
 
 - `domain_rules` 配置站作为采集源；管理员「同步源站」爬列表页链接并解析 Markdown
-- Postgres `collect_articles`；Collect 页以库检索为主，单 URL 采集仍写入库
-- API：`GET /sources`、`POST /articles/search`、`GET /articles/{id}`、`POST /crawl`、`POST /parse`
+- Postgres `collect_articles`；Collect 页以库检索为主，HTML→Markdown 仅作为源站采集的底层实现
+- API：`GET /sources`、`POST /articles/search`、`GET /articles/{id}`、`POST /crawl`；不提供任意 URL 的 `/parse`
 
 相关：`collect_articles.py` / `collect_crawl_service.py` / `routes/collect.py` / `CollectPage`
 
@@ -2383,8 +2389,8 @@ P0.4 审批值班薄入口        ✅
 
 ## 已完成：设置页删除模型
 
-- 模型列表支持删除自定义模型（内置不可删、至少保留一个）
-- 删除当前模型时自动切换到其它可用模型
+- 模型列表支持删除任意模型，包括最后一个；删除最后一个会回到合法空配置
+- 删除当前模型时自动切换到其它可用模型，若没有剩余模型则清空当前模型
 
 相关：`SettingsPage.tsx`
 
@@ -2393,7 +2399,7 @@ P0.4 审批值班薄入口        ✅
 ## 已完成：xAI 官方 Agno 接入
 
 - `provider=xai` → `agno.models.xai.xAI`（默认 `https://api.x.ai/v1`，Chat Completions）
-- 内置模型 `xai-grok-4.5`；旧 Grok / `api.x.ai` 持久化配置由 Alembic 数据迁移规范化，不再用 OpenAI Responses 或运行时逐行写回
+- 不再内置 `xai-grok-4.5`；旧本地测试行无 API Key 时由 `20260726_0032` 删除，有真实 API Key 的管理员 xAI 连接保留为可编辑配置。旧 Grok / `api.x.ai` 持久化配置由 Alembic 数据迁移规范化，不再用 OpenAI Responses 或运行时逐行写回
 - 设置页可选 xAI；不暴露 reasoning_effort
 
 相关：`model_factory.py` / `model_config_service.py` / `SettingsPage.tsx`

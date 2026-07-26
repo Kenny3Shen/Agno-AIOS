@@ -16,6 +16,9 @@ from api.services.agent_eval_suite_jobs import build_eval_suite_run_payload
 from api.services.model_config_service import get_eval_judge_model_id
 
 
+_LLM_EVALUATOR_TYPES = frozenset({"accuracy", "agent_as_judge"})
+
+
 def _case_ids(plan: Mapping[str, Any]) -> list[str]:
     raw_case_ids = plan.get("case_ids")
     if isinstance(raw_case_ids, str) or not isinstance(raw_case_ids, Sequence):
@@ -26,6 +29,19 @@ def _case_ids(plan: Mapping[str, Any]) -> list[str]:
     if len(set(case_ids)) != len(case_ids):
         raise ValueError("Eval suite run selected case ids must be unique")
     return case_ids
+
+
+def _requires_evaluator_model(cases: Sequence[Mapping[str, Any]]) -> bool:
+    """Return whether an enabled Case will invoke an LLM-based evaluator."""
+    for case in cases:
+        if not bool(case.get("enabled", True)):
+            continue
+        eval_types = case.get("eval_types")
+        if isinstance(eval_types, str) or not isinstance(eval_types, Sequence):
+            continue
+        if any(str(value).strip() in _LLM_EVALUATOR_TYPES for value in eval_types):
+            return True
+    return False
 
 
 def _execution_manifest(
@@ -84,7 +100,11 @@ async def enqueue_suite_run(
     if len(frozen_cases) != len(cases):
         raise ValueError("Eval suite run plan contains an invalid frozen Case")
     suite_run_id = uuid4().hex
-    judge_model_config_id = await get_eval_judge_model_id()
+    judge_model_config_id = (
+        await get_eval_judge_model_id()
+        if _requires_evaluator_model(frozen_cases)
+        else ""
+    )
     execution_snapshot = case_store.build_suite_run_execution_snapshot(
         suite,
         run_manifest=_execution_manifest(

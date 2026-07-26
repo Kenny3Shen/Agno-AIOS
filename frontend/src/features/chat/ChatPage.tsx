@@ -337,7 +337,7 @@ function ModelSettings({
             options={options}
             value={selectedPath}
             open={open}
-            disabled={disabled}
+            disabled={disabled || models.length === 0}
             allowClear={false}
             changeOnSelect={false}
             expandTrigger="hover"
@@ -350,7 +350,13 @@ function ModelSettings({
         </div>
       }
     >
-      <Button className="model-settings-trigger" type="text" disabled={disabled} aria-label={t('modelAndReasoning')} title={label}>
+      <Button
+        className="model-settings-trigger"
+        type="text"
+        disabled={disabled || models.length === 0}
+        aria-label={t('modelAndReasoning')}
+        title={label}
+      >
         <span className="model-select-value" title={selectedModel?.name ?? ''}>
           {label}
         </span>

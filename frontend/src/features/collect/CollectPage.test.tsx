@@ -26,9 +26,9 @@ const installCollectHandlers = (role: 'admin' | 'user') => {
         is_superuser: role === 'admin',
       })
     ),
-    http.get('/api/url2md/sources', () => HttpResponse.json({ data: [], meta: listMeta })),
-    http.get('/api/url2md/stats', () => HttpResponse.json({ ok: 7, error: 3, total: 10 })),
-    http.post('/api/url2md/articles/search', () => HttpResponse.json({ data: [], meta: listMeta }))
+    http.get('/api/collect/sources', () => HttpResponse.json({ data: [], meta: listMeta })),
+    http.get('/api/collect/stats', () => HttpResponse.json({ ok: 7, error: 3, total: 10 })),
+    http.post('/api/collect/articles/search', () => HttpResponse.json({ data: [], meta: listMeta }))
   )
 }
 
@@ -50,5 +50,14 @@ describe('CollectPage bulk retry authorization', () => {
     renderWithQuery(<CollectPage />)
 
     expect(await screen.findByRole('button', { name: '重采失败（最多 3）' })).toBeTruthy()
+  })
+
+  it('does not offer arbitrary URL collection', async () => {
+    installCollectHandlers('user')
+    renderWithQuery(<CollectPage />)
+
+    await screen.findByText('失败 3')
+    expect(screen.queryByPlaceholderText('https://example.com/security-advisory')).toBeNull()
+    expect(screen.queryByRole('button', { name: '采集 URL' })).toBeNull()
   })
 })

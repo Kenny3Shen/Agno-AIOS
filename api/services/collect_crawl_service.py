@@ -606,7 +606,7 @@ async def _fetch_markdown_with_retries(
     for attempt in range(tries):
         try:
             if client is None:
-                # Keep one-off parsing compatible with the existing public API.
+                # Reparse one stored Collect article with a short-lived client.
                 markdowns = await fetch_and_parse_url([url])
             else:
                 markdowns = await fetch_and_parse_url_with_client(client, [url])
@@ -889,8 +889,8 @@ async def _crawl_and_persist_locked(
     return stats
 
 
-async def parse_and_store_url(url: str) -> dict[str, Any]:
-    """On-demand parse used by /url2md/parse — still persists for Collect library."""
+async def refresh_collect_article_url(url: str) -> dict[str, Any]:
+    """Re-fetch and persist one URL that already belongs to the Collect library."""
     from api.persistence.collect_articles import upsert_collect_article
 
     await ensure_collect_articles_table()

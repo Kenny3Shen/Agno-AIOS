@@ -72,7 +72,7 @@ ReasoningEffort = Literal["minimal", "low", "medium", "high", "max"]
 
 
 class ModelConfig(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     id: str
     name: str = "自定义模型"
@@ -91,7 +91,6 @@ class ModelConfig(BaseModel):
     api_key: str = ""
     description: str = ""
     enabled: bool = True
-    builtin: bool = False
 
     @field_validator("structured_output_mode", mode="before")
     @classmethod
@@ -205,7 +204,6 @@ class ModelConfig(BaseModel):
             api_key=str(raw.get("api_key") or "").strip(),
             description=str(raw.get("description") or "").strip(),
             enabled=bool(raw.get("enabled", True)),
-            builtin=bool(raw.get("builtin", False)),
         )
 
     @property
@@ -231,71 +229,39 @@ class ModelConfig(BaseModel):
 
 
 class ModelConfigUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     active_model_id: str | None = None
     # Optional dedicated model for Agno MemoryManager (empty = auto-pick cheap).
     memory_model_id: str | None = None
-    # Optional dedicated model for Agent Eval AgentAsJudge (empty = Agno default judge).
+    # Optional dedicated model for Agent Eval AgentAsJudge (empty = active model).
     eval_judge_model_id: str | None = None
     models: list[ModelConfig]
 
 
-DEFAULT_MODELS: tuple[ModelConfig, ...] = (
-    ModelConfig(
-        id="deepseek-v4-flash",
-        name="DeepSeek V4 Flash",
-        model_id="deepseek-v4-flash",
-        provider="deepseek",
-        api_protocol="chat-completions",
-        structured_output_mode="json",
-        default_reasoning_effort="max",
-        base_url="https://api.deepseek.com",
-        description="低延迟安全分析模型",
-        builtin=True,
-    ),
-    ModelConfig(
-        id="deepseek-v4-pro",
-        name="DeepSeek V4 Pro",
-        model_id="deepseek-v4-pro",
-        provider="deepseek",
-        api_protocol="chat-completions",
-        structured_output_mode="json",
-        default_reasoning_effort="max",
-        base_url="https://api.deepseek.com",
-        description="复杂推理与深度研判模型",
-        builtin=True,
-    ),
-    ModelConfig(
-        id="xai-grok-4.5",
-        name="Grok 4.5 (xAI)",
-        model_id="grok-4.5",
-        provider="xai",
-        api_protocol="chat-completions",
-        structured_output_mode="json",
-        default_reasoning_effort=None,
-        base_url="https://api.x.ai/v1",
-        description="xAI 官方 Agno 接入（Chat Completions）",
-        builtin=True,
-    ),
-)
-
-
 class ModelConfigStore(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     active_model_id: str = ""
     # Config id used by MemoryManager; empty = auto-select a cheap model.
     memory_model_id: str = ""
-    # Config id used by Agent Eval AgentAsJudge; empty = Agno default evaluator.
+    # Config id used by Agent Eval AgentAsJudge; empty = active model.
     eval_judge_model_id: str = ""
     models: list[ModelConfig] = Field(default_factory=list)
 
     @classmethod
     def default(cls) -> Self:
+        """Return the valid, intentionally empty first-run configuration.
+
+        Product deployments never receive provider credentials or test models
+        from the application.  An administrator must add the first connection
+        through Settings before Chat, Workflow, or evaluations can run.
+        """
         return cls(
-            active_model_id=DEFAULT_MODELS[0].id,
+            active_model_id="",
             memory_model_id="",
             eval_judge_model_id="",
-            models=_default_models(),
+            models=[],
         )
 
     @classmethod
@@ -337,8 +303,6 @@ class ModelConfigStore(BaseModel):
             if previous is not None and _is_masked_secret(model.api_key):
                 model = model.model_copy(update={"api_key": previous.api_key})
             normalized.append(model)
-        if not normalized:
-            normalized = _default_models()
         # Preserve existing memory model when the client omits the field.
         if memory_model_id is None:
             resolved_memory = existing.memory_model_id
@@ -355,26 +319,14 @@ class ModelConfigStore(BaseModel):
             models=normalized,
         )
         return (
-            store.with_defaults()
-            .with_valid_active_model()
+            store.with_valid_active_model()
             .with_valid_memory_model()
             .with_valid_eval_judge_model()
         )
 
-    def with_defaults(self) -> Self:
-        models = [model.model_copy(deep=True) for model in self.models]
-        model_ids = {model.id for model in models}
-        for default_model in DEFAULT_MODELS:
-            if default_model.id in model_ids:
-                continue
-            insert_at = len([model for model in models if model.builtin])
-            models.insert(insert_at, default_model.model_copy(deep=True))
-            model_ids.add(default_model.id)
-        return self.model_copy(update={"models": models})
-
     def with_valid_active_model(self) -> Self:
         if not self.models:
-            return self.default()
+            return self.model_copy(update={"active_model_id": ""})
         model_ids = {model.id for model in self.models}
         if self.active_model_id in model_ids:
             return self
@@ -419,7 +371,7 @@ class ModelConfigStore(BaseModel):
         models = {model.id: model for model in self.models}
         model = models.get(selected_id) or models.get(self.active_model_id)
         if not model:
-            raise ValueError("未找到可用模型配置")
+            raise ValueError("尚未配置可用模型，请先在设置中添加并启用模型")
         if not model.enabled:
             raise ValueError(f"模型已禁用: {model.name}")
         required = [("API Key", "api_key"), ("Model ID", "model_id")]
@@ -432,11 +384,6 @@ class ModelConfigStore(BaseModel):
                 f"模型配置不完整: {model.name} 缺少 {', '.join(missing)}。请在系统配置中补全。"
             )
         return model
-
-
-def _default_models() -> list[ModelConfig]:
-    return [model.model_copy(deep=True) for model in DEFAULT_MODELS]
-
 
 def _is_masked_secret(value: str) -> bool:
     return "*" in value
@@ -451,18 +398,27 @@ def _mask_secret(value: str) -> str:
 
 
 def _rows_need_persist(rows: Iterable[Mapping[str, Any]]) -> bool:
+    row_count = 0
     active_count = 0
     memory_count = 0
     judge_count = 0
     for row in rows:
+        row_count += 1
         if row.get("active"):
             active_count += 1
         if row.get("memory_manager"):
             memory_count += 1
         if row.get("eval_judge"):
             judge_count += 1
-    # Exactly one active chat model; memory manager / eval judge optional (0 or 1).
-    return active_count != 1 or memory_count > 1 or judge_count > 1
+    # An empty store is valid until an administrator adds the first model.  Once
+    # rows exist, exactly one active chat model is required; the other pins are
+    # optional (0 or 1).
+    expected_active_count = 1 if row_count else 0
+    return (
+        active_count != expected_active_count
+        or memory_count > 1
+        or judge_count > 1
+    )
 
 
 def _store_to_rows(
@@ -497,7 +453,6 @@ def _store_to_rows(
                 "api_key": model.api_key,
                 "description": model.description,
                 "enabled": model.enabled,
-                "builtin": model.builtin,
                 "active": model.id == store.active_model_id,
                 "memory_manager": bool(memory_id) and model.id == memory_id,
                 "eval_judge": bool(judge_id) and model.id == judge_id,
@@ -518,17 +473,12 @@ async def load_model_config_store() -> ModelConfigStore:
 
     if not rows:
         store = ModelConfigStore.default()
-        logger.info(
-            "model config table empty; seeding {} model(s) from defaults",
-            len(store.models),
-        )
-        await replace_model_config_rows(_store_to_rows(store))
+        logger.info("model config table empty; waiting for administrator configuration")
         return _cache_model_config_store(store)
 
     base_store = ModelConfigStore.from_rows(rows)
     store = (
-        base_store.with_defaults()
-        .with_valid_active_model()
+        base_store.with_valid_active_model()
         .with_valid_memory_model()
         .with_valid_eval_judge_model()
     )
@@ -584,8 +534,19 @@ async def get_memory_model_id() -> str | None:
     return mid or None
 
 
-async def get_eval_judge_model_id() -> str | None:
-    """Return configured Agent Eval judge model config id, or None for Agno default."""
+async def get_eval_judge_model_id() -> str:
+    """Return a dedicated judge model id, or the active product model.
+
+    This prevents AgentAsJudge from silently constructing an SDK-default model
+    that was never configured by the product administrator.
+    """
     store = await load_model_config_store()
-    mid = str(store.eval_judge_model_id or "").strip()
-    return mid or None
+    selected_id = str(
+        store.eval_judge_model_id or store.active_model_id or ""
+    ).strip()
+    if not selected_id:
+        raise ValueError("尚未配置评测模型，请先在设置中添加并启用模型")
+    # Validate the selected connection before it is frozen into a durable Suite
+    # execution snapshot.  This also rejects disabled or incomplete judge pins.
+    store.model_for_run(selected_id)
+    return selected_id

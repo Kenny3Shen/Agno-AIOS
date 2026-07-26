@@ -26,7 +26,6 @@ from api.services.postgres_store import get_async_agno_postgres_db
 # Prefer these model config ids (or substrings of model_id) for MemoryManager
 # when Settings has not pinned a dedicated memory model.
 _CHEAP_MODEL_PREFERENCE: tuple[str, ...] = (
-    "deepseek-v4-flash",
     "flash",
     "mini",
     "lite",
@@ -61,11 +60,16 @@ async def resolve_memory_manager_model_config(
                 exc_info=True,
             )
 
-    # 3) Auto-pick a lower-cost enabled model.
+    # 3) Auto-pick a lower-cost enabled, fully configured model.  An
+    # incomplete draft must never break an otherwise runnable Chat/Workflow
+    # session merely because it sorts ahead of the active connection.
     store = await load_model_config_store()
     models = list(store.models or [])
-    enabled = [m for m in models if getattr(m, "enabled", True)]
-    candidates = enabled or models
+    candidates = [
+        model
+        for model in models
+        if getattr(model, "enabled", True) and getattr(model, "configured", False)
+    ]
 
     def _score(model: Any) -> tuple[int, str]:
         mid = str(getattr(model, "id", "") or "").lower()
@@ -78,7 +82,7 @@ async def resolve_memory_manager_model_config(
 
     if candidates:
         best = min(candidates, key=_score)
-        return best.model_dump()
+        return await get_model_for_run(best.id)
     return await get_model_for_run(None)
 
 

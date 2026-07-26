@@ -787,6 +787,10 @@ async def test_claimed_suite_run_attaches_safety_summary(monkeypatch):
         dependencies=None,
         **_kwargs,
     ):
+        assert _kwargs["judge_model_bundle"] == (
+            configured_evaluator_model,
+            "test-evaluator-model",
+        )
         return run_results[case_id]
 
     marked: dict = {}
@@ -829,6 +833,7 @@ async def test_claimed_suite_run_attaches_safety_summary(monkeypatch):
     monkeypatch.setattr(runner, "run_case", fake_run_case)
 
     actor = SimpleNamespace(id="u1", role="user", is_superuser=False)
+    configured_evaluator_model = object()
     execution_snapshot = case_store.build_suite_run_execution_snapshot(
         suite,
         run_manifest={
@@ -838,7 +843,7 @@ async def test_claimed_suite_run_attaches_safety_summary(monkeypatch):
             "selected_name": None,
             "case_count": len(cases),
             "default_timeout": 120,
-            "judge_model_config_id": "",
+            "judge_model_config_id": "test-evaluator-model",
         },
     )
     case_work_items = case_store.build_suite_run_case_work_items(
@@ -858,6 +863,10 @@ async def test_claimed_suite_run_attaches_safety_summary(monkeypatch):
         execution_snapshot=execution_snapshot,
         case_work_items=case_work_items,
         execution_lease=lease,
+        dependencies=runner.AgentEvalRunnerDependencies(
+            get_model_for_run=lambda config_id: {"id": config_id},
+            build_agno_model=lambda _config: configured_evaluator_model,
+        ),
     )
     assert result["status"] == "failed"  # has failed cases
     safety = result["summary"]["safety"]

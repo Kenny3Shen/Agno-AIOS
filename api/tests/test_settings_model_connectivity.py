@@ -95,7 +95,7 @@ def test_model_config_store_preserves_saved_secret_for_masked_update():
                 enabled=True,
             )
         ],
-    ).with_defaults()
+    )
     submitted = model_config_service.ModelConfig(
         id="custom",
         name="Custom",

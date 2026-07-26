@@ -351,7 +351,7 @@ async function main() {
     const tiles = [
       { icon: icons.kb, t: "Knowledge", d: "Docling 入库 · hybrid 检索 · Rerank · 相似度阈值 · Settings 可调" },
       { icon: icons.bug, t: "CVE 情报", d: "多源同步 · 标签检索 · 流式更新 · 与 Chat Skill 联动" },
-      { icon: icons.search, t: "URL Collect", d: "源站规则采集 · 文章入库 · 失败重采 · 与 CVE 交叉引用" },
+      { icon: icons.search, t: "安全情报采集", d: "源站规则采集 · 文章入库 · 失败重采 · 与 CVE 交叉引用" },
       { icon: icons.shield, t: "IP 黑名单", d: "FireHOL 等威胁源 · 检索 API · Skill 意图挂载" },
     ];
     tiles.forEach((tile, i) => {

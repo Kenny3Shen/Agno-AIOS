@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -118,6 +119,65 @@ async def test_enqueue_suite_run_projects_plan_and_uses_atomic_persistence() -> 
     assert [item["work_item_index"] for item in work_items] == [0, 1]
     assert all(item["status"] == "queued" for item in work_items)
     assert "sensitive prompt" in str(work_items[0]["definition_snapshot"])
+
+
+@pytest.mark.asyncio
+async def test_enqueue_suite_run_skips_judge_lookup_for_non_llm_evaluators() -> None:
+    """Reliability/performance suites can run before any model is configured."""
+    plan = _plan()
+    frozen_cases = plan["_cases"]
+    assert isinstance(frozen_cases, list)
+    for index, raw_case in enumerate(frozen_cases):
+        assert isinstance(raw_case, dict)
+        case = cast(dict[str, Any], raw_case)
+        case["eval_types"] = ["reliability" if index == 0 else "performance"]
+        if index == 0:
+            case["expected_tool_calls"] = ["approved_tool"]
+
+    persisted_row = {
+        "id": "suite-run-non-llm",
+        "suite_id": "suite-1",
+        "status": "queued",
+        "started_by": "user-1",
+        "error_summary": "",
+        "summary": {},
+        "started_at": None,
+        "completed_at": None,
+    }
+    judge_lookup = AsyncMock(
+        side_effect=AssertionError("non-LLM evaluators must not require a judge model")
+    )
+    with (
+        patch.object(
+            queue,
+            "uuid4",
+            return_value=SimpleNamespace(hex="suite-run-non-llm"),
+        ),
+        patch.object(queue, "get_eval_judge_model_id", new=judge_lookup),
+        patch.object(
+            queue,
+            "create_suite_run_with_case_runs_and_enqueue_job_async",
+            new=AsyncMock(
+                return_value=(persisted_row, SimpleNamespace(id="job-non-llm"))
+            ),
+        ) as persist,
+    ):
+        suite_run, job_id = await queue.enqueue_suite_run(
+            suite_id="suite-1",
+            actor=_actor(),
+            plan=plan,
+            summary={},
+        )
+
+    assert suite_run["id"] == "suite-run-non-llm"
+    assert job_id == "job-non-llm"
+    judge_lookup.assert_not_awaited()
+    call = persist.await_args
+    assert call is not None
+    assert (
+        call.args[0]["execution_snapshot"]["run_manifest"]["judge_model_config_id"]
+        == ""
+    )
 
 
 @pytest.mark.parametrize(

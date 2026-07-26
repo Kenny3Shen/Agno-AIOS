@@ -201,6 +201,7 @@
   "errorPublishNeedsClean": "请先保存修改再发布",
   "errorRunNeedsSave": "请先保存工作流再运行",
   "errorRunNeedsClean": "请先保存修改再运行",
+  "errorRunNeedsModel": "请先在设置中添加并启用可用模型",
   "validationFixBeforeRun": "请先修复校验问题再运行",
   "validationFixBeforePublish": "请先修复校验问题再发布",
   "errorTriggerNeedsPublish": "请先发布工作流再启用 Webhook / 定时触发",
