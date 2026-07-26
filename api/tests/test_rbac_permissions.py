@@ -87,21 +87,6 @@ def test_user_scopes_cover_normal_workspace_operations():
         assert not has_scope(actor, scope), scope
 
 
-def test_retired_and_unknown_roles_fail_closed_to_user():
-    for legacy_role in (
-        "analyst",
-        "author",
-        "approver",
-        "auditor",
-        "guest",
-        "not-a-real-role",
-    ):
-        actor = user(legacy_role)
-        assert actor_role(actor) == "user"
-        assert has_scope(actor, "sessions:write")
-        assert not has_scope(actor, ADMIN_SCOPE)
-
-
 def test_scope_claims_are_expanded_as_agentos_scopes():
     actor_claims = scope_claims(user())
 
@@ -113,19 +98,20 @@ def test_scope_claims_are_expanded_as_agentos_scopes():
     assert "agent_eval:read" not in actor_claims.scopes
 
 
-def test_user_read_normalizes_retired_roles_and_superusers():
+def test_user_read_rejects_noncanonical_roles_and_aligns_superusers():
     from api.auth.schemas import UserRead
 
-    retired = UserRead.model_validate(
-        {
-            "id": uuid4(),
-            "email": "member@example.com",
-            "role": "author",
-            "is_active": True,
-            "is_superuser": False,
-            "is_verified": False,
-        }
-    ).model_dump()
+    with pytest.raises(ValidationError):
+        UserRead.model_validate(
+            {
+                "id": uuid4(),
+                "email": "member@example.com",
+                "role": "author",
+                "is_active": True,
+                "is_superuser": False,
+                "is_verified": False,
+            }
+        )
     superuser = UserRead(
         id=uuid4(),
         email="admin@example.com",
@@ -135,11 +121,8 @@ def test_user_read_normalizes_retired_roles_and_superusers():
         is_verified=False,
     ).model_dump()
 
-    assert retired["role"] == "user"
-    assert "approvals:write" in retired["scopes"]
     assert superuser["role"] == "admin"
     assert superuser["scopes"] == [ADMIN_SCOPE]
-    assert "permissions" not in retired
 
 
 def test_public_user_schemas_do_not_expose_role_assignment():

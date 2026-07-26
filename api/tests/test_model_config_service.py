@@ -1,78 +1,23 @@
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 from api.services import model_config_service
 
 
 @pytest.fixture(autouse=True)
-def _clear_model_config_cache(tmp_path, monkeypatch):
-    """Isolate legacy JSON path so load never archives the developer config file."""
+def _clear_model_config_cache():
     model_config_service._invalidate_model_config_cache()
-    monkeypatch.setattr(
-        model_config_service,
-        "_legacy_model_config_file_once",
-        model_config_service.AsyncOnce(),
-    )
-    monkeypatch.setattr(
-        model_config_service,
-        "model_config_file",
-        lambda: tmp_path / "model_config.json",
-    )
     yield
     model_config_service._invalidate_model_config_cache()
 
 
-
 @pytest.mark.asyncio
-async def test_load_model_config_store_archives_leftover_json_without_import_when_empty(tmp_path):
-    """Empty table seeds builtins only; leftover JSON is archived, never imported."""
-    legacy_file = tmp_path / "model_config.json"
-    legacy_file.write_text(
-        """
-        {
-          "active_model_id": "custom",
-          "models": [
-            {
-              "id": "custom",
-              "name": "Custom",
-              "model_id": "model-name",
-              "base_url": "https://api.example.com/v1",
-              "api_key": "secret-key",
-              "structured_output_mode": "none"
-            }
-          ]
-        }
-        """,
-        encoding="utf-8",
-    )
+async def test_load_model_config_store_seeds_defaults_when_empty():
     replace = AsyncMock()
 
     with (
-        patch.object(model_config_service, "model_config_file", return_value=legacy_file),
-        patch.object(model_config_service, "list_model_config_rows", AsyncMock(return_value=[])),
-        patch.object(model_config_service, "replace_model_config_rows", replace),
-    ):
-        store = await model_config_service.load_model_config_store()
-
-    assert store.active_model_id == model_config_service.DEFAULT_MODELS[0].id
-    assert all(model.id != "custom" for model in store.models)
-    replace.assert_awaited_once()
-    await_args = replace.await_args
-    assert await_args is not None
-    rows = await_args.args[0]
-    assert all(row["id"] != "custom" for row in rows)
-    assert not legacy_file.exists()
-    assert (tmp_path / "model_config.json.imported").exists()
-
-
-@pytest.mark.asyncio
-async def test_load_model_config_store_seeds_defaults_when_empty_without_legacy_file(tmp_path):
-    missing = tmp_path / "missing-model-config.json"
-    replace = AsyncMock()
-
-    with (
-        patch.object(model_config_service, "model_config_file", return_value=missing),
         patch.object(model_config_service, "list_model_config_rows", AsyncMock(return_value=[])),
         patch.object(model_config_service, "replace_model_config_rows", replace),
     ):
@@ -80,30 +25,6 @@ async def test_load_model_config_store_seeds_defaults_when_empty_without_legacy_
 
     assert store.models
     replace.assert_awaited_once()
-    assert not missing.exists()
-
-
-@pytest.mark.asyncio
-async def test_load_model_config_store_checks_legacy_file_once_per_process(tmp_path):
-    legacy_file = tmp_path / "model_config.json"
-    legacy_file.write_text("{}", encoding="utf-8")
-    rows = model_config_service._store_to_rows(model_config_service.ModelConfigStore.default())
-    list_rows = AsyncMock(return_value=rows)
-    model_config_path = Mock(return_value=legacy_file)
-
-    with (
-        patch.object(model_config_service, "model_config_file", model_config_path),
-        patch.object(model_config_service, "list_model_config_rows", list_rows),
-        patch.object(model_config_service, "replace_model_config_rows", AsyncMock()),
-    ):
-        await model_config_service.load_model_config_store()
-        model_config_service._invalidate_model_config_cache()
-        await model_config_service.load_model_config_store()
-
-    assert list_rows.await_count == 2
-    model_config_path.assert_called_once()
-    assert not legacy_file.exists()
-    assert (tmp_path / "model_config.json.imported").exists()
 
 
 @pytest.mark.asyncio
@@ -207,6 +128,19 @@ def test_model_config_requires_explicit_id():
         model_config_service.ModelConfig.from_row({"model_id": "model-name"})
 
 
+def test_model_config_rejects_retired_structured_output_mode():
+    with pytest.raises(ValidationError, match="structured_output_mode"):
+        model_config_service.ModelConfig.from_row(
+            {
+                "id": "custom",
+                "model_id": "model-name",
+                "provider": "openai-compatible",
+                "structured_output_mode": "none",
+                "base_url": "https://api.example.com/v1",
+            }
+        )
+
+
 def test_model_config_does_not_guess_native_provider_from_model_identity():
     model = model_config_service.ModelConfig.from_row(
         {
@@ -301,37 +235,6 @@ def test_model_config_strips_reasoning_effort_for_unsupported_providers():
         default_reasoning_effort="high",
     )
     assert xai.default_reasoning_effort is None
-
-
-@pytest.mark.asyncio
-async def test_load_model_config_store_archives_leftover_json_when_postgres_has_rows(tmp_path):
-    """Non-empty table: retire leftover model_config.json without re-importing it."""
-    leftover = tmp_path / "model_config.json"
-    leftover.write_text(
-        '{"active_model_id":"stale","models":[{"id":"stale","name":"Stale","model_id":"m","api_key":"k"}]}',
-        encoding="utf-8",
-    )
-    store = model_config_service.ModelConfigStore.default()
-    rows = model_config_service._store_to_rows(store)
-    replace = AsyncMock()
-
-    with (
-        patch.object(model_config_service, "model_config_file", return_value=leftover),
-        patch.object(model_config_service, "list_model_config_rows", AsyncMock(return_value=rows)),
-        patch.object(model_config_service, "replace_model_config_rows", replace),
-    ):
-        loaded = await model_config_service.load_model_config_store()
-
-    assert loaded.active_model_id == store.active_model_id
-    assert all(model.id != "stale" for model in loaded.models)
-    assert not leftover.exists()
-    assert (tmp_path / "model_config.json.imported").exists()
-    if replace.await_count:
-        # Integrity rewrite is allowed; must not seed leftover "stale" model.
-        call = replace.await_args
-        assert call is not None
-        saved = call.args[0]
-        assert all(row["id"] != "stale" for row in saved)
 
 
 @pytest.mark.asyncio

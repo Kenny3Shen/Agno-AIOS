@@ -5,12 +5,9 @@ import secrets
 import time
 from typing import Any
 
-from anyio import Path as AsyncPath
 from fastapi_users.jwt import decode_jwt, generate_jwt
-from loguru import logger
 
 from api.persistence.mcp import (
-    delete_retired_builtin_server_row,
     delete_token_row,
     ensure_mcp_tables,
     find_token_row,
@@ -22,15 +19,9 @@ from api.persistence.mcp import (
     upsert_token_row,
 )
 from api.config import get_settings
-from api.services.runtime_paths import CONFIG_DIR
 from api.utils.async_once import AsyncOnce
 
 SERVICE_IDS = ("basic", "hitl")
-# A migration must name only services deliberately removed by this release.
-# Treating every unknown ``builtin`` row as retired would silently discard
-# data from a newer deployment or an extension during a rolling downgrade.
-RETIRED_SERVICE_IDS = frozenset({"playbook"})
-MCP_CONFIG_FILE = CONFIG_DIR / "mcp" / "mcp_config.json"
 MCP_TOKENS_TABLE = "mcp_tokens"
 MCP_DELEGATION_AUDIENCE = "tais-mcp-delegation"
 MCP_DELEGATION_LIFETIME_SECONDS = 120
@@ -55,16 +46,6 @@ async def _seed_mcp_bootstrap() -> None:
     now = int(time.time())
     rows = await list_server_rows()
     existing_names = {row["name"] for row in rows}
-    retired_builtin_names = sorted(
-        str(row.get("name") or "")
-        for row in rows
-        if str(row.get("server_type") or "") == "builtin"
-        and str(row.get("name") or "") in RETIRED_SERVICE_IDS
-    )
-    for service_id in retired_builtin_names:
-        if await delete_retired_builtin_server_row(service_id):
-            logger.info("retired obsolete built-in MCP service {}", service_id)
-            existing_names.discard(service_id)
     for service_id in SERVICE_IDS:
         if service_id in existing_names:
             continue
@@ -83,36 +64,11 @@ async def _seed_mcp_bootstrap() -> None:
                 "updated_at": now,
             }
         )
-    await _retire_legacy_mcp_config_file()
 
 
 async def bootstrap_mcp_config() -> None:
     """Idempotent startup seed; runs at most once per process."""
     await _mcp_bootstrap_once.run(_seed_mcp_bootstrap)
-
-
-async def _archive_legacy_mcp_config_file(path: AsyncPath) -> None:
-    migrated_path = AsyncPath(f"{MCP_CONFIG_FILE}.migrated")
-    try:
-        if await migrated_path.exists():
-            if await path.exists():
-                await path.unlink()
-        else:
-            await path.rename(migrated_path)
-            logger.info("archived legacy MCP config to {}", migrated_path)
-    except OSError:
-        logger.warning("unable to archive legacy MCP config at {}", path, exc_info=True)
-
-
-async def _retire_legacy_mcp_config_file() -> None:
-    path = AsyncPath(MCP_CONFIG_FILE)
-    if not await path.exists():
-        return
-    logger.warning(
-        "retiring leftover MCP config file at {} (Postgres is source of truth)",
-        path,
-    )
-    await _archive_legacy_mcp_config_file(path)
 
 
 async def list_mcp_servers() -> list[dict[str, Any]]:

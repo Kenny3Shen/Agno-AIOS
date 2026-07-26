@@ -12,7 +12,7 @@
   "colDescription": "描述",
   "colSource": "来源",
   "colIndexed": "入库时间",
-  "updatedDetail": "CVE 库已更新：新增 {{add}}，删除 {{del}}",
+  "updatedDetail": "CVE 库已更新：写入/刷新 {{add}}，删除 {{del}}",
   "updateStarting": "正在更新 CVE 库…",
   "updateStageStart": "CVE 更新开始",
   "updateStageSource": "拉取数据源 {{source}}（{{index}}/{{total}}）",

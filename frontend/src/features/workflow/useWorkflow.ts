@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useDebouncedValue } from '@/shared/lib/useDebouncedValue'
+import { createClientId } from '@/shared/lib/clientId'
 import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getModels } from '@/features/settings/api'
 import { ApiError } from '@/shared/api/client'
@@ -90,7 +91,7 @@ const initialState = (): WorkflowState => ({
   name: '',
   description: '',
   input: '',
-  sessionId: crypto.randomUUID(),
+  sessionId: createClientId(),
   modelId: null,
   version: 0,
   publishedVersion: null,
@@ -857,7 +858,7 @@ export function useWorkflow() {
       ...record,
       selectedIds: record.selectedId ? [record.selectedId] : [],
       input: current.input,
-      sessionId: crypto.randomUUID(),
+      sessionId: createClientId(),
       runLog: [],
       error: null,
       validationIssues: [],
@@ -913,7 +914,7 @@ export function useWorkflow() {
       nextCronAt: null,
       selectedIds: loaded.selectedId ? [loaded.selectedId] : [],
       input: current.input,
-      sessionId: crypto.randomUUID(),
+      sessionId: createClientId(),
       modelId: current.modelId,
       runLog: [],
       nodeRunStatus: {},
@@ -965,7 +966,7 @@ export function useWorkflow() {
       nextCronAt: null,
       selectedIds: loaded.selectedId ? [loaded.selectedId] : [],
       input: current.input,
-      sessionId: crypto.randomUUID(),
+      sessionId: createClientId(),
       modelId: current.modelId,
       runLog: [],
       nodeRunStatus: {},
@@ -1217,9 +1218,9 @@ export function useWorkflow() {
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
-    const sessionId = crypto.randomUUID()
-    const runId = crypto.randomUUID()
-    const historyId = crypto.randomUUID()
+    const sessionId = createClientId()
+    const runId = createClientId()
+    const historyId = createClientId()
     setState((current) => ({
       ...current,
       running: true,
@@ -1318,7 +1319,7 @@ export function useWorkflow() {
     abortRef.current?.abort()
     setState((current) => {
       const cancelItem: WorkflowRunLogItem = {
-        id: crypto.randomUUID(),
+        id: createClientId(),
         type: 'workflow.cancelled',
         message: t('runStoppedByUser'),
         runId: runId || current.lastRunId,

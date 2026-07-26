@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from api.services.chat_settings_service import ChatSettings
 from api.services.security_run_runtime import SecurityRunRequest, SecurityRunRuntime
 
 
@@ -242,10 +243,11 @@ async def test_security_runtime_exposes_agent_context_for_evals():
     cast(Any, runtime).dependencies = SimpleNamespace(
         mcp_tools_factory=lambda **kwargs: FakeMcpTools(),
         get_mcp_url=lambda: "http://127.0.0.1:8000/mcp/",
-        get_mcp_token=lambda: "test",
+        issue_mcp_delegation_token=lambda _user_id: "test",
         build_model=lambda *args, **kwargs: "model",
         get_async_knowledge_base=lambda: None,
-        get_enabled_skill_dirs=lambda: [],
+        effective_skill_dirs_for_actor=lambda _actor, _skill_names: [],
+        effective_mcp_server_names_for_actor=lambda _actor: [],
         get_db=lambda: "db",
         agent_factory=lambda **kwargs: SimpleNamespace(**kwargs),
     )
@@ -254,10 +256,15 @@ async def test_security_runtime_exposes_agent_context_for_evals():
         "ping",
         user_id="user-1",
         infer_skills=False,
+        memory_enabled=False,
     )
-    async with runtime.security_agent_context(request) as agent:
-        assert agent.id == "security-operations"
-        assert agent.tools == ["mcp-tools"]
+    with patch(
+        "api.services.security_run_runtime.get_chat_settings_async",
+        new=AsyncMock(return_value=ChatSettings()),
+    ):
+        async with runtime.security_agent_context(request) as agent:
+            assert agent.id == "security-operations"
+            assert agent.tools == ["mcp-tools"]
 
 
 class FakeAccuracyEval:

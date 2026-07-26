@@ -64,6 +64,7 @@ import {
 import type { AuthUser, UserRole } from '@/shared/types/auth'
 import type { ModelConfig, ModelConfigResponse } from '@/shared/types/common'
 import { useTranslation } from 'react-i18next'
+import { createModelId } from './modelId'
 import './settings.css'
 
 const providerOptions = [
@@ -415,7 +416,7 @@ export function SettingsPage() {
 
   const addModel = () => {
     openEditor({
-      id: crypto.randomUUID(),
+      id: createModelId(),
       name: '',
       model_id: '',
       provider: 'openai-compatible',

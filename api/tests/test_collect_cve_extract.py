@@ -18,12 +18,13 @@ def test_extract_cve_ids_dedupes_and_uppercases():
 
 
 @pytest.mark.asyncio
-async def test_search_articles_exposes_derived_and_persisted_cve_ids():
+async def test_search_articles_returns_persisted_cve_ids_without_backfill():
     rows = [
         {
             "title": "Log4Shell CVE-2021-44228 emergency",
             "summary": "patch now",
             "markdown": "",
+            "cve_ids": [],
         },
         {
             "title": "CVE-2020-0001",
@@ -41,6 +42,6 @@ async def test_search_articles_exposes_derived_and_persisted_cve_ids():
 
     assert total == 2
     assert [article["cve_ids"] for article in articles] == [
-        ["CVE-2021-44228"],
-        ["CVE-2019-9999"],
+        [],
+        ["cve-2019-9999"],
     ]

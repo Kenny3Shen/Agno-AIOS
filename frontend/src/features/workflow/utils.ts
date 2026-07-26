@@ -15,6 +15,7 @@ import type {
   WorkflowState,
   WorkflowTriggers,
 } from './types'
+import { createClientId } from '@/shared/lib/clientId'
 
 export const defaultTriggers = (): WorkflowTriggers => ({
   webhook: { enabled: false, secret: '' },
@@ -22,7 +23,7 @@ export const defaultTriggers = (): WorkflowTriggers => ({
 })
 
 export const createNode = (type: WorkflowNodeType = 'step'): WorkflowNode => {
-  const id = crypto.randomUUID()
+  const id = createClientId()
   // Control-flow nodes start empty: users drop Agent steps into them.
   // Seeding default agents caused "extra Agent step" spam on the canvas.
   if (type === 'parallel') {
@@ -60,8 +61,8 @@ export const createNode = (type: WorkflowNodeType = 'step'): WorkflowNode => {
       name: '',
       selectorCel: 'input.contains("critical") ? "path_a" : "path_b"',
       choices: [
-        { id: crypto.randomUUID(), name: 'path_a', steps: [] },
-        { id: crypto.randomUUID(), name: 'path_b', steps: [] },
+        { id: createClientId(), name: 'path_a', steps: [] },
+        { id: createClientId(), name: 'path_b', steps: [] },
       ],
     }
   }
@@ -364,7 +365,7 @@ const insertAfterLocation = (
 
 /** Deep-clone a node tree with fresh ids (for copy/paste). */
 export const cloneNodeDeep = (node: WorkflowNode): WorkflowNode => {
-  const id = crypto.randomUUID()
+  const id = createClientId()
   const base: WorkflowNode = {
     ...node,
     id,
@@ -387,7 +388,7 @@ export const cloneNodeDeep = (node: WorkflowNode): WorkflowNode => {
       ...base,
       type: 'router',
       choices: (node.choices ?? []).map((choice) => ({
-        id: crypto.randomUUID(),
+        id: createClientId(),
         name: choice.name,
         steps: choice.steps.map(cloneNodeDeep),
       })),

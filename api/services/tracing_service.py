@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
@@ -5,6 +6,7 @@ from agno.tracing import setup_tracing
 from agno.os.routers.traces.schemas import format_duration_ms
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
+from sqlalchemy import MetaData, Table
 
 from api.auth.ownership import assert_owned_resource
 from api.services.chat_run_events import approval_rejection_reason
@@ -16,6 +18,23 @@ from api.utils.pagination import pagination_meta
 
 # Keep a single DB wrapper instance.
 _trace_db = get_async_agno_postgres_db()
+
+# ``AsyncPostgresDb`` reuses reflected SQLAlchemy tables for the process
+# lifetime.  A schema repair can therefore leave a long-lived worker with a
+# stale ``agno_spans`` object that lacks ``span_id`` even after PostgreSQL has
+# the column.  Agno's native trace queries require this column for their span
+# aggregate join.
+_SPAN_TABLE_REFRESH_LOCK = asyncio.Lock()
+_TRACE_QUERY_SPAN_COLUMNS = frozenset(
+    {
+        "span_id",
+        "trace_id",
+        "parent_span_id",
+        "status_code",
+        "start_time",
+        "attributes",
+    }
+)
 
 INPUT_ATTRIBUTE_KEYS = (
     "input.value",
@@ -98,6 +117,73 @@ def _trace_list_response(
     }
 
 
+def _missing_span_columns(table: Any, required_columns: frozenset[str]) -> set[str]:
+    if table is None:
+        return set(required_columns)
+    try:
+        existing_columns = set(table.c.keys())
+    except (AttributeError, TypeError):
+        return set(required_columns)
+    return set(required_columns) - existing_columns
+
+
+async def _refresh_span_table_reflection(
+    db: Any,
+    *,
+    required_columns: frozenset[str],
+) -> Any | None:
+    """Reload a stale reflected Agno spans table after a schema repair."""
+    async with _SPAN_TABLE_REFRESH_LOCK:
+        cached = getattr(db, "spans_table", None)
+        if not _missing_span_columns(cached, required_columns):
+            return cached
+
+        try:
+            schema = getattr(db, "db_schema", None)
+            table_name = getattr(db, "span_table_name", None) or "agno_spans"
+            metadata = getattr(db, "metadata", None) or MetaData(schema=schema)
+
+            async with db.db_engine.connect() as connection:
+
+                def _reflect(sync_connection: Any) -> Table:
+                    return Table(
+                        table_name,
+                        metadata,
+                        schema=schema,
+                        autoload_with=sync_connection,
+                        extend_existing=True,
+                        autoload_replace=True,
+                    )
+
+                table = await connection.run_sync(_reflect)
+            db.spans_table = table
+            return table
+        except Exception:
+            logger.warning("trace spans-table reflection refresh failed")
+            return None
+
+
+async def _ensure_trace_span_reflection(
+    db: Any = _trace_db,
+    *,
+    required_columns: frozenset[str] = _TRACE_QUERY_SPAN_COLUMNS,
+) -> Any | None:
+    """Ensure native Agno trace queries see a complete spans-table reflection."""
+    cached = getattr(db, "spans_table", None)
+    if not _missing_span_columns(cached, required_columns):
+        return cached
+    try:
+        table = await db._get_table(table_type="spans")
+    except Exception:
+        table = None
+    if _missing_span_columns(table, required_columns):
+        return await _refresh_span_table_reflection(
+            db,
+            required_columns=required_columns,
+        )
+    return table
+
+
 def _root_input_from_spans(spans: list[Any]) -> str | None:
     root = next((span for span in spans if not getattr(span, "parent_span_id", None)), None)
     if root is None and spans:
@@ -142,7 +228,7 @@ async def _batch_root_spans_by_trace_ids(trace_ids: list[str]) -> dict[str, list
 
     from sqlalchemy import case, select
 
-    table = await _trace_db._get_table(table_type="spans")
+    table = await _ensure_trace_span_reflection()
     if table is None:
         return {}
 
@@ -409,6 +495,8 @@ async def list_traces(
 
     st, et = _validate_trace_time_range(start_time, end_time)
     normalized_status = _normalize_trace_status(status)
+
+    await _ensure_trace_span_reflection()
 
     # Agno AsyncPostgresDb.get_traces supports SQL ``status`` (OK/ERROR/UNSET).
     # Prefer native pagination over a post-hoc full-window scan.
@@ -847,6 +935,7 @@ async def mark_trace_error(run_id: str) -> bool:
     if not run_id:
         return False
     try:
+        await _ensure_trace_span_reflection()
         trace = await _trace_db.get_trace(run_id=run_id)
         if trace is None:
             logger.debug("No trace found to mark failed for run {}", run_id)
@@ -1091,6 +1180,7 @@ async def get_trace_detail(trace_id: str, actor: Any | None = None) -> dict[str,
     # Do not query spans until the trace itself has passed ownership checks.
     # Besides avoiding unnecessary work, this prevents access patterns from
     # revealing whether a protected trace has span data.
+    await _ensure_trace_span_reflection()
     trace = await _trace_db.get_trace(trace_id=trace_id)
     if not trace:
         return None

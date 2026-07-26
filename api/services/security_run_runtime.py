@@ -41,9 +41,7 @@ from api.services.capability_policy_service import (
     effective_skill_dirs_for_actor,
 )
 from api.services.skill_service import (
-    get_enabled_skill_dirs,
     parse_skill_metadata,
-    resolve_enabled_skill_dirs,
 )
 from api.services.notification_service import (
     notify_admins_of_hitl_approval,
@@ -112,13 +110,6 @@ def _build_mcp_url() -> str:
     if not base_url:
         raise RuntimeError("MCP_SERVER_URL 未配置，请在 .env 或系统配置中设置 MCP 服务地址。")
     return base_url
-
-
-def _build_mcp_token() -> str:
-    token = get_settings().mcp_token.get_secret_value().strip()
-    if not token:
-        raise RuntimeError("MCP_TOKEN 未配置，请在 .env 或系统配置中设置 MCP 访问 Token。")
-    return token
 
 
 PROMPT_DIR = Path(__file__).resolve().parents[1] / "agent" / "prompts"
@@ -926,14 +917,9 @@ class SecurityRunRuntimeDependencies:
     build_model: Callable[..., Any] = _build_model
     get_db: Callable[[], Any] = get_async_agno_postgres_db
     get_async_knowledge_base: Callable[[], Any] = get_async_knowledge_base_async
-    # Legacy hooks remain injectable for existing focused tests and extensions.
-    # Production uses the actor-aware defaults below.
-    get_enabled_skill_dirs: Callable[[], Any] = get_enabled_skill_dirs
-    resolve_enabled_skill_dirs: Callable[..., Any] = resolve_enabled_skill_dirs
     effective_skill_dirs_for_actor: Callable[..., Any] = effective_skill_dirs_for_actor
     effective_mcp_server_names_for_actor: Callable[..., Any] = effective_mcp_server_names_for_actor
     get_mcp_url: Callable[[], str] = _build_mcp_url
-    get_mcp_token: Callable[[], str] = _build_mcp_token
     issue_mcp_delegation_token: Callable[[str], str] = issue_delegation_token
     mcp_tools_factory: Callable[..., Any] = MCPTools
     agent_factory: Callable[..., Any] = Agent
@@ -1576,7 +1562,7 @@ class SecurityRunRuntime:
             )
 
         mcp_names_raw: list[str] = []
-        if profile_connects_mcp(request.agent_id) and not self._uses_legacy_skill_hooks():
+        if profile_connects_mcp(request.agent_id):
             mcp_names_raw = await _run_sync_dependency(
                 self.dependencies.effective_mcp_server_names_for_actor,
                 request.capability_actor,
@@ -1589,21 +1575,13 @@ class SecurityRunRuntime:
         )
 
     async def _build_enabled_skills(
-        self, request: SecurityRunRequest | None = None
+        self, request: SecurityRunRequest
     ) -> Skills | None:
         """Load Local Skills.
 
         ``skill_names`` mirrors Workflow step binding:
         None → all enabled; [] → none; list → enabled ∩ names.
         """
-        if request is None:
-            dirs_raw = await _run_sync_dependency(
-                self.dependencies.get_enabled_skill_dirs
-            )
-            enabled_dirs = [str(skill_dir) for skill_dir in dirs_raw]
-            if not enabled_dirs:
-                return None
-            return await to_thread.run_sync(_load_local_skills, enabled_dirs)
         skill_names = request.skill_names
         if skill_names is not None and not skill_names:
             return None
@@ -1613,43 +1591,9 @@ class SecurityRunRuntime:
             return None
         return await to_thread.run_sync(_load_local_skills, enabled_dirs)
 
-    def _uses_legacy_skill_hooks(self) -> bool:
-        effective_skill_resolver = getattr(
-            self.dependencies,
-            "effective_skill_dirs_for_actor",
-            effective_skill_dirs_for_actor,
-        )
-        legacy_resolver = getattr(
-            self.dependencies,
-            "resolve_enabled_skill_dirs",
-            resolve_enabled_skill_dirs,
-        )
-        legacy_mcp_token = getattr(
-            self.dependencies,
-            "get_mcp_token",
-            _build_mcp_token,
-        )
-        return (
-            effective_skill_resolver is effective_skill_dirs_for_actor
-            and (
-                self.dependencies.get_enabled_skill_dirs is not get_enabled_skill_dirs
-                or legacy_resolver is not resolve_enabled_skill_dirs
-                or legacy_mcp_token is not _build_mcp_token
-            )
-        )
-
     async def _resolve_skill_dirs_for_request(
         self, request: SecurityRunRequest
     ) -> Any:
-        if self._uses_legacy_skill_hooks():
-            if request.skill_names is None:
-                return await _run_sync_dependency(
-                    self.dependencies.get_enabled_skill_dirs
-                )
-            return await _run_sync_dependency(
-                self.dependencies.resolve_enabled_skill_dirs,
-                request.skill_names,
-            )
         return await _run_sync_dependency(
             self.dependencies.effective_skill_dirs_for_actor,
             request.capability_actor,
@@ -2865,26 +2809,10 @@ class SecurityRunRuntime:
                 yield security_agent
                 return
 
-            delegation_issuer = getattr(
-                self.dependencies,
-                "issue_mcp_delegation_token",
-                issue_delegation_token,
+            token = await _run_sync_dependency(
+                self.dependencies.issue_mcp_delegation_token,
+                request.agent_user_id,
             )
-            legacy_mcp_token = getattr(
-                self.dependencies,
-                "get_mcp_token",
-                _build_mcp_token,
-            )
-            if (
-                delegation_issuer is issue_delegation_token
-                and legacy_mcp_token is not _build_mcp_token
-            ):
-                token = await _run_sync_dependency(legacy_mcp_token)
-            else:
-                token = await _run_sync_dependency(
-                    delegation_issuer,
-                    request.agent_user_id,
-                )
             server_params = StreamableHTTPClientParams(
                 url=await _run_sync_dependency(self.dependencies.get_mcp_url),
             )

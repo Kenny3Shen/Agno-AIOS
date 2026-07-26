@@ -211,8 +211,12 @@ async def insert_new_cve_rows(rows: Sequence[dict[str, Any]]) -> int:
         )
     )
     async with get_async_control_plane_engine().begin() as conn:
-        result = await conn.execute(stmt)
-    return max(int(result.rowcount or 0), 0)
+        await conn.execute(stmt)
+    # psycopg reports ``-1`` for this multi-row INSERT .. ON CONFLICT DO
+    # UPDATE statement, even though every validated value was inserted or
+    # refreshed.  The source delta is already deduplicated, so its validated
+    # value count is the reliable write count for progress and completion UI.
+    return len(values)
 
 
 async def find_missing_cve_source_keys(

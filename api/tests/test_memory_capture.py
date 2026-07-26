@@ -1,12 +1,8 @@
-"""P1 memory capture policy + memory_mode helpers."""
+"""P1 memory capture policy + memory-mode normalization."""
 
 from __future__ import annotations
 
-from api.persistence.chat_settings import (
-    memory_flags_from_mode,
-    memory_mode_from_flags,
-    normalize_memory_mode,
-)
+from api.persistence.chat_settings import normalize_memory_mode
 from api.services.memory_capture import (
     is_soc_memory_profile,
     memory_capture_instructions,
@@ -18,20 +14,6 @@ def test_normalize_memory_mode() -> None:
     assert normalize_memory_mode("agentic") == "agentic"
     assert normalize_memory_mode("OFF") == "off"
     assert normalize_memory_mode("garbage") == "automatic"
-
-
-def test_memory_mode_flags_roundtrip() -> None:
-    assert memory_flags_from_mode("off") == (False, False)
-    assert memory_flags_from_mode("automatic") == (True, False)
-    assert memory_flags_from_mode("agentic") == (True, True)
-    assert memory_mode_from_flags(memory_enabled=False, enable_agentic_memory=True) == "off"
-    assert (
-        memory_mode_from_flags(memory_enabled=True, enable_agentic_memory=True) == "agentic"
-    )
-    assert (
-        memory_mode_from_flags(memory_enabled=True, enable_agentic_memory=False)
-        == "automatic"
-    )
 
 
 def test_global_capture_blocks_one_off_tasks() -> None:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from pathlib import Path
 import time
 from typing import Any, Literal, Self, cast
 
@@ -10,8 +9,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from loguru import logger
 
 from api.persistence.model_configs import list_model_config_rows, replace_model_config_rows
-from api.services.runtime_paths import CONFIG_DIR, resolve_project_path
-from api.utils.async_once import AsyncOnce
 from api.utils.ttl_cache import TtlCache
 from api.services.model_capabilities import (
     apply_optimal_model_defaults,
@@ -22,7 +19,6 @@ from api.services.model_capabilities import (
 
 # Short-lived process cache for hot chat/settings reads; cleared on save/seed rewrite.
 _STORE_CACHE: TtlCache[ModelConfigStore] = TtlCache(ttl_sec=5.0)
-_legacy_model_config_file_once = AsyncOnce()
 
 
 def _invalidate_model_config_cache() -> None:
@@ -100,10 +96,7 @@ class ModelConfig(BaseModel):
     @field_validator("structured_output_mode", mode="before")
     @classmethod
     def _normalize_structured_output_mode(cls, value: Any) -> str:
-        mode = str(value or "").strip().lower()
-        if mode in {"", "none"}:
-            return "json"
-        return mode
+        return str(value or "").strip().lower()
 
     @field_validator("api_protocol", mode="before")
     @classmethod
@@ -181,8 +174,6 @@ class ModelConfig(BaseModel):
         structured_output_mode = str(
             raw.get("structured_output_mode") or default_output_mode
         ).strip()
-        if structured_output_mode == "none":
-            structured_output_mode = "json"
         configured_reasoning_effort = raw.get("default_reasoning_effort")
         if configured_reasoning_effort is None:
             configured_reasoning_effort = default_reasoning_effort
@@ -443,11 +434,6 @@ class ModelConfigStore(BaseModel):
         return model
 
 
-def model_config_file() -> Path:
-    """Path checked only to retire leftover JSON (never loaded as config source)."""
-    return resolve_project_path(CONFIG_DIR / "model_config.json")
-
-
 def _default_models() -> list[ModelConfig]:
     return [model.model_copy(deep=True) for model in DEFAULT_MODELS]
 
@@ -464,40 +450,9 @@ def _mask_secret(value: str) -> str:
     return value[:4] + "*" * (len(value) - 8) + value[-4:]
 
 
-def _archive_legacy_model_config_file(config_file: Path) -> None:
-    """Rename leftover ``model_config.json`` to ``*.imported`` (never re-imported)."""
-    try:
-        archived = config_file.with_name(f"{config_file.name}.imported")
-        # Avoid clobbering a previous archive; keep the first successful import.
-        if archived.exists():
-            config_file.unlink(missing_ok=True)
-            return
-        config_file.rename(archived)
-        logger.info("archived legacy model config to {}", archived)
-    except OSError:
-        logger.warning(
-            "unable to archive legacy model config at {}",
-            config_file,
-            exc_info=True,
-        )
-
-
-async def _retire_legacy_model_config_file() -> None:
-    """Retire the old JSON source once; Postgres is the only config source."""
-    leftover = model_config_file()
-    if not leftover.exists():
-        return
-    logger.warning(
-        "retiring leftover model config file at {} (Postgres is source of truth)",
-        leftover,
-    )
-    _archive_legacy_model_config_file(leftover)
-
-
 def _rows_need_persist(rows: Iterable[Mapping[str, Any]]) -> bool:
     active_count = 0
     memory_count = 0
-    invalid_output_mode = False
     judge_count = 0
     for row in rows:
         if row.get("active"):
@@ -506,10 +461,8 @@ def _rows_need_persist(rows: Iterable[Mapping[str, Any]]) -> bool:
             memory_count += 1
         if row.get("eval_judge"):
             judge_count += 1
-        if str(row.get("structured_output_mode") or "").strip() not in {"native", "json"}:
-            invalid_output_mode = True
     # Exactly one active chat model; memory manager / eval judge optional (0 or 1).
-    return active_count != 1 or memory_count > 1 or judge_count > 1 or invalid_output_mode
+    return active_count != 1 or memory_count > 1 or judge_count > 1
 
 
 def _store_to_rows(
@@ -562,7 +515,6 @@ async def load_model_config_store() -> ModelConfigStore:
         return cached
 
     rows = await list_model_config_rows()
-    await _legacy_model_config_file_once.run(_retire_legacy_model_config_file)
 
     if not rows:
         store = ModelConfigStore.default()

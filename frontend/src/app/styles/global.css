@@ -196,16 +196,6 @@ html.dark .shell-menu .ant-menu-item-selected {
   background: #1c3b5f !important;
   color: #e7f1ff !important;
 }
-.shell-menu .ant-menu-item-selected::before {
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 0;
-  width: 2px;
-  border-radius: 0 2px 2px 0;
-  background: var(--tais-blue);
-  content: '';
-}
 .shell-menu .ant-menu-item:focus-visible {
   outline: 2px solid var(--tais-blue);
   outline-offset: -2px;

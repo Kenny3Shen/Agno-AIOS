@@ -12,7 +12,7 @@
   "colDescription": "Description",
   "colSource": "Source",
   "colIndexed": "Indexed",
-  "updatedDetail": "CVE database updated: +{{add}} / −{{del}}",
+  "updatedDetail": "CVE database updated: upserted {{add}}, removed {{del}}",
   "updateStarting": "Updating CVE database…",
   "updateStageStart": "Starting CVE database update…",
   "updateStageSource": "Fetching source {{source}} ({{index}}/{{total}})",

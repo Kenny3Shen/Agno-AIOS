@@ -4,6 +4,7 @@
  */
 import { apiFetch, jsonInit, requestJson } from '@/shared/api/client'
 import { normalizePaginatedList } from '@/shared/lib/pagination'
+import { createClientId } from '@/shared/lib/clientId'
 import { consumeSse } from '@/features/chat/utils'
 import type {
   ExecutorOption,
@@ -726,7 +727,7 @@ export const streamWorkflowRun = async (
           ? `${type} · ${stepName}`
           : type
     onEvent({
-      id: crypto.randomUUID(),
+      id: createClientId(),
       type,
       message,
       stepName,

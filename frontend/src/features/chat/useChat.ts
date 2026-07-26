@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type Dispatch } from 'react'
 import { useTranslation } from 'react-i18next'
+import { createClientId } from '@/shared/lib/clientId'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
 import { attachLiveSessionStream, cancelRun, streamMessage, unarchiveSession } from './api'
@@ -313,7 +314,7 @@ export function useChat() {
     let cancelled = false
     const controller = new AbortController()
     const attachSession = sessionId
-    let assistantId: string = crypto.randomUUID()
+    let assistantId: string = createClientId()
     let attachedUi = false
 
     const ensureAssistant = (runId?: string) => {
@@ -501,7 +502,7 @@ export function useChat() {
     }
     // Existing deep-link session: wait for meta (and never send on workflow sessions).
     if (sessionId && (!metaResolved || sessionMetaFailed || isWorkflowSession || teamSessionChecking || teamSessionUnavailable)) return
-    const activeSession = sessionId ?? crypto.randomUUID()
+    const activeSession = sessionId ?? createClientId()
     if (!sessionId) {
       prevSessionIdRef.current = activeSession
       setSession(activeSession)
@@ -534,9 +535,9 @@ export function useChat() {
         void queryClient.invalidateQueries({ queryKey: chatKeys.sessionLists })
       })
     }
-    const assistantId = crypto.randomUUID()
+    const assistantId = createClientId()
     const user: Message = {
-      id: crypto.randomUUID(),
+      id: createClientId(),
       role: 'user',
       content: text,
       final: true,

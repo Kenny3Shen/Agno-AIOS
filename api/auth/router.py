@@ -15,7 +15,6 @@ from api.auth.claims import (
     ADMIN_SCOPE,
     ROLE_SCOPES,
     Role,
-    normalize_actor_role,
 )
 from api.auth.database import async_session_maker
 from api.auth.models import User
@@ -138,10 +137,7 @@ class AdminRoleUpdate(BaseModel):
 
 
 def _is_admin_account(user: AuthUser) -> bool:
-    return normalize_actor_role(
-        user.role,
-        is_superuser=bool(user.is_superuser),
-    ) == "admin"
+    return user.role == "admin"
 
 
 async def _lock_role_changes(session) -> None:
@@ -155,10 +151,7 @@ async def _active_admin_count(session) -> int:
         .select_from(AuthUser)
         .where(
             cast(ColumnElement[bool], AuthUser.is_active).is_(True),
-            or_(
-                cast(ColumnElement[bool], AuthUser.is_superuser).is_(True),
-                func.lower(func.trim(AuthUser.role)) == "admin",
-            ),
+            AuthUser.role == "admin",
         )
     )
     return int(count or 0)
@@ -210,7 +203,7 @@ async def set_user_role(
                 detail="Administrators cannot change their own access level.",
             )
 
-        previous = normalize_actor_role(row.role, is_superuser=bool(row.is_superuser))
+        previous = cast(Role, row.role)
         target_is_admin = body.role == "admin"
         stored_role = str(row.role or "").strip().lower()
         changed = stored_role != body.role or bool(row.is_superuser) != target_is_admin

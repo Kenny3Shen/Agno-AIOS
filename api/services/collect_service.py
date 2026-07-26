@@ -1,9 +1,4 @@
-"""Read-side service for Collect articles stored in Postgres.
-
-List/detail responses preserve persisted ``cve_ids`` and backfill legacy rows
-from title, summary, and body when necessary, enabling CVE deep-links from the
-security news library.
-"""
+"""Read-side service for Collect articles stored in Postgres."""
 
 from __future__ import annotations
 
@@ -20,27 +15,9 @@ from api.persistence.collect_articles import (
 )
 from api.services.collect_crawl_service import (
     configured_source_domains,
-    extract_cve_ids,
     parse_and_store_url,
 )
 from api.utils.url2md_utils import active_domain_rules
-
-
-def _with_cve_ids(row: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Normalize persisted CVE ids and derive them only for legacy rows."""
-    if not row:
-        return row
-    out = dict(row)
-    existing = out.get("cve_ids")
-    if isinstance(existing, list) and existing:
-        out["cve_ids"] = [str(item).upper() for item in existing if item]
-        return out
-    out["cve_ids"] = extract_cve_ids(
-        str(out.get("title") or ""),
-        str(out.get("summary") or ""),
-        str(out.get("markdown") or ""),
-    )
-    return out
 
 
 async def search_articles(
@@ -59,13 +36,11 @@ async def search_articles(
         size=size,
         include_markdown=False,
     )
-    # List payloads omit body; CVE tags come from title/summary only.
-    return [item for item in (_with_cve_ids(row) for row in rows) if item is not None], total
+    return rows, total
 
 
 async def get_article(article_id: int) -> dict[str, Any] | None:
-    row = await get_collect_article(article_id)
-    return _with_cve_ids(row)
+    return await get_collect_article(article_id)
 
 
 async def list_sources() -> list[dict[str, Any]]:
@@ -98,8 +73,7 @@ async def reparse_article(article_id: int) -> dict[str, Any]:
     if not url:
         raise ValueError("article has no URL")
     record = await parse_and_store_url(url)
-    # Normalize persisted tags, or backfill a legacy row for clients.
-    return _with_cve_ids(record) or record
+    return record
 
 
 async def reparse_failed_articles(

@@ -140,7 +140,8 @@ async def test_cve_delete_is_scoped_to_its_source_membership():
 @pytest.mark.asyncio
 async def test_cve_upsert_uses_source_as_part_of_reference_identity():
     class Result:
-        rowcount = 1
+        # psycopg reports -1 for multi-row INSERT .. ON CONFLICT DO UPDATE.
+        rowcount = -1
 
     class Connection:
         def __init__(self) -> None:
@@ -175,11 +176,17 @@ async def test_cve_upsert_uses_source_as_part_of_reference_identity():
                     "github_url": "https://github.com/example/poc",
                     "description": "corrected",
                     "source": "github",
-                }
+                },
+                {
+                    "cve_id": "cve-2026-0002",
+                    "github_url": "https://github.com/example/poc-2",
+                    "description": "new",
+                    "source": "github",
+                },
             ]
         )
 
-    assert written == 1
+    assert written == 2
     sql = str(
         cast(Any, connection.statements[0]).compile(dialect=postgresql.dialect())
     )
