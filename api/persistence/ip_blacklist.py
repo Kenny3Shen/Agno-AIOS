@@ -175,8 +175,13 @@ async def upsert_ip_blacklist_rows(rows: Sequence[dict[str, Any]]) -> int:
         },
     )
     async with get_async_control_plane_engine().begin() as conn:
-        result = await conn.execute(stmt)
-    return max(int(result.rowcount or 0), 0)
+        await conn.execute(stmt)
+    # psycopg reports ``-1`` for this multi-row INSERT .. ON CONFLICT DO
+    # UPDATE statement, even though every validated value was inserted or
+    # refreshed. The source data is deduplicated before reaching this store,
+    # so its validated value count is the reliable write count for progress
+    # and completion UI.
+    return len(values)
 
 
 async def delete_ip_blacklist_missing_for_source(

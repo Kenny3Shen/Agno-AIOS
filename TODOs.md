@@ -244,6 +244,7 @@
 - 管理员更新：`POST /api/ip-blacklist/update`（可 SSE）；检索：`POST /api/ip-blacklist/search`。
 - 工作台「安全情报 → IP 黑名单」页；权限 `ip_blacklist:read`。
 - Chat Skill `ip-blacklist-skill` + 意图匹配外联 IP/黑名单关键词。
+- 批量 upsert 的「写入」数按已验证指标计数，不依赖 psycopg 对该语句返回的不可用 `rowcount`。
 
 
 ## 已完成：项目关键业务测试收敛

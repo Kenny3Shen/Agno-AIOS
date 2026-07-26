@@ -74,6 +74,8 @@ TAIS_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
 
 CVE 库更新支持 GitHub PoC/Exp 与 Exploit-DB 数据源；管理员可在设置页的「CVE 数据源」中分别启用或停用。停用源不会删除既有 CVE 数据或缓存。
 
+IP 黑名单库可由管理员按源同步；进度中的「写入」表示已验证并写入或刷新的指标数，不会将有效同步误报为零。
+
 飞书通知仅会发送到当前登录用户在「设置 → 通知」保存的个人 HTTPS Webhook；未配置时 MCP 会明确失败，且不接受调用参数指定外部 URL。
 
 ## 性能热路径

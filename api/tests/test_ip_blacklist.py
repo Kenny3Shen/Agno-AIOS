@@ -123,6 +123,48 @@ async def test_search_ip_blacklist_rows_filters_by_query(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_upsert_ip_blacklist_rows_counts_validated_rows_when_psycopg_rowcount_is_unknown(
+    monkeypatch,
+):
+    from api.persistence import ip_blacklist as store
+
+    class FakeResult:
+        # psycopg reports -1 for multi-row INSERT .. ON CONFLICT DO UPDATE.
+        rowcount = -1
+
+    class FakeConn:
+        async def execute(self, _stmt):
+            return FakeResult()
+
+    class FakeBegin:
+        async def __aenter__(self):
+            return FakeConn()
+
+        async def __aexit__(self, *args):
+            return False
+
+    class FakeEngine:
+        def begin(self):
+            return FakeBegin()
+
+    async def _ensure():
+        return None
+
+    monkeypatch.setattr(store, "ensure_ip_blacklist_table", _ensure)
+    monkeypatch.setattr(store, "get_async_control_plane_engine", lambda: FakeEngine())
+
+    written = await store.upsert_ip_blacklist_rows(
+        [
+            {"indicator": "1.2.3.4", "source": "firehol-level1"},
+            {"indicator": "5.6.7.8", "source": "firehol-level1"},
+            {"indicator": "9.10.11.12"},
+        ]
+    )
+
+    assert written == 2
+
+
+@pytest.mark.asyncio
 async def test_load_ip_blacklist_source_config_reads_repo_config_dir(monkeypatch):
     """Default feed TOML lives under config/, not the project root."""
     from unittest.mock import AsyncMock
