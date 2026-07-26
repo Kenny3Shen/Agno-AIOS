@@ -13,7 +13,7 @@ const chatSettings = {
   show_raw_reasoning: true,
   show_raw_tool_io: true,
   show_thought_chain: true,
-  memory_enabled: true,
+  memory_mode: 'automatic',
 }
 const models = {
   active_model_id: 'first',
@@ -103,6 +103,38 @@ describe('model settings editor', () => {
     expect(await screen.findByText('Automatic')).toBeTruthy()
     expect(await screen.findByText('Agentic')).toBeTruthy()
     expect(screen.queryByText('添加模型')).toBeNull()
+  })
+
+  it('saves memory mode without legacy boolean flags', async () => {
+    let saved: Record<string, unknown> | undefined
+    mockSettings()
+    server.use(
+      http.patch('/api/settings/chat', async ({ request }) => {
+        saved = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ ...chatSettings, ...saved })
+      })
+    )
+    renderWithQuery(<SettingsPage />)
+
+    const memoryTab = (await screen.findByText('记忆')).closest('[role="tab"]')
+    expect(memoryTab).toBeTruthy()
+    fireEvent.click(memoryTab!)
+
+    fireEvent.click(await screen.findByRole('radio', { name: 'Agentic' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存记忆设置' }))
+
+    await waitFor(() => expect(saved).toBeTruthy())
+    expect(saved).toEqual({
+      memory_mode: 'agentic',
+      memory_tool_content_enabled: false,
+      memory_prune_enabled: true,
+      memory_prune_retention_days: 90,
+      memory_prune_top_k: 50,
+      memory_inject_enabled: true,
+      memory_inject_top_k: 12,
+      memory_inject_window_days: 90,
+      memory_inject_dedupe_topics: true,
+    })
   })
 
   it('saves CVE source enablement choices', async () => {

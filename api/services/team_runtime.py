@@ -344,13 +344,7 @@ async def build_team(
     use_summaries = bool(chat_settings.session_summaries_enabled)
     # Fail-closed for team leader memory is enforced by the caller (SecurityRunRequest).
     # memory_mode is the single source of truth (off / automatic / agentic).
-    memory_mode = str(getattr(chat_settings, "memory_mode", "") or "").strip().lower()
-    if memory_mode not in {"off", "automatic", "agentic"}:
-        memory_mode = (
-            "agentic"
-            if chat_settings.enable_agentic_memory
-            else ("automatic" if memory_enabled else "off")
-        )
+    memory_mode = chat_settings.memory_mode
     memory_ok = memory_mode != "off" and bool(memory_enabled)
     agentic = memory_ok and memory_mode == "agentic"
     memory_manager = (

@@ -4,7 +4,7 @@ from typing import Any, cast
 from agno.models.message import Message
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from api.auth.models import User
 from api.auth.claims import ADMIN_SCOPE
@@ -41,11 +41,12 @@ from api.tasks.cve_sources import DATA_SOURCES
 router = APIRouter(prefix="/api", tags=["Settings"])
 
 class ChatSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     show_raw_reasoning: bool | None = None
     show_raw_tool_io: bool | None = None
     show_thought_chain: bool | None = None
-    memory_enabled: bool | None = None
-    # Preferred: single radio (off | automatic | agentic). Legacy bools still accepted.
+    # Single radio (off | automatic | agentic).
     memory_mode: str | None = None
     # Agno runtime knobs (history / session summary / tools / memory mode)
     num_history_runs: int | None = None
@@ -53,7 +54,6 @@ class ChatSettingsUpdate(BaseModel):
     add_datetime_to_context: bool | None = None
     max_tool_calls_from_history: int | None = None
     default_tool_call_limit: int | None = None
-    enable_agentic_memory: bool | None = None
     markdown: bool | None = None
     # Memory P0: tool-content capture + automatic prune job knobs
     memory_tool_content_enabled: bool | None = None

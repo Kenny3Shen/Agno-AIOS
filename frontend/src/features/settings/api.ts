@@ -10,10 +10,8 @@ export interface ChatSettings {
   show_raw_reasoning: boolean
   show_raw_tool_io: boolean
   show_thought_chain: boolean
-  /** Preferred: off | automatic | agentic. Legacy bools are derived. */
+  /** Single source of truth for long-term memory behavior. */
   memory_mode: MemoryMode
-  /** Derived from memory_mode (API still returns for compatibility). */
-  memory_enabled: boolean
   /** Agno num_history_runs — past runs injected into model context. */
   num_history_runs: number
   /** Agno enable_session_summaries + add_session_summary_to_context. */
@@ -24,8 +22,6 @@ export interface ChatSettings {
   max_tool_calls_from_history: number | null
   /** Fallback tool_call_limit when agent profile has none; null = profile only. */
   default_tool_call_limit: number | null
-  /** Derived from memory_mode === 'agentic'. */
-  enable_agentic_memory: boolean
   /** Agno markdown response formatting. */
   markdown: boolean
   /** Allow MemoryManager to capture durable facts from tool results. */

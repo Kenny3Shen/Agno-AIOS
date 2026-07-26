@@ -92,8 +92,6 @@ const CHAT_SETTINGS_DEFAULTS: ChatSettings = {
   show_raw_reasoning: false,
   show_raw_tool_io: false,
   memory_mode: 'automatic',
-  memory_enabled: true,
-  enable_agentic_memory: false,
   session_summaries_enabled: true,
   add_datetime_to_context: true,
   markdown: true,
@@ -110,26 +108,13 @@ const CHAT_SETTINGS_DEFAULTS: ChatSettings = {
   memory_inject_dedupe_topics: true,
 }
 
-const memoryModeFromFlags = (enabled: boolean, agentic: boolean): MemoryMode => {
-  if (!enabled) return 'off'
-  if (agentic) return 'agentic'
-  return 'automatic'
-}
-
-const flagsFromMemoryMode = (mode: MemoryMode): Pick<ChatSettings, 'memory_enabled' | 'enable_agentic_memory'> => {
-  if (mode === 'off') return { memory_enabled: false, enable_agentic_memory: false }
-  if (mode === 'agentic') return { memory_enabled: true, enable_agentic_memory: true }
-  return { memory_enabled: true, enable_agentic_memory: false }
-}
-
 const normalizeChatSettings = (raw: Partial<ChatSettings> | undefined): ChatSettings => {
   const base = { ...CHAT_SETTINGS_DEFAULTS, ...raw }
-  const mode =
+  const memory_mode: MemoryMode =
     raw?.memory_mode === 'off' || raw?.memory_mode === 'automatic' || raw?.memory_mode === 'agentic'
       ? raw.memory_mode
-      : memoryModeFromFlags(Boolean(base.memory_enabled), Boolean(base.enable_agentic_memory))
-  const flags = flagsFromMemoryMode(mode)
-  return { ...base, memory_mode: mode, ...flags }
+      : CHAT_SETTINGS_DEFAULTS.memory_mode
+  return { ...base, memory_mode }
 }
 
 const GUARDRAIL_SETTINGS_DEFAULTS: GuardrailSettings = {
@@ -946,8 +931,6 @@ export function SettingsPage() {
 
   const MEMORY_FIELDS = new Set<ChatField>([
     'memory_mode',
-    'memory_enabled',
-    'enable_agentic_memory',
     'memory_tool_content_enabled',
     'memory_prune_enabled',
     'memory_prune_retention_days',
@@ -1007,10 +990,8 @@ export function SettingsPage() {
     setMemorySaving(true)
     try {
       const mode = (values.memory_mode ?? 'automatic') as MemoryMode
-      const flags = flagsFromMemoryMode(mode)
       const payload: Partial<ChatSettings> = {
         memory_mode: mode,
-        ...flags,
         memory_tool_content_enabled: Boolean(values.memory_tool_content_enabled),
         memory_prune_enabled: Boolean(values.memory_prune_enabled),
         memory_prune_retention_days: Number(values.memory_prune_retention_days ?? 90),
@@ -1052,8 +1033,6 @@ export function SettingsPage() {
   const resetMemoryToDefaults = async () => {
     const memoryOnly: Partial<ChatSettings> = {
       memory_mode: CHAT_SETTINGS_DEFAULTS.memory_mode,
-      memory_enabled: CHAT_SETTINGS_DEFAULTS.memory_enabled,
-      enable_agentic_memory: CHAT_SETTINGS_DEFAULTS.enable_agentic_memory,
       memory_tool_content_enabled: CHAT_SETTINGS_DEFAULTS.memory_tool_content_enabled,
       memory_prune_enabled: CHAT_SETTINGS_DEFAULTS.memory_prune_enabled,
       memory_prune_retention_days: CHAT_SETTINGS_DEFAULTS.memory_prune_retention_days,
@@ -1253,7 +1232,7 @@ export function SettingsPage() {
         form={memoryForm}
         layout="vertical"
         initialValues={CHAT_SETTINGS_DEFAULTS}
-        onFinish={(values) => void saveMemoryRuntime(values)}
+        onFinish={(values) => void saveMemoryRuntime({ ...memoryForm.getFieldsValue(true), ...values })}
         disabled={chatSettings.isLoading || memorySaving}
       >
         <Collapse

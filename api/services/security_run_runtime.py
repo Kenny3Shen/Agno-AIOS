@@ -2625,13 +2625,7 @@ class SecurityRunRuntime:
         use_summaries = bool(chat_settings.session_summaries_enabled)
         # Fail-closed: never write/read long-term memory under anonymous/default.
         memory_owner = (user_id or "").strip()
-        memory_mode = str(getattr(chat_settings, "memory_mode", "") or "").strip().lower()
-        if memory_mode not in {"off", "automatic", "agentic"}:
-            memory_mode = (
-                "agentic"
-                if chat_settings.enable_agentic_memory
-                else ("automatic" if memory_enabled else "off")
-            )
+        memory_mode = chat_settings.memory_mode
         memory_ok = (
             memory_mode != "off"
             and bool(memory_enabled)
@@ -2763,13 +2757,7 @@ class SecurityRunRuntime:
         # Fail-closed: real user_id required before any long-term memory I/O.
         # memory_mode is the single source of truth (off / automatic / agentic).
         memory_owner = request.memory_user_id
-        memory_mode = str(getattr(chat_settings, "memory_mode", "") or "").strip().lower()
-        if memory_mode not in {"off", "automatic", "agentic"}:
-            memory_mode = (
-                "agentic"
-                if chat_settings.enable_agentic_memory
-                else ("automatic" if request.memory_enabled else "off")
-            )
+        memory_mode = chat_settings.memory_mode
         memory_ok = (
             memory_mode != "off"
             and bool(request.memory_enabled)

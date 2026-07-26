@@ -33,9 +33,8 @@ DEFAULT_CHAT_SETTINGS: dict[str, Any] = {
     "show_raw_reasoning": False,
     "show_raw_tool_io": False,
     "show_thought_chain": True,
-    # Unified memory mode (Settings radio). Legacy bools are derived on read/write.
+    # Unified memory mode (Settings radio).
     "memory_mode": "automatic",
-    "memory_enabled": True,
     # Agno: num_history_runs — past runs injected into context (docs recommend 3–5).
     "num_history_runs": 5,
     # Agno: enable_session_summaries + add_session_summary_to_context.
@@ -46,8 +45,6 @@ DEFAULT_CHAT_SETTINGS: dict[str, Any] = {
     "max_tool_calls_from_history": None,
     # Global tool_call_limit when agent profile does not set one (None = profile).
     "default_tool_call_limit": None,
-    # Agno: enable_agentic_memory (takes precedence over update_memory_on_run).
-    "enable_agentic_memory": False,
     # Agno: markdown response formatting.
     "markdown": True,
     # Memory P0: allow MemoryManager / agentic memory to capture tool-derived facts.
@@ -68,10 +65,8 @@ _BOOL_KEYS = frozenset(
         "show_raw_reasoning",
         "show_raw_tool_io",
         "show_thought_chain",
-        "memory_enabled",
         "session_summaries_enabled",
         "add_datetime_to_context",
-        "enable_agentic_memory",
         "markdown",
         "memory_tool_content_enabled",
         "memory_prune_enabled",
@@ -100,24 +95,6 @@ def normalize_memory_mode(value: object) -> str:
     return "automatic"
 
 
-def memory_flags_from_mode(mode: str) -> tuple[bool, bool]:
-    """Return (memory_enabled, enable_agentic_memory) for a memory_mode value."""
-    normalized = normalize_memory_mode(mode)
-    if normalized == "off":
-        return False, False
-    if normalized == "agentic":
-        return True, True
-    return True, False
-
-
-def memory_mode_from_flags(*, memory_enabled: bool, enable_agentic_memory: bool) -> str:
-    if not memory_enabled:
-        return "off"
-    if enable_agentic_memory:
-        return "agentic"
-    return "automatic"
-
-
 def _app_schema() -> str:
     return get_settings().agno_app_schema
 
@@ -130,7 +107,6 @@ def chat_settings_table(metadata: MetaData | None = None) -> Table:
         Column("show_raw_reasoning", Boolean, nullable=False, server_default="false"),
         Column("show_raw_tool_io", Boolean, nullable=False, server_default="false"),
         Column("show_thought_chain", Boolean, nullable=False, server_default="true"),
-        Column("memory_enabled", Boolean, nullable=False, server_default="true"),
         Column(
             "memory_mode",
             String(16),
@@ -148,12 +124,6 @@ def chat_settings_table(metadata: MetaData | None = None) -> Table:
             Boolean,
             nullable=False,
             server_default="true",
-        ),
-        Column(
-            "enable_agentic_memory",
-            Boolean,
-            nullable=False,
-            server_default="false",
         ),
         Column("markdown", Boolean, nullable=False, server_default="true"),
         Column("num_history_runs", Integer, nullable=False, server_default="5"),
@@ -253,22 +223,6 @@ def _project_row(row: Mapping[str, Any] | None) -> dict[str, Any]:
                     payload[key] = None
             else:
                 payload[key] = int(value)
-    # Prefer memory_mode when present; keep legacy bools consistent.
-    if "memory_mode" in row and row.get("memory_mode") is not None:
-        mode = normalize_memory_mode(row.get("memory_mode"))
-        enabled, agentic = memory_flags_from_mode(mode)
-        payload["memory_mode"] = mode
-        payload["memory_enabled"] = enabled
-        payload["enable_agentic_memory"] = agentic
-    else:
-        mode = memory_mode_from_flags(
-            memory_enabled=bool(payload["memory_enabled"]),
-            enable_agentic_memory=bool(payload["enable_agentic_memory"]),
-        )
-        payload["memory_mode"] = mode
-        enabled, agentic = memory_flags_from_mode(mode)
-        payload["memory_enabled"] = enabled
-        payload["enable_agentic_memory"] = agentic
     return payload
 
 
@@ -323,28 +277,6 @@ async def update_chat_settings_row(values: Mapping[str, Any]) -> dict[str, Any]:
                     updates[key] = None
             else:
                 updates[key] = int(value)
-    # memory_mode is source of truth when provided; otherwise reconcile from bools.
-    if "memory_mode" in updates:
-        enabled, agentic = memory_flags_from_mode(str(updates["memory_mode"]))
-        updates["memory_enabled"] = enabled
-        updates["enable_agentic_memory"] = agentic
-    elif "memory_enabled" in updates or "enable_agentic_memory" in updates:
-        enabled = bool(
-            updates.get("memory_enabled", current.get("memory_enabled", True))
-        )
-        agentic = bool(
-            updates.get(
-                "enable_agentic_memory",
-                current.get("enable_agentic_memory", False),
-            )
-        )
-        mode = memory_mode_from_flags(
-            memory_enabled=enabled, enable_agentic_memory=agentic
-        )
-        updates["memory_mode"] = mode
-        enabled, agentic = memory_flags_from_mode(mode)
-        updates["memory_enabled"] = enabled
-        updates["enable_agentic_memory"] = agentic
     if not updates:
         return current
     updates["updated_at"] = int(time())

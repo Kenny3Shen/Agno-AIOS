@@ -126,6 +126,21 @@ def _user_auth_versions_revision() -> ModuleType:
     return module
 
 
+def _drop_legacy_chat_memory_flags_revision() -> ModuleType:
+    revision_path = (
+        Path(__file__).resolve().parents[2]
+        / "alembic"
+        / "versions"
+        / "20260726_0031_drop_legacy_chat_memory_flags.py"
+    )
+    spec = spec_from_file_location("drop_legacy_chat_memory_flags_revision", revision_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_fresh_baseline_does_not_include_future_control_plane_schema() -> None:
     """Keep the initial revision frozen before the first later table migration.
 
@@ -533,6 +548,54 @@ def test_user_auth_version_migration_canonicalizes_admin_state_and_adds_guards(
         ("ck_user_role", "user"),
     ]
     assert removed == [("user", "auth_version")]
+
+
+def test_legacy_chat_memory_flags_migration_drops_and_restores_from_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    revision = _drop_legacy_chat_memory_flags_revision()
+    added: list[tuple[str, Any, str | None]] = []
+    removed: list[tuple[str, str, str | None]] = []
+    executed: list[Any] = []
+
+    class Operations:
+        def add_column(self, table: str, column: Any, *, schema: str | None) -> None:
+            added.append((table, column, schema))
+
+        def drop_column(self, table: str, column: str, *, schema: str | None) -> None:
+            removed.append((table, column, schema))
+
+        def execute(self, statement: Any) -> None:
+            executed.append(statement)
+
+    monkeypatch.setattr(revision, "op", Operations())
+    monkeypatch.setattr(
+        revision,
+        "get_settings",
+        lambda: SimpleNamespace(agno_app_schema="chat_settings_test"),
+    )
+
+    revision.upgrade()
+
+    assert revision.down_revision == "20260726_0030"
+    assert removed == [
+        ("chat_settings", "enable_agentic_memory", "chat_settings_test"),
+        ("chat_settings", "memory_enabled", "chat_settings_test"),
+    ]
+
+    revision.downgrade()
+
+    assert [(table, column.name, schema) for table, column, schema in added] == [
+        ("chat_settings", "memory_enabled", "chat_settings_test"),
+        ("chat_settings", "enable_agentic_memory", "chat_settings_test"),
+    ]
+    assert all(getattr(column, "nullable") is False for _, column, _ in added)
+    assert len(executed) == 1
+    sql = str(executed[0].compile(dialect=postgresql.dialect()))
+    assert "UPDATE chat_settings_test.chat_settings" in sql
+    assert "memory_mode" in sql
+    assert "memory_enabled" in sql
+    assert "enable_agentic_memory" in sql
 
 
 class _RevisionConnection:
