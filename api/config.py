@@ -278,7 +278,6 @@ class Settings(BaseSettings):
         default=SecretStr(""),
         validation_alias="MCP_TOKEN",
     )
-    feishu_webhook_url: SecretStr = SecretStr("")
 
     auth_jwt_secret: SecretStr = SecretStr(_DEFAULT_AUTH_SECRETS["AUTH_JWT_SECRET"])
     auth_reset_password_secret: SecretStr = SecretStr(

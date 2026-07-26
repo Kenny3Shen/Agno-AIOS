@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urlparse
 
-from api.config import get_settings
 from api.persistence.user_notification_settings import (
     get_user_feishu_webhook_url,
     get_user_notification_settings_public,
@@ -18,26 +17,14 @@ def is_secure_feishu_webhook_url(value: str) -> bool:
     return parsed.scheme == "https" and bool(parsed.netloc)
 
 
-def global_feishu_webhook_url() -> str:
-    return get_settings().feishu_webhook_url.get_secret_value().strip()
-
-
 async def resolve_feishu_webhook_url(user_id: str | None) -> str:
-    """Prefer per-user webhook; fall back to process-wide FEISHU_WEBHOOK_URL."""
+    """Return the caller's personal webhook, never a process-wide fallback."""
     owner = (user_id or "").strip()
-    if owner:
-        personal = await get_user_feishu_webhook_url(owner)
-        if personal:
-            return personal
-    return global_feishu_webhook_url()
+    return await get_user_feishu_webhook_url(owner) if owner else ""
 
 
 async def read_user_notification_settings(user_id: str) -> dict[str, Any]:
-    public = await get_user_notification_settings_public(user_id)
-    return {
-        **public,
-        "global_feishu_webhook_configured": bool(global_feishu_webhook_url()),
-    }
+    return await get_user_notification_settings_public(user_id)
 
 
 async def update_user_feishu_webhook(user_id: str, webhook_url: str | None) -> dict[str, Any]:

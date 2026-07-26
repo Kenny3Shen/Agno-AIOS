@@ -317,6 +317,28 @@ async def test_overview_token_sample_stops_at_first_page_when_window_exceeds_cap
 
 
 @pytest.mark.asyncio
+async def test_overview_trace_query_repairs_span_reflection_before_native_query():
+    db = MagicMock()
+    db.get_traces = AsyncMock(return_value=([], 0))
+    ensure = AsyncMock()
+
+    with (
+        patch.object(overview_service, "get_async_agno_postgres_db", return_value=db),
+        patch.object(overview_service, "ensure_trace_span_reflection", ensure),
+    ):
+        traces, meta = await overview_service._fetch_traces(
+            start=datetime(2026, 7, 12, 11, tzinfo=UTC),
+            end=datetime(2026, 7, 12, 12, tzinfo=UTC),
+            user_id="u1",
+        )
+
+    assert traces == []
+    assert meta == {"sample_size": 0, "window_total": 0, "truncated": False}
+    ensure.assert_awaited_once_with(db)
+    db.get_traces.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("aggregate", "kwargs", "required_columns"),
     [

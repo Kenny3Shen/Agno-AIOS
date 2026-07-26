@@ -2,6 +2,21 @@ from api.services.workflow_node_presets import (
     list_builtin_node_presets,
     normalize_custom_step_definition,
 )
+from api.services.workflow_templates import list_workflow_templates
+
+
+def _workflow_skill_names(value: object) -> set[str]:
+    if isinstance(value, dict):
+        names: set[str] = set()
+        skills = value.get("skills")
+        if isinstance(skills, list):
+            names.update(item for item in skills if isinstance(item, str))
+        for child in value.values():
+            names.update(_workflow_skill_names(child))
+        return names
+    if isinstance(value, list):
+        return set().union(*(_workflow_skill_names(item) for item in value))
+    return set()
 
 
 def test_builtin_presets_use_product_executors() -> None:
@@ -13,6 +28,15 @@ def test_builtin_presets_use_product_executors() -> None:
     }
     assert "security-operations" in refs
     assert "safe-fallback" in refs
+
+
+def test_builtin_templates_reference_only_available_builtin_skills() -> None:
+    names = _workflow_skill_names(list_workflow_templates())
+    assert names <= {
+        "cve-intel-skill",
+        "hitl-containment-skill",
+        "ip-blacklist-skill",
+    }
 
 
 def test_normalize_strips_skills_for_non_skill_executors() -> None:
@@ -90,4 +114,3 @@ def test_normalize_validates_user_input_schema() -> None:
         assert "name is required" in str(exc)
     else:
         raise AssertionError("expected ValueError for invalid schema")
-

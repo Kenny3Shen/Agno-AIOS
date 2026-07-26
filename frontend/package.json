@@ -54,5 +54,9 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-i18next": "^17.0.9"
+  },
+  "overrides": {
+    "postcss": "8.5.18",
+    "dompurify": "3.4.12"
   }
 }

@@ -74,9 +74,11 @@ TAIS_BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
 
 CVE 库更新支持 GitHub PoC/Exp 与 Exploit-DB 数据源；管理员可在设置页的「CVE 数据源」中分别启用或停用。停用源不会删除既有 CVE 数据或缓存。
 
+飞书通知仅会发送到当前登录用户在「设置 → 通知」保存的个人 HTTPS Webhook；未配置时 MCP 会明确失败，且不接受调用参数指定外部 URL。
+
 ## 性能热路径
 
-Dashboard Overview 对同一权限投影与查询窗口合并并缓存 3 秒的进程内请求；Chat 初始读取最近 40 个完整 turns，支持向前分页并按动画帧合并 SSE 更新。Agno Trace 索引仍由 Agno 管理，先用 `uv run audit-trace-indexes --explain` 收集只读计划证据，确认后才可显式执行带确认参数的并发建索引。部署边界与命令见 [配置与运维](./docs/operations.md)。
+Dashboard Overview 对同一权限投影与查询窗口合并并缓存 3 秒的进程内请求；原生 Agno Trace 查询会在使用前修复长驻进程中的 spans 表反射，避免旧缓存导致查询空结果；Chat 初始读取最近 40 个完整 turns，支持向前分页并按动画帧合并 SSE 更新。Agno Trace 索引仍由 Agno 管理，先用 `uv run audit-trace-indexes --explain` 收集只读计划证据，确认后才可显式执行带确认参数的并发建索引。部署边界与命令见 [配置与运维](./docs/operations.md)。
 
 ## 架构
 

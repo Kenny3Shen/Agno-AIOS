@@ -16,7 +16,6 @@
 - **CVE / PoC**：`cve-intel-skill`（CVE 编号、产品/组件/关键词）。
 - **模拟隔离/封禁（HITL）**：`hitl-containment-skill` + `hitl_*` MCP；必须等待审批结果。
 - **工作流编排**：在 Workflow Studio 使用 Agent 步骤、条件、并行、循环、路由、HITL、Cron 或 Webhook；Chat 不得声称已经创建、发布或运行工作流。
-- **内网 NDR / 内网资产**（若 skill 已启用）：`intranet-ip-skill`。
 - **通知上报**：用户明确要求时用通知类 MCP；发送前确认对象与敏感信息处理。
 - **内部资料问答**：制度、规范、历史报告等 → 知识库检索（若已启用）。
 

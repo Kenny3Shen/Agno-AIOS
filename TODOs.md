@@ -234,7 +234,7 @@
 ## 已完成：按用户配置飞书 Webhook
 
 - 表 `user_notification_settings`（Alembic `20260721_0005`）按 `user_id` 存个人 Webhook。
-- MCP `send_feishu_notify`：优先当前用户个人配置 → 全局 `FEISHU_WEBHOOK_URL`；仍不接受工具参数传入 URL。
+- MCP `send_feishu_notify`：只使用当前用户个人配置；未配置时明确失败，且不接受工具参数传入 URL。
 - API：`GET/PATCH /api/settings/notifications`（返回是否已配置 + 脱敏 hint，不回传完整密钥）。
 - 设置页「通知」Tab：任意登录用户可保存/清除个人 Webhook。
 
@@ -1267,7 +1267,7 @@
 
 - `security_operations.md`：去掉未安装 skill 路由与重复 SOP，改指向 progressive discovery（`get_skill_instructions`）；体量 ~2105→~1063 字符。
 - Agent `role` 去掉冗余（description + prompt 已覆盖）；`add_dependencies_to_context=False`，飞书 Webhook **不再**注入每条 user 消息。
-- `basic_send_feishu_notify`：`feishu_webhook_url` 可选，缺省读服务端配置；修复 `code == 0` 因 `or` 被当成 falsy 的成功判定 bug。
+- `basic_send_feishu_notify`：目标地址仅从当前用户的服务器端个人配置解析；修复 `code == 0` 因 `or` 被当成 falsy 的成功判定 bug。
 - 冒烟（xai-grok-4.5，`Reply with exactly: pong`，`search_knowledge=false`）：`input_tokens` ~5234 → **~4585**（仍含 Skills 摘要 + MCP 工具 schema + 模型侧开销）。
 - 后续可继续：trivial turn 不挂 MCP/Skills、按意图绑定 skill（对齐 Workflow step skills）、MCP 工具表裁剪。
 
@@ -2067,13 +2067,12 @@ P0.4 审批值班薄入口        ✅
 
 ---
 
-## 已完成：Approvals 后续页并行 + 配置/skill 可观测
+## 已完成：Approvals 后续页并行 + 配置可观测
 
 - `getApprovals(kind=all)` 上传窗口内后续页也 `Promise.all` 并行 submissions + HITL
 - model config 表空时从 legacy 导入写 `info` 日志
-- intranet-ip-skill 外部查询失败写 `warning`（仍返回空列表）
 
-相关：`approvals/api.ts` / `model_config_service.py` / `intranet-ip-skill/agent.py`
+相关：`approvals/api.ts` / `model_config_service.py`
 
 ---
 

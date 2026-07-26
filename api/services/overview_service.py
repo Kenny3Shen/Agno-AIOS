@@ -24,6 +24,7 @@ from api.auth.claims import (
 from api.services.postgres_store import get_async_agno_postgres_db
 from api.services.trace_lookup_service import batch_traces_by_run_ids
 from api.services.trace_status_service import reconcile_trace_statuses
+from api.services.tracing_service import ensure_trace_span_reflection
 from api.utils.ttl_cache import AsyncTtlCache
 
 OverviewRange = Literal["1h", "24h", "7d"]
@@ -439,7 +440,8 @@ async def _count_traces(
 ) -> int:
     """Cheap window total via Agno ``get_traces`` total (limit=1)."""
     db = get_async_agno_postgres_db()
-    _rows, total = await db.get_traces(
+    _rows, total = await _get_traces_with_span_schema(
+        db,
         start_time=start,
         end_time=end,
         user_id=user_id,
@@ -448,6 +450,20 @@ async def _count_traces(
         page=1,
     )
     return max(0, int(total or 0))
+
+
+async def _get_traces_with_span_schema(
+    db: Any, **filters: Any
+) -> tuple[list[Any], int]:
+    """Run Agno's native query only after repairing its cached spans schema.
+
+    ``AsyncPostgresDb.get_traces`` joins ``agno_spans`` and accesses
+    ``span_id`` even for count-only queries. Its reflected table can be stale
+    in a long-lived worker, which otherwise logs ``Error getting traces:
+    span_id`` and returns an empty result instead of raising.
+    """
+    await ensure_trace_span_reflection(db)
+    return await db.get_traces(**filters)
 
 
 async def _fetch_recent_failures(
@@ -465,7 +481,8 @@ async def _fetch_recent_failures(
     """
     safe_limit = max(1, min(int(limit or 10), 50))
     db = get_async_agno_postgres_db()
-    traces, _total = await db.get_traces(
+    traces, _total = await _get_traces_with_span_schema(
+        db,
         start_time=start,
         end_time=end,
         user_id=user_id,
@@ -792,7 +809,8 @@ async def _fetch_traces(
     """
     db = get_async_agno_postgres_db()
     # Single capped page: multi-page walks were only useful before SQL aggregates.
-    traces, total = await db.get_traces(
+    traces, total = await _get_traces_with_span_schema(
+        db,
         start_time=start,
         end_time=end,
         user_id=user_id,

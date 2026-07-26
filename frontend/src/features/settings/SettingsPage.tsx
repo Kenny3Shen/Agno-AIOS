@@ -1746,9 +1746,7 @@ export function SettingsPage() {
       <Typography.Paragraph type="secondary">
         {notificationSettings.data?.feishu_webhook_configured
           ? t('feishuConfigured', { hint: notificationSettings.data.feishu_webhook_hint || '…' })
-          : notificationSettings.data?.global_feishu_webhook_configured
-            ? t('feishuUsingGlobal')
-            : t('feishuNotConfigured')}
+          : t('feishuNotConfigured')}
       </Typography.Paragraph>
       <Flex vertical gap="middle" style={{ width: '100%', maxWidth: 560 }}>
         <Input.Password

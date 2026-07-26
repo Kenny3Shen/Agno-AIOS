@@ -1,8 +1,9 @@
 """Low-risk, generally useful FastMCP tools.
 
-Secrets and transport destinations are deliberately kept in server-side
-configuration.  MCP callers can tune bounded delivery behaviour, but cannot
-turn this notification tool into a general-purpose HTTP client.
+Secrets and transport destinations are deliberately kept in each caller's
+server-side notification settings. MCP callers can tune bounded delivery
+behaviour, but cannot turn this notification tool into a general-purpose HTTP
+client.
 """
 
 from __future__ import annotations
@@ -139,13 +140,6 @@ def _fit_content_to_payload_limit(
     return best or _TRUNCATION_SUFFIX, True
 
 
-def _configured_webhook_url() -> str:
-    """Process-wide fallback (FEISHU_WEBHOOK_URL). Prefer resolve_webhook_url()."""
-    from api.config import get_settings
-
-    return get_settings().feishu_webhook_url.get_secret_value().strip()
-
-
 async def _current_mcp_user_id() -> str:
     """Best-effort MCP caller id; empty when unauthenticated or outside request."""
     try:
@@ -158,7 +152,7 @@ async def _current_mcp_user_id() -> str:
 
 
 async def _user_webhook_url(user_id: str) -> str:
-    """Load personal webhook; isolated for unit tests that only patch get_settings."""
+    """Load the authenticated caller's personal webhook."""
     if not user_id:
         return ""
     from api.persistence.user_notification_settings import get_user_feishu_webhook_url
@@ -167,12 +161,9 @@ async def _user_webhook_url(user_id: str) -> str:
 
 
 async def _resolve_webhook_url() -> str:
-    """Per-user webhook when MCP is called as that user; else global env fallback."""
+    """Resolve only the authenticated caller's personal webhook."""
     user_id = await _current_mcp_user_id()
-    personal = await _user_webhook_url(user_id)
-    if personal:
-        return personal
-    return _configured_webhook_url()
+    return await _user_webhook_url(user_id)
 
 
 def _is_secure_webhook_url(value: str) -> bool:
@@ -287,9 +278,7 @@ async def send_feishu_notify(
 ) -> FeishuNotifyResult:
     """发送飞书机器人通知。
 
-    Webhook 解析顺序：
-    1. 当前 MCP 调用用户在「设置 → 通知」中保存的个人 Webhook
-    2. 服务端全局 ``FEISHU_WEBHOOK_URL``
+    仅使用当前 MCP 调用用户在「设置 → 通知」中保存的个人 Webhook。
 
     不接受 MCP 调用方传入 URL，避免泄露密钥或把本工具当任意 HTTP 代理。
 
@@ -322,10 +311,7 @@ async def send_feishu_notify(
     if not webhook_url:
         return _failure(
             code=-3,
-            msg=(
-                "飞书 Webhook 未配置。请在「设置 → 通知」填写个人 Webhook，"
-                "或由管理员配置服务端 FEISHU_WEBHOOK_URL。"
-            ),
+            msg="飞书 Webhook 未配置。请在「设置 → 通知」填写个人 Webhook。",
             attempts=0,
             content_truncated=False,
             failure_reason="configuration",
@@ -333,7 +319,7 @@ async def send_feishu_notify(
     if not _is_secure_webhook_url(webhook_url):
         return _failure(
             code=-3,
-            msg="服务端飞书 Webhook 必须是有效的 HTTPS URL。",
+            msg="个人飞书 Webhook 必须是有效的 HTTPS URL。",
             attempts=0,
             content_truncated=False,
             failure_reason="configuration",

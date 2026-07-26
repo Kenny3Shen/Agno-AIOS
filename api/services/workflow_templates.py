@@ -99,7 +99,6 @@ def list_workflow_templates() -> list[dict[str, Any]]:
                                 "id": "asset",
                                 "type": "step",
                                 "name": "Asset impact",
-                                "skills": ["intranet-ip-skill"],
                                 "executor": {"kind": "agent", "ref": "safe-fallback"},
                                 "instructions": "Infer likely affected assets and blast radius.",
                                 "position": {"x": 320, "y": 180},

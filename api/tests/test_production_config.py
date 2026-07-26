@@ -40,6 +40,10 @@ def test_development_keeps_existing_convenient_defaults() -> None:
     assert settings.auth_cookie_secure is False
 
 
+def test_settings_do_not_expose_a_process_wide_feishu_webhook() -> None:
+    assert "feishu_webhook_url" not in Settings.model_fields
+
+
 def test_threat_intel_source_configs_default_under_config_dir() -> None:
     """CVE / IP blacklist feed TOML defaults live under config/, not repo root."""
     settings = Settings.model_validate({"environment": "development"})

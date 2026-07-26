@@ -184,6 +184,16 @@ async def _ensure_trace_span_reflection(
     return table
 
 
+async def ensure_trace_span_reflection(db: Any = _trace_db) -> Any | None:
+    """Prepare the spans table for any caller using Agno's ``get_traces``.
+
+    Agno's native trace query joins ``agno_spans`` and unconditionally selects
+    ``span_id``. Reuse the stale-reflection repair outside the trace route so
+    Overview's concurrent native queries cannot silently return an empty set.
+    """
+    return await _ensure_trace_span_reflection(db)
+
+
 def _root_input_from_spans(spans: list[Any]) -> str | None:
     root = next((span for span in spans if not getattr(span, "parent_span_id", None)), None)
     if root is None and spans:
@@ -496,7 +506,7 @@ async def list_traces(
     st, et = _validate_trace_time_range(start_time, end_time)
     normalized_status = _normalize_trace_status(status)
 
-    await _ensure_trace_span_reflection()
+    await ensure_trace_span_reflection()
 
     # Agno AsyncPostgresDb.get_traces supports SQL ``status`` (OK/ERROR/UNSET).
     # Prefer native pagination over a post-hoc full-window scan.
