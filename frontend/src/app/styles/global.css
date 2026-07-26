@@ -2039,20 +2039,13 @@ html.dark .workflow-studio__page {
   gap: 6px;
 }
 
-.workflow-palette__item--preset {
+.workflow-palette__item.workflow-palette__item--preset {
+  flex-direction: row;
   align-items: flex-start;
   gap: 8px;
   min-height: 44px;
-  padding: 8px 8px 8px 10px;
-}
-
-.workflow-palette__swatch {
-  width: 6px;
-  min-height: 28px;
-  align-self: stretch;
-  border-radius: 3px;
-  flex-shrink: 0;
-  margin-top: 2px;
+  padding: 8px;
+  text-align: left;
 }
 
 .workflow-palette__preset-body {

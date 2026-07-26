@@ -1054,10 +1054,6 @@ export function WorkflowPage() {
                                     : `${item.name} · ${t('palettePresetDragHint')}`
                                 }
                               >
-                                <span
-                                  className="workflow-palette__swatch"
-                                  style={{ background: item.color }}
-                                />
                                 <span className="workflow-palette__preset-body">
                                   <span className="workflow-palette__label">{item.name}</span>
                                   {item.description ? (
@@ -1099,10 +1095,6 @@ export function WorkflowPage() {
                                       : `${item.name} · ${t('palettePresetDragHint')}`
                                   }
                                 >
-                                  <span
-                                    className="workflow-palette__swatch"
-                                    style={{ background: item.color }}
-                                  />
                                   <span className="workflow-palette__preset-body">
                                     <span className="workflow-palette__label">{item.name}</span>
                                     {item.description ? (
