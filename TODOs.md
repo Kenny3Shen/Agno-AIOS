@@ -12,6 +12,7 @@
 - `.agents/`、`.claude/`、`.codex/` 只作为本地工具配置，已加入 `.gitignore`；原 `.agents/skills/` 44 个 vendored 文件经 `git rm --cached` 脱离索引，本地文件保留。
 - `docs/assets/*.html`、`docs/assets/*.json` 为本地生成的交互产物，一并忽略；`tais-architecture.png` / `.svg` 继续跟踪。
 - 跟踪文件数 625 → 582。软链在未开启 `core.symlinks` 的原生 Windows clone 中会退化为文本文件，WSL2 / macOS 不受影响。
+- `skills-lock.json` 补全为全部 10 个 skill（原先只记 2 个）：`ant-design/antd-skill` ×2、`polars-inc/skills`、`existential-birds/beagle`、`ant-design/x`（`packages/x-skill/skills-zh/` ×6）。`computedHash` 语义为 `sha256`(目录内排序文件的 `相对路径 + 内容` 拼接)，已用 `antd` 原值复现验证；`react-flow-implementation` 排除本地生成的 `.skillfish.json`。
 
 ## 已完成：模型配置正式化（无内置测试模型）
 

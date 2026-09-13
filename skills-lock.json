@@ -5,13 +5,61 @@
       "source": "ant-design/antd-skill",
       "sourceType": "github",
       "skillPath": "skills/ant-design/SKILL.md",
-      "computedHash": "096d4ac9513e43030f960aab49b50168a3d5eb35be86926ac6e96e5998ea9466"
+      "computedHash": "6dd191faf20b6690153ee99b53dc46bd5fc84f9b8cfd8cbc23e94795a4d62850"
     },
     "antd": {
       "source": "ant-design/antd-skill",
       "sourceType": "github",
       "skillPath": "skills/antd/SKILL.md",
       "computedHash": "5e26c8042060bb811118927b5daf637af7929a00fa973dd8f5f804f3ba6e2bf2"
+    },
+    "polars": {
+      "source": "polars-inc/skills",
+      "sourceType": "github",
+      "skillPath": "polars/SKILL.md",
+      "computedHash": "73971f99cae193bbeff2fca717e267a44f208207c0bb10ddd24329cd6f5ebab8"
+    },
+    "react-flow-implementation": {
+      "source": "existential-birds/beagle",
+      "sourceType": "github",
+      "skillPath": "plugins/beagle-react/skills/react-flow-implementation/SKILL.md",
+      "computedHash": "78301b78e460c4208cef58fabcf8bfa77a7d279c753187fc961a145c3a306775"
+    },
+    "use-x-chat": {
+      "source": "ant-design/x",
+      "sourceType": "github",
+      "skillPath": "packages/x-skill/skills-zh/use-x-chat/SKILL.md",
+      "computedHash": "0d8ca4c693dc225c93d009417b54596f8d553b6af85381c77f0aa415802886fc"
+    },
+    "x-card": {
+      "source": "ant-design/x",
+      "sourceType": "github",
+      "skillPath": "packages/x-skill/skills-zh/x-card/SKILL.md",
+      "computedHash": "e1475e2b6d46654820d3d83c16543d2117a15d0a6a334f3c29db4a3318ce576a"
+    },
+    "x-chat-provider": {
+      "source": "ant-design/x",
+      "sourceType": "github",
+      "skillPath": "packages/x-skill/skills-zh/x-chat-provider/SKILL.md",
+      "computedHash": "c9a7387bc39d486d01ebfad68d5bb2774dadac2704110ee344bdc28dc7ed60b1"
+    },
+    "x-components": {
+      "source": "ant-design/x",
+      "sourceType": "github",
+      "skillPath": "packages/x-skill/skills-zh/x-components/SKILL.md",
+      "computedHash": "d1347119165bba9553fdc577c4473a98c49e8072405f32781d4f92a893028831"
+    },
+    "x-markdown": {
+      "source": "ant-design/x",
+      "sourceType": "github",
+      "skillPath": "packages/x-skill/skills-zh/x-markdown/SKILL.md",
+      "computedHash": "e531ca9b5fdbfca401d0ecf0ebf769e5e36731a06de53ccbeea85e9f067871d5"
+    },
+    "x-request": {
+      "source": "ant-design/x",
+      "sourceType": "github",
+      "skillPath": "packages/x-skill/skills-zh/x-request/SKILL.md",
+      "computedHash": "a3137a5318ea13bd1a4719007386f975d6f85bbc9f3d332b0490e46f7d830895"
     }
   }
 }
