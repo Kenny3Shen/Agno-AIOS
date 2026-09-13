@@ -31,5 +31,15 @@ dataset/
 # Local PPTX inspection output; the deck source and published PPTX stay tracked.
 /docs/unpacked_tais/
 
+# Agent 工具的本地配置目录，不进仓库。
+# 项目级指令统一维护在根目录 AGENTS.md（CLAUDE.md 为指向它的软链）。
+/.agents/
+/.claude/
+/.codex/
+
+# 本地生成的架构图交互产物；tais-architecture.png/svg 仍然跟踪。
+/docs/assets/*.html
+/docs/assets/*.json
+
 
 /frontend-react

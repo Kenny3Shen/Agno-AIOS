@@ -6,6 +6,13 @@
 - 每次部署必须先完成 `docs/release.md` 的后端/前端构建门禁；涉及既有数据库时，RBAC 迁移演练仅可在带备份引用的 PostgreSQL 克隆库执行。
 - 资产—漏洞—告警闭环和 Team 的 MCP/HITL 扩展明确延后至 **1.1+**，不作为 1.0.0 的隐含承诺；Overview/Trace/Chat 的首批性能治理已按下述 1.1 P1 落地。
 
+## 已完成：Agent 配置目录脱离版本控制
+
+- 项目级指令收口到根目录 `AGENTS.md`；`CLAUDE.md` 为指向它的软链（git 模式 `120000`），Claude Code 与 Codex 共用同一份内容。
+- `.agents/`、`.claude/`、`.codex/` 只作为本地工具配置，已加入 `.gitignore`；原 `.agents/skills/` 44 个 vendored 文件经 `git rm --cached` 脱离索引，本地文件保留。
+- `docs/assets/*.html`、`docs/assets/*.json` 为本地生成的交互产物，一并忽略；`tais-architecture.png` / `.svg` 继续跟踪。
+- 跟踪文件数 625 → 582。软链在未开启 `core.symlinks` 的原生 Windows clone 中会退化为文本文件，WSL2 / macOS 不受影响。
+
 ## 已完成：模型配置正式化（无内置测试模型）
 
 - 空模型表是正式的一等首启状态：不再 seed `DEFAULT_MODELS`、不再提供 `builtin` 字段或捆绑供应商密钥；管理员须在 Settings 添加、补全并启用自己的连接。
